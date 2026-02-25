@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiChevronLeft } from "react-icons/fi";
 import axios from "axios";
@@ -60,6 +60,11 @@ const normalizePaymentMethodValue = (value) => {
   return "";
 };
 
+const isGatewayPaymentMethod = (method) =>
+  ["stripe", "paypal", "sslcommerz"].includes(
+    String(method?.channelType || "").trim().toLowerCase(),
+  );
+
 const normalizeBangladeshPhone = (value) => {
   const sanitized = String(value || "").trim().replace(/[^\d+]/g, "");
   if (sanitized.startsWith("+88")) return `0${sanitized.slice(3)}`;
@@ -105,8 +110,7 @@ const CheckOut = () => {
   const [loading, setLoading] = useState(false);
   const [isEstimatingShipping, setIsEstimatingShipping] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([]);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
-  const [selectedPaymentAccount, setSelectedPaymentAccount] = useState("");
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const [transactionId, setTransactionId] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -128,6 +132,24 @@ const CheckOut = () => {
   });
 
   const subtotal = getCartSubtotal();
+  const selectedPaymentMethod = useMemo(
+    () =>
+      paymentMethods.find(
+        (method) => String(method?._id || "") === String(selectedPaymentMethodId || ""),
+      ) || null,
+    [paymentMethods, selectedPaymentMethodId],
+  );
+  const paymentMethodValue = normalizePaymentMethodValue(selectedPaymentMethod);
+  const paymentMethodChannel = String(
+    selectedPaymentMethod?.channelType || "manual",
+  ).toLowerCase();
+  const requiresTransactionProof =
+    selectedPaymentMethod?.requiresTransactionProof === undefined
+      ? true
+      : Boolean(selectedPaymentMethod?.requiresTransactionProof);
+  const selectedPaymentAccount = String(selectedPaymentMethod?.accountNo || "").trim();
+  const isExternalGateway = isGatewayPaymentMethod(selectedPaymentMethod);
+
   const discount = Math.min(
     Number(appliedCoupon?.discount || 0),
     Number(subtotal || 0),
@@ -379,11 +401,7 @@ const CheckOut = () => {
       setPaymentMethods(methods);
 
       if (methods.length > 0) {
-        const defaultMethod = normalizePaymentMethodValue(methods[0]);
-        setSelectedPaymentMethod(defaultMethod);
-        setSelectedPaymentAccount(
-          String(methods[0]?.accountNo || methods[0]?.accountNumber || "").trim(),
-        );
+        setSelectedPaymentMethodId(String(methods[0]?._id || ""));
       }
     } catch (error) {
       console.error("Error fetching payment methods:", error);
@@ -401,9 +419,19 @@ const CheckOut = () => {
 
   const handleSubmitOrder = async (e) => {
     e.preventDefault();
-    const paymentMethodValue =
-      normalizePaymentMethodValue(selectedPaymentMethod) ||
-      normalizePaymentMethodValue(paymentMethods[0]);
+    const resolvedMethod = selectedPaymentMethod || paymentMethods[0] || null;
+    const resolvedPaymentMethodValue =
+      paymentMethodValue || normalizePaymentMethodValue(resolvedMethod);
+    const resolvedRequiresProof =
+      resolvedMethod?.requiresTransactionProof === undefined
+        ? true
+        : Boolean(resolvedMethod?.requiresTransactionProof);
+    const resolvedChannelType = String(
+      resolvedMethod?.channelType || "manual",
+    ).toLowerCase();
+    const resolvedAccountNo = String(
+      resolvedMethod?.accountNo || resolvedMethod?.accountNumber || "",
+    ).trim();
     const normalizedPhone = normalizeBangladeshPhone(formData.phone);
 
     if (cartItems.length === 0) {
@@ -421,12 +449,12 @@ const CheckOut = () => {
       return;
     }
 
-    if (!paymentMethodValue) {
+    if (!resolvedPaymentMethodValue) {
       toast.error("Please select a payment method");
       return;
     }
 
-    if (!transactionId.trim()) {
+    if (resolvedRequiresProof && !transactionId.trim()) {
       toast.error("Transaction ID is required");
       return;
     }
@@ -489,12 +517,16 @@ const CheckOut = () => {
         discount,
         total: finalTotal,
         couponCode: appliedCoupon?.code || "",
-        paymentMethod: paymentMethodValue,
+        paymentMethodId: resolvedMethod?._id || "",
+        paymentMethod: resolvedPaymentMethodValue,
         paymentDetails: {
-          method: paymentMethodValue,
-          accountNo: selectedPaymentAccount,
-          transactionId: transactionId.trim(),
-          sentTo: selectedPaymentAccount,
+          method: resolvedPaymentMethodValue,
+          accountNo: resolvedAccountNo,
+          transactionId: resolvedRequiresProof ? transactionId.trim() : "",
+          sentTo: resolvedAccountNo,
+          meta: {
+            channelType: resolvedChannelType,
+          },
         },
       };
 
@@ -510,6 +542,7 @@ const CheckOut = () => {
       }
 
       const order = response.data.order;
+      const paymentRedirectUrl = String(response.data?.paymentRedirectUrl || "").trim();
 
       if (!isLoggedIn && order) {
         const previous = JSON.parse(localStorage.getItem("guestOrders") || "[]");
@@ -520,6 +553,13 @@ const CheckOut = () => {
       await clearCart();
       localStorage.removeItem(COUPON_STORAGE_KEY);
       setAppliedCoupon(null);
+
+      if (paymentRedirectUrl) {
+        toast.success("Redirecting to payment gateway...");
+        window.location.href = paymentRedirectUrl;
+        return;
+      }
+
       toast.success("Order placed successfully");
       navigate("/thank-you", { state: { orderId: order?._id, order } });
     } catch (error) {
@@ -648,6 +688,11 @@ const CheckOut = () => {
                   const accountValue = String(
                     method?.accountNo || method?.accountNumber || "",
                   ).trim();
+                  const channelType = String(method?.channelType || "manual").toLowerCase();
+                  const methodRequiresProof =
+                    method?.requiresTransactionProof === undefined
+                      ? true
+                      : Boolean(method?.requiresTransactionProof);
 
                   return (
                     <label
@@ -658,13 +703,18 @@ const CheckOut = () => {
                         <input
                           type="radio"
                           name="paymentMethod"
-                          checked={selectedPaymentMethod === methodValue}
+                          checked={selectedPaymentMethodId === String(method?._id || "")}
                           onChange={() => {
-                            setSelectedPaymentMethod(methodValue);
-                            setSelectedPaymentAccount(accountValue);
+                            setSelectedPaymentMethodId(String(method?._id || ""));
                           }}
                         />
-                        <span className="font-medium">{methodValue}</span>
+                        <div>
+                          <span className="font-medium">{methodValue}</span>
+                          <p className="text-[11px] text-gray-500">
+                            {channelType.toUpperCase()}
+                            {methodRequiresProof ? " - Manual Proof Required" : ""}
+                          </p>
+                        </div>
                       </div>
                       <span className="text-sm text-gray-600">{accountValue}</span>
                     </label>
@@ -672,12 +722,26 @@ const CheckOut = () => {
                 })}
               </div>
 
-              <input
-                value={transactionId}
-                onChange={(e) => setTransactionId(e.target.value)}
-                placeholder="Transaction ID*"
-                className="w-full px-3 py-3 border border-gray-200 rounded-lg"
-              />
+              {selectedPaymentMethod?.instructions && (
+                <p className="text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-lg p-2.5">
+                  {selectedPaymentMethod.instructions}
+                </p>
+              )}
+
+              {requiresTransactionProof ? (
+                <input
+                  value={transactionId}
+                  onChange={(e) => setTransactionId(e.target.value)}
+                  placeholder="Transaction ID*"
+                  className="w-full px-3 py-3 border border-gray-200 rounded-lg"
+                />
+              ) : (
+                <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg p-2.5">
+                  {isExternalGateway
+                    ? "You will be redirected to secure payment gateway after placing order."
+                    : "No transaction ID needed for this payment method."}
+                </p>
+              )}
             </div>
 
             <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -695,7 +759,11 @@ const CheckOut = () => {
               disabled={loading}
               className="w-full py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-900 disabled:opacity-60"
             >
-              {loading ? "Placing order..." : "Place Order"}
+              {loading
+                ? "Processing..."
+                : isExternalGateway
+                  ? "Proceed to Payment"
+                  : "Place Order"}
             </button>
           </form>
 

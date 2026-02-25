@@ -135,9 +135,24 @@ const paymentDetailsSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  providerType: {
+    type: String,
+    default: "",
+    trim: true,
+  },
   transactionId: {
     type: String,
     default: "",
+  },
+  gatewayPaymentId: {
+    type: String,
+    default: "",
+    trim: true,
+  },
+  paymentUrl: {
+    type: String,
+    default: "",
+    trim: true,
   },
   accountNo: {
     type: String,
@@ -150,6 +165,10 @@ const paymentDetailsSchema = new mongoose.Schema({
   sentTo: {
     type: String,
     default: "",
+  },
+  meta: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
   },
 });
 const orderSchema = new mongoose.Schema({

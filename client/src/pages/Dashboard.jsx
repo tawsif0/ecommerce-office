@@ -102,7 +102,9 @@ const TabContent = React.memo(({ activeTab, user }) => {
     case "vendor-shipping":
       return user?.userType === "vendor" ? <VendorShippingZones /> : null;
     case "vendor-messages":
-      return user?.userType === "vendor" ? <VendorMessages /> : null;
+      return ["vendor", "staff", "user", "admin"].includes(user?.userType) ? (
+        <VendorMessages />
+      ) : null;
     case "vendor-reports":
       return user?.userType === "admin" ? <AdminVendorReports /> : null;
     case "product-reports":

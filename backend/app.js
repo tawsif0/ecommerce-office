@@ -20,6 +20,7 @@ const staffRoutes = require("./routes/staffRoutes");
 const verificationRoutes = require("./routes/verificationRoutes");
 const adsRoutes = require("./routes/adsRoutes");
 const supportTicketRoutes = require("./routes/supportTicketRoutes");
+const vendorMessageRoutes = require("./routes/vendorMessageRoutes");
 const path = require("path");
 
 const app = express();
@@ -122,6 +123,7 @@ app.use("/api/staff", staffRoutes);
 app.use("/api/verifications", verificationRoutes);
 app.use("/api/ads", adsRoutes);
 app.use("/api/support-tickets", supportTicketRoutes);
+app.use("/api/vendor-messages", vendorMessageRoutes);
 // Error handling middleware
 app.use(errorHandler);
 

@@ -5,6 +5,7 @@ const Product = require("../models/Product.js");
 const Category = require("../models/Category.js");
 const Vendor = require("../models/Vendor.js");
 const User = require("../models/User");
+const PaymentMethod = require("../models/PaymentMethod");
 const { sendOrderStatusEmail } = require("../utils/emailTemplates");
 const { attachImageDataToProducts } = require("../utils/imageUtils");
 const {
@@ -22,6 +23,7 @@ const {
 const {
   createRecurringSubscriptionsFromOrder,
 } = require("../utils/recurringSubscriptionUtils");
+const { initiateGatewayPayment } = require("../utils/paymentGatewayUtils");
 
 // Generate order number
 const generateOrderNumber = () => {
@@ -30,6 +32,11 @@ const generateOrderNumber = () => {
   const random = Math.floor(Math.random() * 10000);
   return `ORD-${timestamp}-${random}`;
 };
+
+const GATEWAY_CHANNELS = new Set(["stripe", "paypal", "sslcommerz"]);
+
+const escapeRegExp = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const extractPaymentMethod = (paymentMethod, paymentDetails = {}) => {
   const candidates = [
@@ -62,13 +69,72 @@ const extractPaymentMethod = (paymentMethod, paymentDetails = {}) => {
   return "";
 };
 
-const normalizePaymentDetails = (paymentMethod, paymentDetails = {}) => ({
+const normalizePaymentDetails = (
+  paymentMethod,
+  paymentDetails = {},
+  { providerType = "", defaultAccountNo = "" } = {},
+) => ({
   method: extractPaymentMethod(paymentMethod, paymentDetails),
+  providerType: String(providerType || "").trim().toLowerCase(),
   transactionId: String(paymentDetails?.transactionId || "").trim(),
-  accountNo: String(paymentDetails?.accountNo || "").trim(),
+  gatewayPaymentId: String(paymentDetails?.gatewayPaymentId || "").trim(),
+  paymentUrl: String(paymentDetails?.paymentUrl || "").trim(),
+  accountNo: String(paymentDetails?.accountNo || defaultAccountNo || "").trim(),
   sentFrom: String(paymentDetails?.sentFrom || "").trim(),
   sentTo: String(paymentDetails?.sentTo || "").trim(),
+  meta:
+    paymentDetails?.meta && typeof paymentDetails.meta === "object"
+      ? paymentDetails.meta
+      : {},
 });
+
+const resolvePaymentMethodSelection = async ({
+  paymentMethodId,
+  paymentMethod,
+  paymentDetails,
+}) => {
+  const requestedMethod = extractPaymentMethod(paymentMethod, paymentDetails);
+  let methodDoc = null;
+
+  const normalizedMethodId = String(paymentMethodId || "").trim();
+  if (/^[0-9a-fA-F]{24}$/.test(normalizedMethodId)) {
+    methodDoc = await PaymentMethod.findOne({
+      _id: normalizedMethodId,
+      isActive: true,
+    }).lean();
+  }
+
+  if (!methodDoc && requestedMethod) {
+    const escaped = escapeRegExp(requestedMethod);
+    methodDoc = await PaymentMethod.findOne({
+      isActive: true,
+      $or: [
+        { code: requestedMethod.toLowerCase() },
+        { type: { $regex: `^${escaped}$`, $options: "i" } },
+      ],
+    }).lean();
+  }
+
+  const channelType = String(methodDoc?.channelType || "manual")
+    .trim()
+    .toLowerCase();
+  const requestedLower = String(requestedMethod || "").trim().toLowerCase();
+  const inferredCod =
+    !methodDoc && (requestedLower.includes("cod") || requestedLower.includes("cash on delivery"));
+  const inferredChannel = methodDoc ? channelType : inferredCod ? "cod" : "manual";
+
+  return {
+    methodDoc,
+    methodName: String(methodDoc?.type || requestedMethod || "").trim(),
+    channelType: inferredChannel,
+    defaultAccountNo: String(methodDoc?.accountNo || "").trim(),
+    requiresTransactionProof: methodDoc
+      ? methodDoc.requiresTransactionProof === undefined
+        ? true
+        : Boolean(methodDoc.requiresTransactionProof)
+      : !inferredCod,
+  };
+};
 
 const normalizeOrderItem = (item) => ({
   productId: item?.productId || item?.product?._id || item?.product,
@@ -446,13 +512,24 @@ exports.createOrder = async (req, res) => {
       shippingFee = 0,
       shippingMeta = {},
       couponCode = "",
+      paymentMethodId,
       paymentMethod,
       paymentDetails,
     } = req.body;
 
-    const normalizedPaymentDetails = normalizePaymentDetails(
+    const paymentSelection = await resolvePaymentMethodSelection({
+      paymentMethodId,
       paymentMethod,
       paymentDetails,
+    });
+
+    const normalizedPaymentDetails = normalizePaymentDetails(
+      paymentSelection.methodName,
+      paymentDetails,
+      {
+        providerType: paymentSelection.channelType,
+        defaultAccountNo: paymentSelection.defaultAccountNo,
+      },
     );
 
     // Validate required fields
@@ -467,6 +544,16 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Payment method is required",
+      });
+    }
+
+    if (
+      paymentSelection.requiresTransactionProof &&
+      !String(normalizedPaymentDetails.transactionId || "").trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction ID is required for this payment method",
       });
     }
 
@@ -508,7 +595,7 @@ exports.createOrder = async (req, res) => {
       discount: pricing.discount,
       couponCode: pricing.couponCode,
       total: pricing.total,
-      paymentMethod: normalizedPaymentDetails.method,
+      paymentMethod: paymentSelection.methodName || normalizedPaymentDetails.method,
       paymentDetails: normalizedPaymentDetails,
       paymentStatus: "pending",
       orderStatus: "pending",
@@ -528,6 +615,39 @@ exports.createOrder = async (req, res) => {
     }
 
     await createRecurringSubscriptionsFromOrder(order).catch(() => null);
+
+    let paymentRedirectUrl = "";
+    let gatewayInitError = "";
+
+    if (paymentSelection.methodDoc && GATEWAY_CHANNELS.has(paymentSelection.channelType)) {
+      try {
+        const gatewaySession = await initiateGatewayPayment({
+          order,
+          paymentMethod: paymentSelection.methodDoc,
+          customer: shippingAddress,
+        });
+
+        order.paymentDetails = {
+          ...(order.paymentDetails?.toObject
+            ? order.paymentDetails.toObject()
+            : order.paymentDetails || {}),
+          ...normalizedPaymentDetails,
+          providerType: gatewaySession?.providerType || paymentSelection.channelType,
+          gatewayPaymentId: String(gatewaySession?.gatewayPaymentId || ""),
+          paymentUrl: String(gatewaySession?.paymentUrl || ""),
+          meta:
+            gatewaySession?.meta && typeof gatewaySession.meta === "object"
+              ? gatewaySession.meta
+              : {},
+        };
+        await order.save();
+
+        paymentRedirectUrl = String(gatewaySession?.paymentUrl || "");
+      } catch (gatewayError) {
+        console.error("Create order gateway initialization error:", gatewayError);
+        gatewayInitError = gatewayError?.message || "Failed to initialize payment gateway";
+      }
+    }
 
     // Clear user's cart if logged in
     if (req.user?.id) {
@@ -553,6 +673,9 @@ exports.createOrder = async (req, res) => {
       success: true,
       message: "Order created successfully",
       order: populatedOrder,
+      paymentRedirectUrl: paymentRedirectUrl || null,
+      paymentProvider: paymentSelection.channelType || "manual",
+      gatewayInitError: gatewayInitError || null,
     });
   } catch (error) {
     console.error("Create order error:", error);
@@ -1138,13 +1261,24 @@ exports.guestCheckout = async (req, res) => {
       shippingFee = 0,
       shippingMeta = {},
       couponCode = "",
+      paymentMethodId,
       paymentMethod,
       paymentDetails,
     } = req.body;
 
-    const normalizedPaymentDetails = normalizePaymentDetails(
+    const paymentSelection = await resolvePaymentMethodSelection({
+      paymentMethodId,
       paymentMethod,
       paymentDetails,
+    });
+
+    const normalizedPaymentDetails = normalizePaymentDetails(
+      paymentSelection.methodName,
+      paymentDetails,
+      {
+        providerType: paymentSelection.channelType,
+        defaultAccountNo: paymentSelection.defaultAccountNo,
+      },
     );
 
     // Validate required fields
@@ -1160,6 +1294,16 @@ exports.guestCheckout = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Payment method is required",
+      });
+    }
+
+    if (
+      paymentSelection.requiresTransactionProof &&
+      !String(normalizedPaymentDetails.transactionId || "").trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction ID is required for this payment method",
       });
     }
 
@@ -1201,7 +1345,7 @@ exports.guestCheckout = async (req, res) => {
       discount: pricing.discount,
       couponCode: pricing.couponCode,
       total: pricing.total,
-      paymentMethod: normalizedPaymentDetails.method,
+      paymentMethod: paymentSelection.methodName || normalizedPaymentDetails.method,
       paymentDetails: normalizedPaymentDetails,
       paymentStatus: "pending",
       orderStatus: "pending",
@@ -1222,6 +1366,39 @@ exports.guestCheckout = async (req, res) => {
 
     await createRecurringSubscriptionsFromOrder(order).catch(() => null);
 
+    let paymentRedirectUrl = "";
+    let gatewayInitError = "";
+
+    if (paymentSelection.methodDoc && GATEWAY_CHANNELS.has(paymentSelection.channelType)) {
+      try {
+        const gatewaySession = await initiateGatewayPayment({
+          order,
+          paymentMethod: paymentSelection.methodDoc,
+          customer: shippingAddress,
+        });
+
+        order.paymentDetails = {
+          ...(order.paymentDetails?.toObject
+            ? order.paymentDetails.toObject()
+            : order.paymentDetails || {}),
+          ...normalizedPaymentDetails,
+          providerType: gatewaySession?.providerType || paymentSelection.channelType,
+          gatewayPaymentId: String(gatewaySession?.gatewayPaymentId || ""),
+          paymentUrl: String(gatewaySession?.paymentUrl || ""),
+          meta:
+            gatewaySession?.meta && typeof gatewaySession.meta === "object"
+              ? gatewaySession.meta
+              : {},
+        };
+        await order.save();
+
+        paymentRedirectUrl = String(gatewaySession?.paymentUrl || "");
+      } catch (gatewayError) {
+        console.error("Guest checkout gateway initialization error:", gatewayError);
+        gatewayInitError = gatewayError?.message || "Failed to initialize payment gateway";
+      }
+    }
+
     const populatedOrder = await Order.findById(order._id)
       .populate({
         path: "items.product",
@@ -1240,6 +1417,9 @@ exports.guestCheckout = async (req, res) => {
       success: true,
       message: "Order created successfully",
       order: populatedOrder,
+      paymentRedirectUrl: paymentRedirectUrl || null,
+      paymentProvider: paymentSelection.channelType || "manual",
+      gatewayInitError: gatewayInitError || null,
     });
   } catch (error) {
     console.error("Guest checkout error:", error);

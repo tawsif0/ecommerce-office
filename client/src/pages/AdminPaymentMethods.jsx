@@ -1,351 +1,561 @@
-/* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { useAuth } from "../hooks/useAuth";
 import ConfirmModal from "../components/ConfirmModal";
-import {
-  PlusCircleIcon,
-  CreditCardIcon,
-  TrashIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  CogIcon,
-  PencilIcon,
-} from "@heroicons/react/24/outline";
+import { useAuth } from "../hooks/useAuth";
+import { FiCreditCard, FiRefreshCw, FiTrash2 } from "react-icons/fi";
+
 const baseUrl = import.meta.env.VITE_API_URL;
+
+const initialGatewayConfig = {
+  publishableKey: "",
+  secretKey: "",
+  clientId: "",
+  clientSecret: "",
+  sandbox: true,
+  storeId: "",
+  storePassword: "",
+  currency: "",
+  successUrl: "",
+  cancelUrl: "",
+  failUrl: "",
+  ipnUrl: "",
+};
+
+const initialForm = {
+  code: "",
+  type: "",
+  channelType: "manual",
+  accountNo: "",
+  instructions: "",
+  requiresTransactionProof: true,
+  displayOrder: 0,
+  isActive: true,
+  gatewayConfig: initialGatewayConfig,
+};
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const sanitizeCode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
 const AdminPaymentMethods = () => {
   const { user } = useAuth();
-  const [paymentMethods, setPaymentMethods] = useState([]);
+  const isAdmin = user?.userType === "admin";
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [newMethod, setNewMethod] = useState({
-    type: "",
-    accountNo: "",
-  });
-  const [editingId, setEditingId] = useState(null);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [form, setForm] = useState(initialForm);
+  const [editingId, setEditingId] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (user?.userType === "admin") {
-      fetchPaymentMethods();
-    }
-  }, [user]);
+  const isGatewayType = useMemo(
+    () => ["stripe", "paypal", "sslcommerz"].includes(form.channelType),
+    [form.channelType],
+  );
 
-  const fetchPaymentMethods = async () => {
+  const loadPaymentMethods = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        `${baseUrl}/auth/admin/payment-methods`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      setPaymentMethods(response.data);
+      const response = await axios.get(`${baseUrl}/auth/admin/payment-methods`, {
+        headers: getAuthHeaders(),
+      });
+      setPaymentMethods(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      console.error("Error fetching payment methods:", error);
-      toast.error("Failed to load payment methods");
+      toast.error(error.response?.data?.error || "Failed to load payment methods");
+      setPaymentMethods([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddMethod = async () => {
-    if (!newMethod.type.trim() || !newMethod.accountNo.trim()) {
-      toast.error("Please fill in both fields");
+  useEffect(() => {
+    if (isAdmin) {
+      loadPaymentMethods();
+    }
+  }, [isAdmin]);
+
+  const resetForm = () => {
+    setForm(initialForm);
+    setEditingId("");
+  };
+
+  const handleFormChange = (event) => {
+    const { name, value, type, checked } = event.target;
+    const nextValue = type === "checkbox" ? checked : value;
+
+    if (name.startsWith("gateway.")) {
+      const key = name.replace("gateway.", "");
+      setForm((prev) => ({
+        ...prev,
+        gatewayConfig: {
+          ...prev.gatewayConfig,
+          [key]: nextValue,
+        },
+      }));
       return;
     }
 
-    setSaving(true);
+    if (name === "channelType") {
+      setForm((prev) => ({
+        ...prev,
+        channelType: nextValue,
+        requiresTransactionProof: nextValue === "manual",
+        accountNo: nextValue === "manual" ? prev.accountNo : "",
+      }));
+      return;
+    }
+
+    if (name === "code") {
+      setForm((prev) => ({ ...prev, code: sanitizeCode(nextValue) }));
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
+  };
+
+  const validateForm = () => {
+    if (!String(form.type || "").trim()) {
+      toast.error("Payment method name is required");
+      return false;
+    }
+    if (form.channelType === "manual" && !String(form.accountNo || "").trim()) {
+      toast.error("Account details are required for manual payment");
+      return false;
+    }
+    if (form.channelType === "stripe" && !String(form.gatewayConfig.secretKey || "").trim()) {
+      toast.error("Stripe secret key is required");
+      return false;
+    }
+    if (
+      form.channelType === "paypal" &&
+      (!String(form.gatewayConfig.clientId || "").trim() ||
+        !String(form.gatewayConfig.clientSecret || "").trim())
+    ) {
+      toast.error("PayPal client ID and secret are required");
+      return false;
+    }
+    if (
+      form.channelType === "sslcommerz" &&
+      (!String(form.gatewayConfig.storeId || "").trim() ||
+        !String(form.gatewayConfig.storePassword || "").trim())
+    ) {
+      toast.error("SSLCommerz store ID and password are required");
+      return false;
+    }
+    return true;
+  };
+
+  const buildPayload = () => ({
+    code: sanitizeCode(form.code) || sanitizeCode(form.type),
+    type: String(form.type || "").trim(),
+    channelType: form.channelType,
+    accountNo: form.channelType === "manual" ? String(form.accountNo || "").trim() : "",
+    instructions: String(form.instructions || "").trim(),
+    requiresTransactionProof:
+      form.channelType === "manual" ? Boolean(form.requiresTransactionProof) : false,
+    displayOrder: Number(form.displayOrder || 0),
+    isActive: Boolean(form.isActive),
+    gatewayConfig: form.gatewayConfig || {},
+  });
+
+  const handleSave = async (event) => {
+    event.preventDefault();
+    if (!validateForm()) return;
+
     try {
-      const token = localStorage.getItem("token");
+      setSaving(true);
+      const payload = buildPayload();
 
       if (editingId) {
-        // Update existing method
-        const response = await axios.put(
-          `${baseUrl}/auth/admin/payment-methods/${editingId}`,
-          newMethod,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        toast.success("Payment method updated successfully");
+        await axios.put(`${baseUrl}/auth/admin/payment-methods/${editingId}`, payload, {
+          headers: getAuthHeaders(),
+        });
+        toast.success("Payment method updated");
       } else {
-        // Add new method
-        const response = await axios.post(
-          `${baseUrl}/auth/admin/payment-methods`,
-          newMethod,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        toast.success("Payment method added successfully");
+        await axios.post(`${baseUrl}/auth/admin/payment-methods`, payload, {
+          headers: getAuthHeaders(),
+        });
+        toast.success("Payment method created");
       }
 
-      setNewMethod({ type: "", accountNo: "" });
-      setEditingId(null);
-      fetchPaymentMethods();
+      resetForm();
+      loadPaymentMethods();
     } catch (error) {
-      toast.error(
-        error.response?.data?.error || "Failed to save payment method",
-      );
+      toast.error(error.response?.data?.error || "Failed to save payment method");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEditMethod = (method) => {
-    setNewMethod({
-      type: method.type,
-      accountNo: method.accountNo,
+  const startEdit = (method) => {
+    setEditingId(String(method._id || ""));
+    setForm({
+      code: method.code || "",
+      type: method.type || "",
+      channelType: method.channelType || "manual",
+      accountNo: method.accountNo || "",
+      instructions: method.instructions || "",
+      requiresTransactionProof: Boolean(method.requiresTransactionProof),
+      displayOrder: Number(method.displayOrder || 0),
+      isActive: method.isActive !== false,
+      gatewayConfig: {
+        ...initialGatewayConfig,
+        ...(method.gatewayConfig || {}),
+      },
     });
-    setEditingId(method._id);
   };
 
-  const handleDeleteMethod = (method) => {
-    setDeleteConfirm(method);
-  };
-
-  const confirmDeleteMethod = async () => {
-    if (!deleteConfirm) return;
-    setIsDeleting(true);
+  const confirmDelete = async () => {
+    if (!deleteConfirm?._id) return;
     try {
-      const token = localStorage.getItem("token");
-      await axios.delete(
-        `${baseUrl}/auth/admin/payment-methods/${deleteConfirm._id}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      toast.success("Payment method deleted successfully");
-      fetchPaymentMethods();
+      setIsDeleting(true);
+      await axios.delete(`${baseUrl}/auth/admin/payment-methods/${deleteConfirm._id}`, {
+        headers: getAuthHeaders(),
+      });
+      toast.success("Payment method deleted");
+      setDeleteConfirm(null);
+      loadPaymentMethods();
     } catch (error) {
-      toast.error(
-        error.response?.data?.error || "Failed to delete payment method",
-      );
+      toast.error(error.response?.data?.error || "Failed to delete payment method");
     } finally {
       setIsDeleting(false);
-      setDeleteConfirm(null);
     }
   };
 
-  const handleCancelEdit = () => {
-    setNewMethod({ type: "", accountNo: "" });
-    setEditingId(null);
-  };
-
-  if (loading) {
+  if (!isAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[200px] p-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-        <p className="mt-4 text-gray-600">Loading payment methods...</p>
+      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+        <h2 className="text-xl font-semibold text-black mb-2">Admin Access Required</h2>
+        <p className="text-gray-600">Only admin can manage payment methods.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-linear-to-r from-blue-900 to-black rounded-xl p-6 md:p-8 text-center">
-        <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-white/10 rounded-full mb-4">
-          <CreditCardIcon className="h-6 w-6 md:h-8 md:w-8 text-white" />
+      <div className="bg-linear-to-r from-zinc-900 to-black rounded-xl p-6 md:p-8 text-white">
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-white/10 rounded-full mb-4">
+          <FiCreditCard className="w-6 h-6" />
         </div>
-        <h2 className="text-xl md:text-2xl font-bold text-white mb-2">
-          Payment Methods Management
-        </h2>
-        <p className="text-gray-300 text-sm md:text-base mb-6">
-          Add and manage payment methods for users
+        <h1 className="text-2xl font-bold">Payment Gateway Management</h1>
+        <p className="text-zinc-200 mt-1">
+          Configure manual/COD and Stripe, PayPal, SSLCommerz gateways for checkout.
         </p>
       </div>
 
-      {/* Add/Edit Form */}
-      <div className="bg-white rounded-xl p-4 md:p-6 border border-gray-200 shadow-sm">
-        <div className="flex items-center space-x-3 mb-6">
-          <CogIcon className="h-5 w-5 md:h-6 md:w-6 text-gray-700" />
-          <h2 className="text-lg md:text-xl font-bold text-gray-900">
-            {editingId ? "Edit Payment Method" : "Add New Payment Method"}
-          </h2>
-        </div>
+      <form
+        onSubmit={handleSave}
+        className="bg-white border border-gray-200 rounded-xl p-5 md:p-6 space-y-4"
+      >
+        <h2 className="text-lg font-semibold text-black">
+          {editingId ? "Edit Payment Method" : "Create Payment Method"}
+        </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Payment Type
-            </label>
-            <input
-              type="text"
-              value={newMethod.type}
-              onChange={(e) =>
-                setNewMethod({ ...newMethod, type: e.target.value })
-              }
-              placeholder="e.g., Bitcoin, PayPal, Stripe"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-black focus:outline-none"
-            />
-            <p className="text-xs md:text-sm text-gray-500 mt-2">
-              Name of the payment method
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Account Number/Details
-            </label>
-            <input
-              type="text"
-              value={newMethod.accountNo}
-              onChange={(e) =>
-                setNewMethod({ ...newMethod, accountNo: e.target.value })
-              }
-              placeholder="e.g., 1A2b3C4d5E... or +1234567890"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-black focus:outline-none"
-            />
-            <p className="text-xs md:text-sm text-gray-500 mt-2">
-              Account number or payment details
-            </p>
-          </div>
-        </div>
-
-        <div className="flex space-x-3 mt-6">
-          <button
-            onClick={handleAddMethod}
-            disabled={
-              saving || !newMethod.type.trim() || !newMethod.accountNo.trim()
-            }
-            className="px-6 py-3 bg-black text-white rounded-xl font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center space-x-2"
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <input
+            name="type"
+            value={form.type}
+            onChange={handleFormChange}
+            placeholder="Display name (e.g. bKash, Stripe)"
+            className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+          />
+          <input
+            name="code"
+            value={form.code}
+            onChange={handleFormChange}
+            placeholder="code (auto from name)"
+            className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+          />
+          <select
+            name="channelType"
+            value={form.channelType}
+            onChange={handleFormChange}
+            className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
           >
-            {saving ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                {editingId ? (
-                  <>
-                    <CheckCircleIcon className="h-5 w-5" />
-                    <span>Update Method</span>
-                  </>
-                ) : (
-                  <>
-                    <PlusCircleIcon className="h-5 w-5" />
-                    <span>Add Payment Method</span>
-                  </>
-                )}
-              </>
-            )}
-          </button>
+            <option value="manual">Manual</option>
+            <option value="cod">Cash on Delivery</option>
+            <option value="stripe">Stripe</option>
+            <option value="paypal">PayPal</option>
+            <option value="sslcommerz">SSLCommerz</option>
+          </select>
+          <input
+            name="displayOrder"
+            type="number"
+            value={form.displayOrder}
+            onChange={handleFormChange}
+            placeholder="Display order"
+            className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+          />
+        </div>
 
+        {form.channelType === "manual" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input
+              name="accountNo"
+              value={form.accountNo}
+              onChange={handleFormChange}
+              placeholder="Account number/details"
+              className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+            />
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                name="requiresTransactionProof"
+                checked={Boolean(form.requiresTransactionProof)}
+                onChange={handleFormChange}
+              />
+              Require transaction ID in checkout
+            </label>
+          </div>
+        )}
+
+        {isGatewayType && (
+          <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+            <p className="text-sm font-semibold text-gray-900">Gateway Credentials</p>
+            {form.channelType === "stripe" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  name="gateway.publishableKey"
+                  value={form.gatewayConfig.publishableKey}
+                  onChange={handleFormChange}
+                  placeholder="Publishable key (optional for frontend)"
+                  className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+                <input
+                  name="gateway.secretKey"
+                  value={form.gatewayConfig.secretKey}
+                  onChange={handleFormChange}
+                  placeholder="Secret key"
+                  className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+              </div>
+            )}
+            {form.channelType === "paypal" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  name="gateway.clientId"
+                  value={form.gatewayConfig.clientId}
+                  onChange={handleFormChange}
+                  placeholder="PayPal client ID"
+                  className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+                <input
+                  name="gateway.clientSecret"
+                  value={form.gatewayConfig.clientSecret}
+                  onChange={handleFormChange}
+                  placeholder="PayPal client secret"
+                  className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    name="gateway.sandbox"
+                    checked={Boolean(form.gatewayConfig.sandbox)}
+                    onChange={handleFormChange}
+                  />
+                  Use sandbox
+                </label>
+              </div>
+            )}
+            {form.channelType === "sslcommerz" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  name="gateway.storeId"
+                  value={form.gatewayConfig.storeId}
+                  onChange={handleFormChange}
+                  placeholder="Store ID"
+                  className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+                <input
+                  name="gateway.storePassword"
+                  value={form.gatewayConfig.storePassword}
+                  onChange={handleFormChange}
+                  placeholder="Store password"
+                  className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    name="gateway.sandbox"
+                    checked={Boolean(form.gatewayConfig.sandbox)}
+                    onChange={handleFormChange}
+                  />
+                  Use sandbox
+                </label>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <input
+                name="gateway.currency"
+                value={form.gatewayConfig.currency}
+                onChange={handleFormChange}
+                placeholder="Currency (BDT/USD)"
+                className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+              />
+              <input
+                name="gateway.successUrl"
+                value={form.gatewayConfig.successUrl}
+                onChange={handleFormChange}
+                placeholder="Success URL (optional)"
+                className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+              />
+              <input
+                name="gateway.cancelUrl"
+                value={form.gatewayConfig.cancelUrl}
+                onChange={handleFormChange}
+                placeholder="Cancel URL (optional)"
+                className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+              />
+              {form.channelType === "sslcommerz" && (
+                <>
+                  <input
+                    name="gateway.failUrl"
+                    value={form.gatewayConfig.failUrl}
+                    onChange={handleFormChange}
+                    placeholder="Fail URL (optional)"
+                    className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                  />
+                  <input
+                    name="gateway.ipnUrl"
+                    value={form.gatewayConfig.ipnUrl}
+                    onChange={handleFormChange}
+                    placeholder="IPN URL (optional)"
+                    className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <textarea
+          name="instructions"
+          value={form.instructions}
+          onChange={handleFormChange}
+          rows={2}
+          placeholder="Optional instructions shown in checkout"
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+        />
+
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              name="isActive"
+              checked={Boolean(form.isActive)}
+              onChange={handleFormChange}
+            />
+            Active in checkout
+          </label>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-5 py-2.5 bg-black text-white rounded-lg font-medium disabled:opacity-60"
+          >
+            {saving ? "Saving..." : editingId ? "Update Method" : "Create Method"}
+          </button>
           {editingId && (
             <button
-              onClick={handleCancelEdit}
-              disabled={saving}
-              className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+              type="button"
+              onClick={resetForm}
+              className="px-5 py-2.5 border border-gray-300 rounded-lg"
             >
-              <XCircleIcon className="h-5 w-5 inline mr-2" />
               Cancel
             </button>
           )}
         </div>
-      </div>
+      </form>
 
-      {/* Payment Methods List */}
-      <div className="bg-white rounded-xl p-4 md:p-6 border border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg md:text-xl font-bold text-gray-900">
-              Available Payment Methods ({paymentMethods.length})
-            </h3>
-            <p className="text-sm text-gray-600">
-              These methods will appear in checkout payment options
-            </p>
-          </div>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-black">
+            Configured Methods ({paymentMethods.length})
+          </h2>
           <button
-            onClick={fetchPaymentMethods}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+            type="button"
+            onClick={loadPaymentMethods}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm"
           >
-            <svg
-              className="h-4 w-4 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
+            <FiRefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
         </div>
 
-        {paymentMethods.length === 0 ? (
-          <div className="text-center py-8">
-            <CreditCardIcon className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-            <p className="text-gray-500">No payment methods added yet</p>
-            <p className="text-sm text-gray-400 mt-1">
-              Add payment methods above to get started
-            </p>
-          </div>
+        {loading ? (
+          <p className="text-sm text-gray-600">Loading payment methods...</p>
+        ) : paymentMethods.length === 0 ? (
+          <p className="text-sm text-gray-600">No payment methods configured yet.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-3">
             {paymentMethods.map((method) => (
-              <motion.div
+              <div
                 key={method._id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-gray-300 transition-colors"
+                className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <CreditCardIcon className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <h4 className="font-bold text-gray-900">{method.type}</h4>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-2">
-                      Account Details:
+                <div>
+                  <p className="font-semibold text-black">
+                    {method.type} ({String(method.channelType || "manual").toUpperCase()})
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Code: {method.code} | Order: {Number(method.displayOrder || 0)} |{" "}
+                    {method.isActive ? "Active" : "Inactive"}
+                  </p>
+                  {method.accountNo ? (
+                    <p className="text-xs text-gray-600 mt-1">Account: {method.accountNo}</p>
+                  ) : (
+                    <p className="text-xs text-gray-600 mt-1">
+                      Gateway: credentials configured in admin panel
                     </p>
-                    <p className="font-mono text-sm bg-white p-2 rounded mt-1 border border-gray-200">
-                      {method.accountNo}
-                    </p>
-                  </div>
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={() => handleEditMethod(method)}
-                      className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                      title="Edit"
-                    >
-                      <PencilIcon className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteMethod(method)}
-                      className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                      title="Delete"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
+                  )}
                 </div>
-                <div className="text-xs text-gray-500 mt-3">
-                  Created: {new Date(method.createdAt).toLocaleDateString()}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(method)}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm(method)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 rounded-lg text-sm"
+                  >
+                    <FiTrash2 className="w-4 h-4" />
+                    Delete
+                  </button>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         )}
-        <ConfirmModal
-          isOpen={Boolean(deleteConfirm)}
-          title="Delete payment method"
-          message={
-            deleteConfirm?.type
-              ? `Delete the ${deleteConfirm.type} payment method?`
-              : "Delete this payment method?"
-          }
-          confirmLabel="Delete"
-          isDanger
-          isLoading={isDeleting}
-          onCancel={() => setDeleteConfirm(null)}
-          onConfirm={confirmDeleteMethod}
-        />
       </div>
+
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirm)}
+        title="Delete Payment Method"
+        message={
+          deleteConfirm?.type
+            ? `Delete ${deleteConfirm.type} payment method?`
+            : "Delete this payment method?"
+        }
+        confirmLabel="Delete"
+        isDanger
+        isLoading={isDeleting}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

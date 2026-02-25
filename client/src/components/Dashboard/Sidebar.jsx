@@ -397,6 +397,11 @@ const getRoleSections = (role) => {
       title: "Support",
       items: [
         {
+          name: "Vendor Messages",
+          icon: FiMail,
+          tab: "vendor-messages",
+        },
+        {
           name: "Support Tickets",
           icon: FiMessageSquare,
           tab: "module-support",

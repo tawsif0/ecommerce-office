@@ -11,6 +11,11 @@ const {
   getAdminProductReports,
   trackOrder, // NEW
   searchOrders, // NEW
+  generateCourierConsignment,
+  syncCourierTracking,
+  getCourierLabel,
+  getAdminCustomerInsights,
+  createAdminOrder,
 } = require("../controllers/orderController.js");
 const auth = require("../middlewares/auth.js");
 
@@ -34,5 +39,10 @@ router.patch("/:id/cancel", cancelOrder);
 router.get("/admin/all", getAllOrders); // NEW - Admin order list
 router.get("/admin/product-reports", getAdminProductReports);
 router.patch("/admin/:id/status", updateOrderStatus); // UPDATED - Admin status update
+router.post("/admin/customer-insights", getAdminCustomerInsights);
+router.post("/admin/manual", createAdminOrder);
+router.post("/admin/:id/courier/consignment", generateCourierConsignment);
+router.post("/admin/:id/courier/sync", syncCourierTracking);
+router.get("/admin/:id/courier/label", getCourierLabel);
 
 module.exports = router;

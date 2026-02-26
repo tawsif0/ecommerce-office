@@ -12,6 +12,7 @@ import MobileHeader from "../components/Dashboard/MobileHeader";
 import Settings from "../components/Dashboard/Settings";
 import AdminPaymentMethods from "./AdminPaymentMethods";
 import DashboardHome from "./DashboardHome";
+import AdminAddOrder from "./AdminAddOrder";
 import CreateCategory from "./Category/CreateCategory";
 import ModifyCategory from "./Category/ModifyCategory";
 import ProductModify from "./Product/ProductModify";
@@ -32,6 +33,7 @@ import VendorMessages from "./VendorMessages";
 import AdminVendorReports from "./AdminVendorReports";
 import AdminVendorReviews from "./AdminVendorReviews";
 import AdminProductReports from "./AdminProductReports";
+import AdminCustomerRisk from "./AdminCustomerRisk";
 import MyWishlist from "./MyWishlist";
 import ModuleSubscriptions from "./ModuleSubscriptions";
 import ModuleBookings from "./ModuleBookings";
@@ -41,19 +43,60 @@ import ModuleVerifications from "./ModuleVerifications";
 import ModuleAds from "./ModuleAds";
 import ModuleSupportTickets from "./ModuleSupportTickets";
 import ModuleGeolocation from "./ModuleGeolocation";
+import ModuleAbandonedOrders from "./ModuleAbandonedOrders";
+import ModuleSuppliers from "./ModuleSuppliers";
+import ModulePurchases from "./ModulePurchases";
+import ModuleAccounts from "./ModuleAccounts";
+import ModuleLandingPages from "./ModuleLandingPages";
+import ModuleVoiceAssistant from "./ModuleVoiceAssistant";
+import ModuleBusinessReports from "./ModuleBusinessReports";
+import ModuleWebsiteSetup from "./ModuleWebsiteSetup";
+import ModuleCampaignOffers from "./ModuleCampaignOffers";
+import ModuleAdminUsers from "./ModuleAdminUsers";
+import ModuleSuperAdminControl from "./ModuleSuperAdminControl";
+import { fetchPublicSettings } from "../utils/publicSettings";
+
+const normalizeMarketplaceMode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "single"
+    ? "single"
+    : "multi";
+
+const SINGLE_VENDOR_DISABLED_TABS = new Set([
+  "vendors-admin",
+  "product-approvals",
+  "vendor-reports",
+  "vendor-reviews",
+  "vendor-store",
+  "vendor-orders",
+  "vendor-dashboard",
+  "vendor-shipping",
+  "vendor-messages",
+  "module-subscriptions",
+  "module-staff",
+  "module-verifications",
+  "module-ads",
+  "module-geolocation",
+]);
 
 // Memoized content components
-const TabContent = React.memo(({ activeTab, user }) => {
+const TabContent = React.memo(({
+  activeTab,
+  user,
+  onTabChange,
+  onMarketplaceModeChange,
+}) => {
   if (user?.userType === "admin" && activeTab === "dashboard") {
-    return <DashboardHome user={user} />;
+    return <DashboardHome user={user} onTabChange={onTabChange} />;
   }
 
   if (user?.userType === "vendor" && activeTab === "dashboard") {
-    return <VendorDashboardHome />;
+    return <VendorDashboardHome onTabChange={onTabChange} />;
   }
 
   if (user?.userType !== "admin" && activeTab === "dashboard") {
-    return <DashboardHome user={user} />;
+    return <DashboardHome user={user} onTabChange={onTabChange} />;
   }
 
   switch (activeTab) {
@@ -87,12 +130,14 @@ const TabContent = React.memo(({ activeTab, user }) => {
       return user?.userType === "admin" ? <AdminProductApprovals /> : null;
     case "order-list":
       return user?.userType === "admin" ? <AdminOrderList /> : null;
+    case "add-order":
+      return user?.userType === "admin" ? <AdminAddOrder /> : null;
     case "vendor-store":
       return user?.userType === "vendor" ? <VendorStoreSettings /> : null;
     case "vendor-orders":
       return user?.userType === "vendor" ? <VendorOrders /> : null;
     case "vendor-dashboard":
-      return user?.userType === "vendor" ? <VendorDashboardHome /> : null;
+      return user?.userType === "vendor" ? <VendorDashboardHome onTabChange={onTabChange} /> : null;
     case "coupons":
       return user?.userType === "admin" || user?.userType === "vendor" ? (
         <AdminCoupons />
@@ -111,6 +156,8 @@ const TabContent = React.memo(({ activeTab, user }) => {
       return user?.userType === "admin" ? <AdminProductReports /> : null;
     case "vendor-reviews":
       return user?.userType === "admin" ? <AdminVendorReviews /> : null;
+    case "customer-risk":
+      return user?.userType === "admin" ? <AdminCustomerRisk /> : null;
     case "my-orders":
       return user?.userType !== "admin" ? <UserOrders /> : null;
     case "wishlist":
@@ -141,8 +188,51 @@ const TabContent = React.memo(({ activeTab, user }) => {
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleGeolocation />
       ) : null;
+    case "module-abandoned":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModuleAbandonedOrders />
+      ) : null;
+    case "module-suppliers":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModuleSuppliers />
+      ) : null;
+    case "module-purchases":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModulePurchases />
+      ) : null;
+    case "module-accounts":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModuleAccounts />
+      ) : null;
+    case "module-landing-pages":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModuleLandingPages />
+      ) : null;
+    case "module-campaign-offers":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModuleCampaignOffers onOpenTab={onTabChange} />
+      ) : null;
+    case "module-voice":
+      return (
+        <ModuleVoiceAssistant
+          user={user}
+          onTabChange={onTabChange}
+        />
+      );
+    case "module-admin-users":
+      return user?.userType === "admin" ? <ModuleAdminUsers /> : null;
+    case "module-super-admin":
+      return user?.userType === "admin" ? (
+        <ModuleSuperAdminControl onMarketplaceModeChange={onMarketplaceModeChange} />
+      ) : null;
+    case "module-business-reports":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModuleBusinessReports />
+      ) : null;
+    case "module-website-setup":
+      return user?.userType === "admin" ? <ModuleWebsiteSetup /> : null;
     default:
-      return <DashboardHome user={user} />;
+      return <DashboardHome user={user} onTabChange={onTabChange} />;
   }
 });
 
@@ -155,6 +245,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem("dashboardActiveTab") || "dashboard";
   });
+  const [marketplaceMode, setMarketplaceMode] = useState("multi");
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -199,6 +290,36 @@ const Dashboard = () => {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    const loadMarketplaceMode = async () => {
+      if (!user) return;
+      try {
+        const settings = await fetchPublicSettings();
+        if (!mounted) return;
+        setMarketplaceMode(normalizeMarketplaceMode(settings?.marketplaceMode));
+      } catch (_error) {
+        if (!mounted) return;
+        setMarketplaceMode("multi");
+      }
+    };
+
+    loadMarketplaceMode();
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (normalizeMarketplaceMode(marketplaceMode) !== "single") return;
+    if (!SINGLE_VENDOR_DISABLED_TABS.has(activeTab)) return;
+
+    setActiveTab("dashboard");
+    localStorage.setItem("dashboardActiveTab", "dashboard");
+    toast.error("This module is disabled in single-vendor mode");
+  }, [marketplaceMode, activeTab]);
+
   const handleTabChange = (tab) => {
     // If it's "home" tab, navigate to homepage
     if (tab === "home") {
@@ -214,11 +335,16 @@ const Dashboard = () => {
       "create-banner",
       "modify-banner",
       "order-list",
+      "add-order",
       "product-approvals",
       "shipping-zones",
       "vendor-reports",
       "product-reports",
       "vendor-reviews",
+      "customer-risk",
+      "module-website-setup",
+      "module-admin-users",
+      "module-super-admin",
     ];
 
     if (adminOnlyTabs.includes(tab) && user?.userType !== "admin") {
@@ -226,10 +352,23 @@ const Dashboard = () => {
       return;
     }
 
+    if (
+      normalizeMarketplaceMode(marketplaceMode) === "single" &&
+      SINGLE_VENDOR_DISABLED_TABS.has(tab)
+    ) {
+      toast.error("This module is disabled in single-vendor mode");
+      setActiveTab("dashboard");
+      return;
+    }
+
     setActiveTab(tab);
     if (isMobile) {
       setIsMobileOpen(false);
     }
+  };
+
+  const handleMarketplaceModeChange = (mode) => {
+    setMarketplaceMode(normalizeMarketplaceMode(mode));
   };
 
   const toggleSidebar = () => {
@@ -304,7 +443,12 @@ const Dashboard = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <TabContent activeTab={activeTab} user={user} />
+              <TabContent
+                activeTab={activeTab}
+                user={user}
+                onTabChange={handleTabChange}
+                onMarketplaceModeChange={handleMarketplaceModeChange}
+              />
               </motion.div>
             </AnimatePresence>
           </div>

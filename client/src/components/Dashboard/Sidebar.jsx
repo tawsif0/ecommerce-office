@@ -26,7 +26,12 @@ import {
   FiHeart,
   FiCheckCircle,
   FiMapPin,
+  FiShield,
+  FiArchive,
+  FiMic,
+  FiUsers,
 } from "react-icons/fi";
+import { fetchPublicSettings } from "../../utils/publicSettings";
 
 const ROLE_LABELS = {
   admin: "Admin Dashboard",
@@ -43,6 +48,11 @@ const AVATAR_ROLE_CLASSES = {
 };
 
 const MODULE_CHILDREN = [
+  {
+    name: "Campaign Offers",
+    icon: FiTag,
+    tab: "module-campaign-offers",
+  },
   {
     name: "Subscriptions",
     icon: FiTag,
@@ -83,7 +93,55 @@ const MODULE_CHILDREN = [
     icon: FiMapPin,
     tab: "module-geolocation",
   },
+  {
+    name: "Abandoned Orders",
+    icon: FiArchive,
+    tab: "module-abandoned",
+  },
+  {
+    name: "Suppliers",
+    icon: FiPackage,
+    tab: "module-suppliers",
+  },
+  {
+    name: "Purchases",
+    icon: FiShoppingBag,
+    tab: "module-purchases",
+  },
+  {
+    name: "Accounts",
+    icon: FiDollarSign,
+    tab: "module-accounts",
+  },
+  {
+    name: "Landing Pages",
+    icon: FiGlobe,
+    tab: "module-landing-pages",
+  },
+  {
+    name: "Voice Assistant",
+    icon: FiMic,
+    tab: "module-voice",
+  },
+  {
+    name: "Business Reports",
+    icon: FiBarChart2,
+    tab: "module-business-reports",
+  },
+  {
+    name: "Website Setup",
+    icon: FiSettings,
+    tab: "module-website-setup",
+  },
 ];
+
+const SINGLE_VENDOR_DISABLED_MODULE_TABS = new Set([
+  "module-subscriptions",
+  "module-staff",
+  "module-verifications",
+  "module-ads",
+  "module-geolocation",
+]);
 
 const resolveUserRole = (user) => {
   const role = String(user?.userType || "user").toLowerCase().trim();
@@ -93,8 +151,16 @@ const resolveUserRole = (user) => {
   return "user";
 };
 
-const getRoleSections = (role) => {
+const normalizeMarketplaceMode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "single"
+    ? "single"
+    : "multi";
+
+const getRoleSections = (role, marketplaceMode = "multi") => {
   const dashboardLabel = ROLE_LABELS[role] || ROLE_LABELS.user;
+  const isSingleMode = normalizeMarketplaceMode(marketplaceMode) === "single";
 
   if (role === "admin") {
     return [
@@ -111,6 +177,11 @@ const getRoleSections = (role) => {
       {
         title: "Operations",
         items: [
+          {
+            name: "Add Order",
+            icon: FiPlus,
+            tab: "add-order",
+          },
           {
             name: "Order List",
             icon: FiPackage,
@@ -133,26 +204,30 @@ const getRoleSections = (role) => {
           },
         ],
       },
-      {
-        title: "Marketplace",
-        items: [
-          {
-            name: "Vendor Management",
-            icon: FiShoppingBag,
-            tab: "vendors-admin",
-          },
-          {
-            name: "Review Moderation",
-            icon: FiMessageSquare,
-            tab: "vendor-reviews",
-          },
-          {
-            name: "Product Approvals",
-            icon: FiCheckCircle,
-            tab: "product-approvals",
-          },
-        ],
-      },
+      ...(!isSingleMode
+        ? [
+            {
+              title: "Marketplace",
+              items: [
+                {
+                  name: "Vendor Management",
+                  icon: FiShoppingBag,
+                  tab: "vendors-admin",
+                },
+                {
+                  name: "Review Moderation",
+                  icon: FiMessageSquare,
+                  tab: "vendor-reviews",
+                },
+                {
+                  name: "Product Approvals",
+                  icon: FiCheckCircle,
+                  tab: "product-approvals",
+                },
+              ],
+            },
+          ]
+        : []),
       {
         title: "Catalog",
         items: [
@@ -215,17 +290,80 @@ const getRoleSections = (role) => {
         ],
       },
       {
-        title: "Analytics",
+        title: "Marketing",
         items: [
           {
-            name: "Vendor Reports",
-            icon: FiBarChart2,
-            tab: "vendor-reports",
+            name: "Campaign Center",
+            icon: FiTag,
+            tab: "module-campaign-offers",
           },
+          {
+            name: "Landing Pages",
+            icon: FiGlobe,
+            tab: "module-landing-pages",
+          },
+          ...(!isSingleMode
+            ? [
+                {
+                  name: "Ads",
+                  icon: FiGlobe,
+                  tab: "module-ads",
+                },
+              ]
+            : []),
+        ],
+      },
+      {
+        title: "Analytics",
+        items: [
+          ...(!isSingleMode
+            ? [
+                {
+                  name: "Vendor Reports",
+                  icon: FiBarChart2,
+                  tab: "vendor-reports",
+                },
+              ]
+            : []),
           {
             name: "Product Reports",
             icon: FiBarChart2,
             tab: "product-reports",
+          },
+          {
+            name: "Business Reports",
+            icon: FiBarChart2,
+            tab: "module-business-reports",
+          },
+          {
+            name: "Customer Risk",
+            icon: FiShield,
+            tab: "customer-risk",
+          },
+        ],
+      },
+      {
+        title: "Website",
+        items: [
+          {
+            name: "Website Setup",
+            icon: FiSettings,
+            tab: "module-website-setup",
+          },
+        ],
+      },
+      {
+        title: "Administration",
+        items: [
+          {
+            name: "Super Admin Control",
+            icon: FiShield,
+            tab: "module-super-admin",
+          },
+          {
+            name: "Admin Users",
+            icon: FiUsers,
+            tab: "module-admin-users",
           },
         ],
       },
@@ -236,7 +374,11 @@ const getRoleSections = (role) => {
             name: "Marketplace Modules",
             icon: FiSettings,
             tab: "modules-admin",
-            children: MODULE_CHILDREN,
+            children: isSingleMode
+              ? MODULE_CHILDREN.filter(
+                  (module) => !SINGLE_VENDOR_DISABLED_MODULE_TABS.has(module.tab),
+                )
+              : MODULE_CHILDREN,
           },
         ],
       },
@@ -277,6 +419,16 @@ const getRoleSections = (role) => {
             name: "Coupons",
             icon: FiTag,
             tab: "coupons",
+          },
+          {
+            name: "Campaign Center",
+            icon: FiTag,
+            tab: "module-campaign-offers",
+          },
+          {
+            name: "Landing Pages",
+            icon: FiGlobe,
+            tab: "module-landing-pages",
           },
           {
             name: "Customer Messages",
@@ -425,9 +577,27 @@ const Sidebar = ({
   setIsHovered,
 }) => {
   const [openSubmenus, setOpenSubmenus] = useState({});
+  const [marketplaceMode, setMarketplaceMode] = useState("multi");
 
   const role = resolveUserRole(user);
-  const roleSections = useMemo(() => getRoleSections(role), [role]);
+  const roleSections = useMemo(() => getRoleSections(role, marketplaceMode), [role, marketplaceMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      const settings = await fetchPublicSettings();
+      if (cancelled) return;
+
+      setMarketplaceMode(normalizeMarketplaceMode(settings?.marketplaceMode));
+    };
+
+    loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const navSections = useMemo(
     () => [

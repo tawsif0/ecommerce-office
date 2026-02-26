@@ -99,6 +99,11 @@ const addressSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  alternativePhone: {
+    type: String,
+    trim: true,
+    default: "",
+  },
   address: {
     type: String,
     required: true,
@@ -108,6 +113,11 @@ const addressSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
+  },
+  subCity: {
+    type: String,
+    trim: true,
+    default: "",
   },
   district: {
     type: String,
@@ -171,6 +181,49 @@ const paymentDetailsSchema = new mongoose.Schema({
     default: {},
   },
 });
+
+const ORDER_STATUS_FLOW = [
+  "pending",
+  "confirmed",
+  "processing",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "returned",
+];
+
+const orderStatusTimelineSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ORDER_STATUS_FLOW,
+      required: true,
+    },
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 1000,
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    changedByRole: {
+      type: String,
+      default: "system",
+      trim: true,
+      maxlength: 40,
+    },
+  },
+  { _id: false },
+);
+
 const orderSchema = new mongoose.Schema({
   orderNumber: {
     type: String,
@@ -228,8 +281,39 @@ const orderSchema = new mongoose.Schema({
   },
   orderStatus: {
     type: String,
-    enum: ["pending", "processing", "shipped", "delivered", "cancelled"],
+    enum: ORDER_STATUS_FLOW,
     default: "pending",
+  },
+  adminNotes: {
+    type: String,
+    default: "",
+    trim: true,
+    maxlength: 3000,
+  },
+  statusTimeline: {
+    type: [orderStatusTimelineSchema],
+    default: [],
+  },
+  source: {
+    type: String,
+    default: "shop",
+    trim: true,
+    maxlength: 120,
+    index: true,
+  },
+  landingPage: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "LandingPage",
+    default: null,
+    index: true,
+  },
+  landingPageSlug: {
+    type: String,
+    default: "",
+    trim: true,
+    lowercase: true,
+    maxlength: 220,
+    index: true,
   },
   createdAt: {
     type: Date,
@@ -248,6 +332,18 @@ orderSchema.pre("validate", function preValidate(next) {
 
   if (!this.paymentMethod && this.paymentDetails?.method) {
     this.paymentMethod = this.paymentDetails.method;
+  }
+
+  if (this.isNew && (!Array.isArray(this.statusTimeline) || this.statusTimeline.length === 0)) {
+    this.statusTimeline = [
+      {
+        status: this.orderStatus || "pending",
+        note: "Order created",
+        changedAt: this.createdAt || new Date(),
+        changedBy: null,
+        changedByRole: "system",
+      },
+    ];
   }
 
   next();

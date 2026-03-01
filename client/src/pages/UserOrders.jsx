@@ -49,6 +49,23 @@ const getFullImageUrl = (imagePath) => {
   return null;
 };
 
+const ORDER_PROGRESS_STATUSES = [
+  "pending",
+  "confirmed",
+  "processing",
+  "shipped",
+  "delivered",
+];
+
+const formatPaymentMethodLabel = (value) => {
+  const raw = String(value || "").trim();
+  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (normalized === "cod" || normalized === "cash on delivery") {
+    return "Cash on Delivery";
+  }
+  return raw.replace(/_/g, " ");
+};
+
 // In ProductImage component, update the error handling
 const ProductImage = ({ src, alt, className }) => {
   const [imgSrc, setImgSrc] = useState(getFullImageUrl(src));
@@ -198,6 +215,13 @@ const UserOrders = () => {
           bgColor: "bg-yellow-50",
           borderColor: "border-yellow-200",
         };
+      case "confirmed":
+        return {
+          icon: FiCheckCircle,
+          color: "text-cyan-600",
+          bgColor: "bg-cyan-50",
+          borderColor: "border-cyan-200",
+        };
       case "processing":
         return {
           icon: FiPackage,
@@ -225,6 +249,13 @@ const UserOrders = () => {
           color: "text-red-600",
           bgColor: "bg-red-50",
           borderColor: "border-red-200",
+        };
+      case "returned":
+        return {
+          icon: FiXCircle,
+          color: "text-orange-600",
+          bgColor: "bg-orange-50",
+          borderColor: "border-orange-200",
         };
       default:
         return {
@@ -447,7 +478,7 @@ const UserOrders = () => {
                       <div className="text-sm">
                         <span className="text-gray-600">Payment: </span>
                         <span className="font-medium">
-                          {order.paymentMethod?.replace(/_/g, " ")}
+                          {formatPaymentMethodLabel(order.paymentMethod)}
                         </span>
                         <span
                           className={`ml-2 ${
@@ -499,20 +530,15 @@ const UserOrders = () => {
                 <h3 className="font-semibold text-black mb-4">Order Status</h3>
                 <div className="relative">
                   <div className="flex justify-between items-center">
-                    {["pending", "processing", "shipped", "delivered"].map(
-                      (status, index) => {
+                    {ORDER_PROGRESS_STATUSES.map((status, index) => {
                         const isActive = (() => {
-                          const statusOrder = [
-                            "pending",
-                            "processing",
-                            "shipped",
-                            "delivered",
-                          ];
-                          const currentIndex = statusOrder.indexOf(
+                          const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
                             selectedOrder.orderStatus,
                           );
                           return selectedOrder.orderStatus === "cancelled"
                             ? false
+                            : selectedOrder.orderStatus === "returned"
+                              ? true
                             : index <= currentIndex;
                         })();
 
@@ -546,24 +572,23 @@ const UserOrders = () => {
                             </span>
                           </div>
                         );
-                      },
-                    )}
+                      })}
                   </div>
                   {/* Timeline bar */}
                   <div className="absolute top-6 left-6 right-6 h-1 bg-gray-200 -z-10">
                     <div
                       className="h-full bg-black transition-all duration-500"
                       style={{
-                        width:
-                          selectedOrder.orderStatus === "cancelled"
-                            ? "0%"
-                            : selectedOrder.orderStatus === "pending"
-                              ? "0%"
-                              : selectedOrder.orderStatus === "processing"
-                                ? "33%"
-                                : selectedOrder.orderStatus === "shipped"
-                                  ? "66%"
-                                  : "100%",
+                        width: (() => {
+                          if (selectedOrder.orderStatus === "cancelled") return "0%";
+                          if (selectedOrder.orderStatus === "returned") return "100%";
+                          const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
+                            selectedOrder.orderStatus,
+                          );
+                          if (currentIndex <= 0) return "0%";
+                          const maxIndex = Math.max(1, ORDER_PROGRESS_STATUSES.length - 1);
+                          return `${(currentIndex / maxIndex) * 100}%`;
+                        })(),
                       }}
                     ></div>
                   </div>
@@ -717,7 +742,7 @@ const UserOrders = () => {
                     <div>
                       <p className="text-sm text-gray-600">Payment Method</p>
                       <p className="font-medium">
-                        {selectedOrder.paymentMethod?.replace(/_/g, " ")}
+                        {formatPaymentMethodLabel(selectedOrder.paymentMethod)}
                       </p>
                     </div>
                     <div>

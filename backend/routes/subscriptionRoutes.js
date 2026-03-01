@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth");
+const { ensureMultiVendorMode } = require("../middlewares/marketplaceMode");
 const {
   getPublicPlans,
   getAdminPlans,
@@ -19,18 +20,23 @@ const {
 
 const router = express.Router();
 
-router.get("/public/plans", getPublicPlans);
+router.get("/public/plans", ensureMultiVendorMode, getPublicPlans);
 
-router.get("/plans", auth, getAdminPlans);
-router.post("/plans", auth, createPlan);
-router.put("/plans/:id", auth, updatePlan);
-router.delete("/plans/:id", auth, deletePlan);
+router.get("/plans", auth, ensureMultiVendorMode, getAdminPlans);
+router.post("/plans", auth, ensureMultiVendorMode, createPlan);
+router.put("/plans/:id", auth, ensureMultiVendorMode, updatePlan);
+router.delete("/plans/:id", auth, ensureMultiVendorMode, deletePlan);
 
-router.post("/me/subscribe", auth, subscribeToPlan);
-router.get("/me", auth, getMySubscription);
+router.post("/me/subscribe", auth, ensureMultiVendorMode, subscribeToPlan);
+router.get("/me", auth, ensureMultiVendorMode, getMySubscription);
 
-router.get("/admin/subscriptions", auth, getAdminSubscriptions);
-router.patch("/admin/subscriptions/:id/status", auth, updateSubscriptionStatus);
+router.get("/admin/subscriptions", auth, ensureMultiVendorMode, getAdminSubscriptions);
+router.patch(
+  "/admin/subscriptions/:id/status",
+  auth,
+  ensureMultiVendorMode,
+  updateSubscriptionStatus,
+);
 
 router.get("/recurring/me", auth, getMyRecurringSubscriptions);
 router.get("/recurring/vendor", auth, getVendorRecurringSubscriptions);

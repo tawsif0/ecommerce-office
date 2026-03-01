@@ -26,6 +26,22 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+const ORDER_PROGRESS_STATUSES = [
+  "pending",
+  "confirmed",
+  "processing",
+  "shipped",
+  "delivered",
+];
+
+const formatPaymentMethodLabel = (value) => {
+  const raw = String(value || "").trim();
+  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (normalized === "cod" || normalized === "cash on delivery") {
+    return "Cash on Delivery";
+  }
+  return raw.replace(/_/g, " ");
+};
 
 const resolveImageValue = (value) => {
   if (!value) return "";
@@ -272,10 +288,12 @@ const ThankYou = () => {
   const getStatusColor = (status) => {
     const colors = {
       pending: "bg-yellow-50 text-yellow-700 border-yellow-200",
+      confirmed: "bg-cyan-50 text-cyan-700 border-cyan-200",
       processing: "bg-blue-50 text-blue-700 border-blue-200",
       shipped: "bg-purple-50 text-purple-700 border-purple-200",
       delivered: "bg-green-50 text-green-700 border-green-200",
       cancelled: "bg-red-50 text-red-700 border-red-200",
+      returned: "bg-orange-50 text-orange-700 border-orange-200",
     };
     return colors[status] || "bg-gray-50 text-gray-700 border-gray-200";
   };
@@ -400,130 +418,68 @@ const ThankYou = () => {
 
           {/* Status Timeline */}
           <div className="relative">
-            <div className="flex justify-between items-center">
-              <div className="text-center relative z-10">
-                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
-                  <FaCheckCircle className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-xs font-medium text-black">
-                  Order Placed
-                </span>
-                <p className="text-xs text-gray-500">
-                  {formatDate(order.createdAt)}
-                </p>
-              </div>
+            <div className="absolute top-5 left-8 right-8 h-1 bg-gray-200 rounded-full">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all duration-500"
+                style={{
+                  width: (() => {
+                    if (order.orderStatus === "cancelled") return "0%";
+                    if (order.orderStatus === "returned") return "100%";
+                    const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
+                      order.orderStatus,
+                    );
+                    if (currentIndex <= 0) return "0%";
+                    const maxIndex = Math.max(
+                      1,
+                      ORDER_PROGRESS_STATUSES.length - 1,
+                    );
+                    return `${(currentIndex / maxIndex) * 100}%`;
+                  })(),
+                }}
+              ></div>
+            </div>
 
-              <div className="flex-1 h-1 mx-4 bg-gray-200 relative">
-                <div
-                  className={`absolute top-0 left-0 h-full ${
-                    order.orderStatus !== "pending"
-                      ? "bg-green-500"
-                      : "bg-gray-300"
-                  }`}
-                  style={{
-                    width: order.orderStatus !== "pending" ? "100%" : "50%",
-                  }}
-                ></div>
-              </div>
+            <div className="grid grid-cols-5 gap-2 relative">
+              {[
+                { status: "pending", label: "Placed", Icon: FaCheckCircle },
+                { status: "confirmed", label: "Confirmed", Icon: FaCheckCircle },
+                { status: "processing", label: "Processing", Icon: FiClock },
+                { status: "shipped", label: "Shipped", Icon: FaTruck },
+                { status: "delivered", label: "Delivered", Icon: FiPackage },
+              ].map((step, index) => {
+                const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
+                  order.orderStatus,
+                );
+                const isActive =
+                  order.orderStatus === "cancelled"
+                    ? false
+                    : order.orderStatus === "returned"
+                      ? true
+                      : index <= currentIndex;
+                const IconComponent = step.Icon;
 
-              <div className="text-center relative z-10">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg ${
-                    order.orderStatus !== "pending"
-                      ? "bg-green-500"
-                      : "bg-gray-200"
-                  }`}
-                >
-                  <span
-                    className={`${
-                      order.orderStatus !== "pending"
-                        ? "text-white"
-                        : "text-gray-400"
-                    }`}
-                  >
-                    ⚙️
-                  </span>
-                </div>
-                <span className="text-xs font-medium text-black">
-                  Processing
-                </span>
-                <p className="text-xs text-gray-500">Soon</p>
-              </div>
-
-              <div className="flex-1 h-1 mx-4 bg-gray-200 relative">
-                <div
-                  className={`absolute top-0 left-0 h-full ${
-                    order.orderStatus === "shipped" ||
-                    order.orderStatus === "delivered"
-                      ? "bg-green-500"
-                      : "bg-gray-300"
-                  }`}
-                  style={{
-                    width:
-                      order.orderStatus === "shipped" ||
-                      order.orderStatus === "delivered"
-                        ? "100%"
-                        : "0%",
-                  }}
-                ></div>
-              </div>
-
-              <div className="text-center relative z-10">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg ${
-                    order.orderStatus === "shipped" ||
-                    order.orderStatus === "delivered"
-                      ? "bg-green-500"
-                      : "bg-gray-200"
-                  }`}
-                >
-                  <FaTruck
-                    className={`w-4 h-4 ${
-                      order.orderStatus === "shipped" ||
-                      order.orderStatus === "delivered"
-                        ? "text-white"
-                        : "text-gray-400"
-                    }`}
-                  />
-                </div>
-                <span className="text-xs font-medium text-black">Shipped</span>
-                <p className="text-xs text-gray-500">Soon</p>
-              </div>
-
-              <div className="flex-1 h-1 mx-4 bg-gray-200 relative">
-                <div
-                  className={`absolute top-0 left-0 h-full ${
-                    order.orderStatus === "delivered"
-                      ? "bg-green-500"
-                      : "bg-gray-300"
-                  }`}
-                  style={{
-                    width: order.orderStatus === "delivered" ? "100%" : "0%",
-                  }}
-                ></div>
-              </div>
-
-              <div className="text-center relative z-10">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg ${
-                    order.orderStatus === "delivered"
-                      ? "bg-green-500"
-                      : "bg-gray-200"
-                  }`}
-                >
-                  <FiPackage
-                    className={`w-4 h-4 ${
-                      order.orderStatus === "delivered"
-                        ? "text-white"
-                        : "text-gray-400"
-                    }`}
-                  />
-                </div>
-                <span className="text-xs font-medium text-black">
-                  Delivered
-                </span>
-                <p className="text-xs text-gray-500">Soon</p>
-              </div>
+                return (
+                  <div key={step.status} className="text-center">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg ${
+                        isActive ? "bg-green-500" : "bg-gray-200"
+                      }`}
+                    >
+                      <IconComponent
+                        className={`w-4 h-4 ${isActive ? "text-white" : "text-gray-400"}`}
+                      />
+                    </div>
+                    <span className="text-xs font-medium text-black">
+                      {step.label}
+                    </span>
+                    <p className="text-xs text-gray-500">
+                      {step.status === "pending"
+                        ? formatDate(order.createdAt)
+                        : "Soon"}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -738,7 +694,7 @@ const ThankYou = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-gray-700">Method:</span>
                       <span className="font-medium text-black capitalize">
-                        {order.paymentMethod?.replace(/_/g, " ")}
+                        {formatPaymentMethodLabel(order.paymentMethod)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
@@ -756,7 +712,9 @@ const ThankYou = () => {
                           order.paymentStatus?.slice(1) || "Pending"}
                       </span>
                     </div>
-                    {order.paymentMethod === "cash_on_delivery" && (
+                    {String(
+                      formatPaymentMethodLabel(order.paymentMethod || ""),
+                    ).toLowerCase() === "cash on delivery" && (
                       <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                         <p className="text-xs text-gray-700">
                           Please have the exact amount ready for delivery.
@@ -889,6 +847,7 @@ const ThankYou = () => {
 };
 
 export default ThankYou;
+
 
 
 

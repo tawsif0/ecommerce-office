@@ -70,6 +70,23 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: "active",
   },
+  isBlacklisted: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  blacklistReason: {
+    type: String,
+    default: "",
+    trim: true,
+    maxlength: 500,
+  },
+  adminNotes: {
+    type: String,
+    default: "",
+    trim: true,
+    maxlength: 2000,
+  },
   adminSettings: {
     type: mongoose.Schema.Types.Mixed,
     default: {},

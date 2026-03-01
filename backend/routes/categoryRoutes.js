@@ -9,9 +9,10 @@ const {
   deleteCategory,
 } = require("../controllers/categoryController");
 const auth = require("../middlewares/auth");
+const responseCache = require("../middlewares/responseCache");
 
 // Public
-router.get("/public", getPublicCategories);
+router.get("/public", responseCache(120000), getPublicCategories);
 
 // Protected
 router.get("/", auth, getCategories);

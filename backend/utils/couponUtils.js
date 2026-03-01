@@ -67,6 +67,13 @@ const calculateEligibleSubtotalForVendor = async (vendorId, items = []) => {
   return roundMoney(Math.max(eligibleSubtotal, 0));
 };
 
+const collectItemProductIds = (items = []) =>
+  new Set(
+    items
+      .map((item) => String(extractProductIdFromItem(item) || "").trim())
+      .filter(Boolean),
+  );
+
 const validateCouponForSubtotal = async (code, subtotal, items = []) => {
   const normalizedCode = normalizeCouponCode(code);
   const normalizedSubtotal = toNumber(subtotal, NaN);
@@ -118,6 +125,9 @@ const validateCouponForSubtotal = async (code, subtotal, items = []) => {
 
   let eligibleSubtotal = normalizedSubtotal;
   const couponVendorId = String(coupon.vendor || "");
+  const offerType = String(coupon.offerType || "discount")
+    .trim()
+    .toLowerCase();
 
   if (couponVendorId) {
     if (!Array.isArray(items) || items.length === 0) {
@@ -151,9 +161,31 @@ const validateCouponForSubtotal = async (code, subtotal, items = []) => {
     };
   }
 
-  let discount = 0;
+  if (offerType === "combo") {
+    const requiredProducts = Array.isArray(coupon.requiredProducts)
+      ? coupon.requiredProducts.map((entry) => String(entry || "")).filter(Boolean)
+      : [];
 
-  if (coupon.discountType === "percentage") {
+    if (requiredProducts.length > 0) {
+      const productSet = collectItemProductIds(items);
+      const missingProductIds = requiredProducts.filter((id) => !productSet.has(id));
+      if (missingProductIds.length > 0) {
+        return {
+          success: false,
+          status: 400,
+          message: "Cart items do not satisfy combo coupon requirements",
+        };
+      }
+    }
+  }
+
+  let discount = 0;
+  let freeShipping = false;
+
+  if (offerType === "free_shipping") {
+    freeShipping = true;
+    discount = 0;
+  } else if (coupon.discountType === "percentage") {
     discount = (eligibleSubtotal * toNumber(coupon.discountValue, 0)) / 100;
     if (Number.isFinite(coupon.maxDiscount) && coupon.maxDiscount > 0) {
       discount = Math.min(discount, coupon.maxDiscount);
@@ -169,6 +201,8 @@ const validateCouponForSubtotal = async (code, subtotal, items = []) => {
     success: true,
     coupon,
     code: normalizedCode,
+    offerType,
+    freeShipping,
     eligibleSubtotal,
     discount,
     finalAmount,

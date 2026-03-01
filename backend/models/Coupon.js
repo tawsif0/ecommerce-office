@@ -14,10 +14,25 @@ const couponSchema = new mongoose.Schema({
     enum: ["percentage", "fixed"],
     default: "percentage",
   },
+  offerType: {
+    type: String,
+    enum: ["discount", "free_shipping", "combo"],
+    default: "discount",
+    index: true,
+  },
   discountValue: {
     type: Number,
     required: true,
     min: 0,
+  },
+  requiredProducts: {
+    type: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
+    default: [],
   },
   minPurchase: {
     type: Number,

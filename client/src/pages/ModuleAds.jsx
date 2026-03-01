@@ -27,6 +27,24 @@ const initialForm = {
 
 const vendorStatusOptions = ["draft", "pending", "paused"];
 const adminStatusOptions = ["pending", "approved", "active", "paused", "rejected", "completed"];
+const placementLabels = {
+  home_hero: "Homepage Hero",
+  home_sidebar: "Homepage Sidebar",
+  category: "Category Page",
+  search: "Search Page",
+  product: "Product Details Page",
+};
+
+const statusBadgeClass = (status) => {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "active") return "bg-emerald-100 text-emerald-700";
+  if (normalized === "approved") return "bg-sky-100 text-sky-700";
+  if (normalized === "pending") return "bg-amber-100 text-amber-700";
+  if (normalized === "rejected") return "bg-red-100 text-red-700";
+  if (normalized === "paused") return "bg-zinc-200 text-zinc-700";
+  if (normalized === "completed") return "bg-indigo-100 text-indigo-700";
+  return "bg-gray-100 text-gray-700";
+};
 
 const ModuleAds = () => {
   const { user } = useAuth();
@@ -34,7 +52,7 @@ const ModuleAds = () => {
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectionReasons, setRejectionReasons] = useState({});
 
   const isAdmin = user?.userType === "admin";
   const isVendorSide = user?.userType === "vendor" || user?.userType === "staff";
@@ -116,16 +134,20 @@ const ModuleAds = () => {
 
   const reviewAd = async (adId, status) => {
     try {
+      const rejectionReason = String(rejectionReasons?.[adId] || "").trim();
       await axios.patch(
         `${baseUrl}/ads/admin/${adId}/status`,
         {
           status,
-          rejectionReason: rejectionReason.trim(),
+          rejectionReason,
         },
         { headers: getAuthHeaders() },
       );
       toast.success("Ad status updated");
-      setRejectionReason("");
+      setRejectionReasons((prev) => ({
+        ...prev,
+        [adId]: "",
+      }));
       fetchAds();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update ad status");
@@ -145,7 +167,27 @@ const ModuleAds = () => {
     <div className="space-y-6">
       <div className="bg-linear-to-r from-zinc-900 to-black rounded-xl p-6 md:p-8 text-white">
         <h1 className="text-2xl font-bold">Paid Ads Module</h1>
-        <p className="text-zinc-200 mt-1">Create ad campaigns and manage approval workflow.</p>
+        <p className="text-zinc-200 mt-1">
+          Standard ecommerce flow: Draft {"->"} Pending {"->"} Approved {"->"} Active {"->"} Completed.
+        </p>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
+        <h2 className="text-sm font-semibold text-black">How ads work</h2>
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2">
+          {["Draft", "Pending Review", "Approved", "Active", "Completed"].map((step, index) => (
+            <div
+              key={step}
+              className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center"
+            >
+              <p className="text-[11px] uppercase tracking-wide text-gray-500">Step {index + 1}</p>
+              <p className="text-sm font-medium text-black mt-0.5">{step}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-gray-600">
+          Vendors create campaigns and submit for review. Admin approves/rejects and controls runtime status.
+        </p>
       </div>
 
       {isVendorSide && (
@@ -284,9 +326,17 @@ const ModuleAds = () => {
                 className="border border-gray-200 rounded-lg p-4 grid grid-cols-1 xl:grid-cols-12 gap-3 items-center"
               >
                 <div className="xl:col-span-5">
-                  <p className="font-semibold text-black">{ad.title}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-black">{ad.title}</p>
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusBadgeClass(ad.status)}`}
+                    >
+                      {String(ad.status || "draft")}
+                    </span>
+                  </div>
                   <p className="text-sm text-gray-600">
-                    Vendor: {ad.vendor?.storeName || "N/A"} | Placement: {ad.placement}
+                    Vendor: {ad.vendor?.storeName || "N/A"} | Placement:{" "}
+                    {placementLabels[ad.placement] || ad.placement}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
                     {new Date(ad.startDate).toLocaleDateString()} - {new Date(ad.endDate).toLocaleDateString()}
@@ -297,6 +347,12 @@ const ModuleAds = () => {
                   <p>Budget: {ad.budget || 0} TK</p>
                   <p>Impressions: {ad.impressions || 0}</p>
                   <p>Clicks: {ad.clicks || 0}</p>
+                  <p>
+                    CTR:{" "}
+                    {ad.impressions > 0
+                      ? `${((Number(ad.clicks || 0) / Number(ad.impressions || 1)) * 100).toFixed(2)}%`
+                      : "0.00%"}
+                  </p>
                 </div>
 
                 <div className="xl:col-span-4 flex flex-col gap-2">
@@ -314,8 +370,13 @@ const ModuleAds = () => {
                         ))}
                       </select>
                       <input
-                        value={rejectionReason}
-                        onChange={(event) => setRejectionReason(event.target.value)}
+                        value={rejectionReasons?.[ad._id] || ""}
+                        onChange={(event) =>
+                          setRejectionReasons((prev) => ({
+                            ...prev,
+                            [ad._id]: event.target.value,
+                          }))
+                        }
                         placeholder="Rejection reason (if rejected)"
                         className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
                       />

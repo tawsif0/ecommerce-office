@@ -7,6 +7,11 @@ import {
   FaMinus,
   FaHeart,
   FaShare,
+  FaFacebookF,
+  FaTwitter,
+  FaWhatsapp,
+  FaLink,
+  FaPaperPlane,
   FaStar,
   FaChevronLeft,
   FaChevronRight,
@@ -18,6 +23,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  buildDataLayerItem,
+  getDataLayerCurrency,
+  pushDataLayerEvent,
+} from "../../utils/marketingDataLayer";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -134,6 +144,11 @@ const ProductDetails = () => {
   const { addToCart, isLoading: cartLoading } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+  const shareTitle = product?.title || "Product";
+  const shareText = product?.description
+    ? String(product.description).slice(0, 140)
+    : "Check this product";
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("token");
@@ -266,6 +281,32 @@ const ProductDetails = () => {
 
     checkWishlist();
   }, [id, isLoggedIn]);
+
+  useEffect(() => {
+    if (!product?._id) return;
+
+    const resolvedPrice =
+      Number(product?.salePrice ?? product?.price ?? 0) > 0
+        ? Number(product?.salePrice ?? product?.price ?? 0)
+        : Number(product?.price || 0);
+
+    pushDataLayerEvent("view_item", {
+      ecommerce: {
+        currency: getDataLayerCurrency(),
+        value: Number.isFinite(resolvedPrice) ? resolvedPrice : 0,
+        items: [
+          buildDataLayerItem({
+            productId: product._id,
+            title: product.title,
+            price: resolvedPrice,
+            category: product?.category?.name || product?.category || product?.productType || "",
+            brand: product?.brand || "",
+            vendorName: product?.vendor?.storeName || "",
+          }),
+        ],
+      },
+    });
+  }, [product?._id]);
 
   const marketplaceType = String(product?.marketplaceType || "simple");
   const priceType = String(product?.priceType || "single");
@@ -481,12 +522,62 @@ const ProductDetails = () => {
 
   const handleShare = async () => {
     try {
-      const shareUrl = window.location.href;
+      if (navigator.share) {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      }
+
       await navigator.clipboard.writeText(shareUrl);
       toast.success("Product link copied");
     } catch (_error) {
       toast.error("Failed to copy product link");
     }
+  };
+
+  const handleSharePlatform = (platform) => {
+    const encodedUrl = encodeURIComponent(shareUrl);
+    const encodedText = encodeURIComponent(`${shareTitle} - ${shareText}`);
+    const platformUrls = {
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      twitter: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`,
+      whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
+      telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`,
+    };
+
+    const targetUrl = platformUrls[platform];
+    if (!targetUrl) return;
+    window.open(targetUrl, "_blank", "noopener,noreferrer,width=640,height=640");
+  };
+
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Share link copied");
+    } catch (_error) {
+      toast.error("Failed to copy link");
+    }
+  };
+
+  const handleMessageVendor = () => {
+    if (!isLoggedIn) {
+      toast.error("Please login to message vendor");
+      navigate("/login");
+      return;
+    }
+
+    const vendorId = String(product?.vendor?._id || "").trim();
+    if (!vendorId) {
+      toast.error("Vendor information unavailable");
+      return;
+    }
+
+    localStorage.setItem("vendorMessagesPresetVendorId", vendorId);
+    localStorage.setItem("dashboardActiveTab", "vendor-messages");
+    navigate("/dashboard");
   };
 
   const handleSubmitReview = async (event) => {
@@ -870,6 +961,14 @@ const ProductDetails = () => {
                       This store is currently in vacation mode.
                     </p>
                   )}
+                  <button
+                    type="button"
+                    onClick={handleMessageVendor}
+                    className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-xs hover:bg-white"
+                  >
+                    <FaPaperPlane className="w-3.5 h-3.5" />
+                    Message Vendor
+                  </button>
                 </div>
               )}
 
@@ -899,6 +998,49 @@ const ProductDetails = () => {
                 >
                   <FaShare className="w-4 h-4" />
                   Share
+                </button>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSharePlatform("facebook")}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FaFacebookF className="w-3.5 h-3.5" />
+                  Facebook
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSharePlatform("twitter")}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FaTwitter className="w-3.5 h-3.5" />
+                  X/Twitter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSharePlatform("whatsapp")}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FaWhatsapp className="w-3.5 h-3.5" />
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSharePlatform("telegram")}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FaPaperPlane className="w-3.5 h-3.5" />
+                  Telegram
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FaLink className="w-3.5 h-3.5" />
+                  Copy Link
                 </button>
               </div>
             </div>

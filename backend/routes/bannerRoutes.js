@@ -10,12 +10,13 @@ const {
 } = require("../controllers/bannerController.js");
 const auth = require("../middlewares/auth.js");
 const { upload, handleMulterError } = require("../middlewares/bannerUpload.js");
+const responseCache = require("../middlewares/responseCache");
 
 const router = express.Router();
 
 // Public routes
-router.get("/public", getActiveBanners); // Get active banners for public view
-router.get("/public/:id", getBanner); // Get single banner (public)
+router.get("/public", responseCache(120000), getActiveBanners); // Get active banners for public view
+router.get("/public/:id", responseCache(120000), getBanner); // Get single banner (public)
 
 // Protected routes
 router.post(

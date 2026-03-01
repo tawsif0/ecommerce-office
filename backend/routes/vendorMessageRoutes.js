@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth");
+const { ensureMultiVendorMode } = require("../middlewares/marketplaceMode");
 const {
   createConversation,
   getMyConversations,
@@ -12,6 +13,7 @@ const {
 const router = express.Router();
 
 router.use(auth);
+router.use(ensureMultiVendorMode);
 
 router.post("/", createConversation);
 router.get("/", getMyConversations);

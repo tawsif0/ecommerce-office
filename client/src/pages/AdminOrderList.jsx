@@ -14,6 +14,7 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiPrinter,
+  FiTruck,
   FiXCircle,
   FiChevronRight as FiChevronRightIcon,
 } from "react-icons/fi";
@@ -41,6 +42,7 @@ const AdminOrderList = () => {
   const [statusNotes, setStatusNotes] = useState("");
   const [isStatusUpdating, setIsStatusUpdating] = useState(false);
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+  const [courierAction, setCourierAction] = useState("");
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -48,11 +50,31 @@ const AdminOrderList = () => {
     hasNextPage: false,
     hasPrevPage: false,
   });
+  const ORDER_PROGRESS_STATUSES = [
+    "pending",
+    "confirmed",
+    "processing",
+    "shipped",
+    "delivered",
+  ];
+  const ORDER_STATUS_TRANSITIONS = {
+    pending: "confirmed",
+    confirmed: "processing",
+    processing: "shipped",
+    shipped: "delivered",
+    delivered: "returned",
+  };
 
   // Status options with colors
   const statusOptions = [
     { value: "all", label: "All Orders", color: "gray", icon: FaBox },
     { value: "pending", label: "Pending", color: "yellow", icon: FaClock },
+    {
+      value: "confirmed",
+      label: "Confirmed",
+      color: "cyan",
+      icon: FaCheckCircle,
+    },
     {
       value: "processing",
       label: "Processing",
@@ -72,50 +94,52 @@ const AdminOrderList = () => {
       color: "red",
       icon: FaTimesCircle,
     },
+    {
+      value: "returned",
+      label: "Returned",
+      color: "orange",
+      icon: FaTimesCircle,
+    },
   ];
 
   // Helper functions for step-by-step flow
   const getStatusIndex = (status) => {
-    const statusOrder = [
-      "pending",
-      "processing",
-      "shipped",
-      "delivered",
-      "cancelled",
-    ];
-    return statusOrder.indexOf(status);
+    return ORDER_PROGRESS_STATUSES.indexOf(status);
   };
 
   const getCurrentStep = (status) => {
     const index = getStatusIndex(status);
-    return index + 1; // +1 because array index starts at 0
+    return index >= 0 ? index + 1 : 1;
   };
 
   const getNextStatus = (currentStatus) => {
-    const statusOrder = ["pending", "processing", "shipped", "delivered"];
-    const currentIndex = statusOrder.indexOf(currentStatus);
-    return currentIndex < statusOrder.length - 1
-      ? statusOrder[currentIndex + 1]
-      : currentStatus;
+    return ORDER_STATUS_TRANSITIONS[currentStatus] || currentStatus;
+  };
+
+  const canProceedToNextStatus = (status) => {
+    return Boolean(ORDER_STATUS_TRANSITIONS[status]);
   };
 
   const getStatusMessage = (status) => {
     const messages = {
       pending: "Waiting for confirmation and payment verification",
+      confirmed: "Order has been confirmed and queued for processing",
       processing: "Order is being prepared for shipment",
       shipped: "Order has been dispatched to delivery service",
       delivered: "Order has been successfully delivered",
       cancelled: "Order has been cancelled",
+      returned: "Order has been returned",
     };
     return messages[status] || "";
   };
 
   const getNextStepMessage = (currentStatus) => {
     const messages = {
-      pending: "Verify payment and begin order processing",
+      pending: "Confirm this order before fulfillment starts",
+      confirmed: "Prepare items and begin processing",
       processing: "Prepare order for shipment and assign tracking",
       shipped: "Mark as delivered once customer receives order",
-      delivered: "Order completed successfully",
+      delivered: "Mark as returned if customer sends this order back",
     };
     return messages[currentStatus] || "";
   };
@@ -166,6 +190,11 @@ const AdminOrderList = () => {
   const handleProceed = async () => {
     if (!selectedOrder || isStatusUpdating || isCancellingOrder) return;
 
+    if (!canProceedToNextStatus(selectedOrder.orderStatus)) {
+      toast.error("No next status available for this order");
+      return;
+    }
+
     const nextStatus = getNextStatus(selectedOrder.orderStatus);
 
     try {
@@ -184,33 +213,29 @@ const AdminOrderList = () => {
       );
 
       if (response.data.success) {
-        toast.success(`Order status updated to ${nextStatus}`);
+        const updatedOrder = response.data?.order || {};
+        const updatedStatus = updatedOrder.orderStatus || updatedOrder.status || nextStatus;
+        const updatedPaymentStatus =
+          updatedOrder.paymentStatus || selectedOrder.paymentStatus;
 
-        // Update payment status if moving from pending to processing
-        if (
-          selectedOrder.orderStatus === "pending" &&
-          nextStatus === "processing"
-        ) {
-          setOrders(
-            orders.map((order) =>
-              order._id === selectedOrder._id
-                ? {
-                    ...order,
-                    orderStatus: nextStatus,
-                    paymentStatus: "completed", // Update payment status
-                  }
-                : order,
-            ),
-          );
-        } else {
-          setOrders(
-            orders.map((order) =>
-              order._id === selectedOrder._id
-                ? { ...order, orderStatus: nextStatus }
-                : order,
-            ),
-          );
-        }
+        toast.success(`Order status updated to ${updatedStatus}`);
+
+        setOrders(
+          orders.map((order) =>
+            order._id === selectedOrder._id
+              ? {
+                  ...order,
+                  orderStatus: updatedStatus,
+                  paymentStatus: updatedPaymentStatus,
+                  courier: updatedOrder.courier || order.courier || null,
+                  adminNotes: updatedOrder.adminNotes || order.adminNotes || "",
+                  statusTimeline: Array.isArray(updatedOrder.statusTimeline)
+                    ? updatedOrder.statusTimeline
+                    : order.statusTimeline,
+                }
+              : order,
+          ),
+        );
 
         setShowStatusModal(false);
         setStatusNotes("");
@@ -244,6 +269,12 @@ const AdminOrderList = () => {
       );
 
       if (response.data.success) {
+        const updatedOrder = response.data?.order || {};
+        const updatedStatus =
+          updatedOrder.orderStatus || updatedOrder.status || "cancelled";
+        const updatedPaymentStatus =
+          updatedOrder.paymentStatus || selectedOrder.paymentStatus || "failed";
+
         toast.success("Order cancelled successfully");
 
         // Update local state
@@ -252,8 +283,13 @@ const AdminOrderList = () => {
             order._id === selectedOrder._id
               ? {
                   ...order,
-                  orderStatus: "cancelled",
-                  paymentStatus: "failed", // Update payment status
+                  orderStatus: updatedStatus,
+                  paymentStatus: updatedPaymentStatus,
+                  courier: updatedOrder.courier || order.courier || null,
+                  adminNotes: updatedOrder.adminNotes || order.adminNotes || "",
+                  statusTimeline: Array.isArray(updatedOrder.statusTimeline)
+                    ? updatedOrder.statusTimeline
+                    : order.statusTimeline,
                 }
               : order,
           ),
@@ -284,14 +320,229 @@ const AdminOrderList = () => {
     setShowDetailsModal(true);
   };
 
+  const updateOrderInState = (orderId, patch = {}) => {
+    setOrders((prev) =>
+      prev.map((order) =>
+        order._id === orderId
+          ? {
+              ...order,
+              ...patch,
+            }
+          : order,
+      ),
+    );
+
+    setSelectedOrder((prev) =>
+      prev && prev._id === orderId
+        ? {
+            ...prev,
+            ...patch,
+          }
+        : prev,
+    );
+  };
+
+  const handleGenerateCourierConsignment = async () => {
+    if (!selectedOrder?._id) return;
+
+    try {
+      setCourierAction("generate");
+      const token = localStorage.getItem("token");
+      const response = await axios.post(
+        `${baseUrl}/orders/admin/${selectedOrder._id}/courier/consignment`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          meta: { skipGlobalButtonLoading: true },
+        },
+      );
+
+      if (!response.data?.success) {
+        toast.error(response.data?.message || "Failed to generate consignment");
+        return;
+      }
+
+      const updatedOrder = response.data?.order || {};
+      updateOrderInState(selectedOrder._id, {
+        courier: updatedOrder.courier || selectedOrder.courier || null,
+        statusTimeline: Array.isArray(updatedOrder.statusTimeline)
+          ? updatedOrder.statusTimeline
+          : selectedOrder.statusTimeline,
+      });
+
+      toast.success(response.data?.message || "Courier consignment generated");
+      if (response.data?.warning) {
+        toast(response.data.warning, { icon: "i" });
+      }
+    } catch (error) {
+      console.error("Generate courier consignment error:", error);
+      toast.error(error.response?.data?.message || "Failed to generate consignment");
+    } finally {
+      setCourierAction("");
+    }
+  };
+
+  const handleSyncCourierTracking = async () => {
+    if (!selectedOrder?._id) return;
+
+    try {
+      setCourierAction("sync");
+      const token = localStorage.getItem("token");
+      const response = await axios.post(
+        `${baseUrl}/orders/admin/${selectedOrder._id}/courier/sync`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          meta: { skipGlobalButtonLoading: true },
+        },
+      );
+
+      if (!response.data?.success) {
+        toast.error(response.data?.message || "Failed to sync courier tracking");
+        return;
+      }
+
+      const updatedOrder = response.data?.order || {};
+      updateOrderInState(selectedOrder._id, {
+        orderStatus: updatedOrder.orderStatus || selectedOrder.orderStatus,
+        paymentStatus: updatedOrder.paymentStatus || selectedOrder.paymentStatus,
+        courier: updatedOrder.courier || selectedOrder.courier || null,
+        statusTimeline: Array.isArray(updatedOrder.statusTimeline)
+          ? updatedOrder.statusTimeline
+          : selectedOrder.statusTimeline,
+      });
+
+      toast.success(response.data?.message || "Courier tracking synced");
+    } catch (error) {
+      console.error("Sync courier tracking error:", error);
+      toast.error(error.response?.data?.message || "Failed to sync courier tracking");
+    } finally {
+      setCourierAction("");
+    }
+  };
+
+  const handlePrintCourierLabel = async () => {
+    if (!selectedOrder?._id) return;
+
+    try {
+      setCourierAction("print");
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        `${baseUrl}/orders/admin/${selectedOrder._id}/courier/label`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!response.data?.success || !response.data?.label) {
+        toast.error(response.data?.message || "Failed to load courier label");
+        return;
+      }
+
+      const label = response.data.label;
+
+      const printContent = `
+      <html>
+        <head>
+          <title>Courier Label - ${label.orderNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 18px; color: #111; }
+            .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+            .row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+            .label { font-size: 12px; color: #666; }
+            .value { font-size: 14px; font-weight: 600; }
+            .title { font-size: 18px; margin: 0 0 12px 0; }
+            .muted { font-size: 12px; color: #666; }
+            .items { margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2 class="title">Courier Label</h2>
+            <div class="row">
+              <div>
+                <div class="label">Order Number</div>
+                <div class="value">${label.orderNumber || "-"}</div>
+              </div>
+              <div>
+                <div class="label">Courier</div>
+                <div class="value">${label.courierProvider || "-"}</div>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <div class="label">Consignment ID</div>
+                <div class="value">${label.consignmentId || "-"}</div>
+              </div>
+              <div>
+                <div class="label">Tracking No</div>
+                <div class="value">${label.trackingNumber || "-"}</div>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <div class="label">Customer</div>
+                <div class="value">${label.customer?.name || "-"}</div>
+              </div>
+              <div>
+                <div class="label">Phone</div>
+                <div class="value">${label.customer?.phone || "-"}</div>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <div class="label">Address</div>
+                <div class="value">
+                  ${label.customer?.address || "-"}, ${label.customer?.city || "-"}, ${label.customer?.district || "-"}
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <div class="label">Amount to Collect</div>
+                <div class="value">${Number(label.amountToCollect || 0).toFixed(2)} TK</div>
+              </div>
+            </div>
+            <div class="items">
+              <div class="label">Items</div>
+              ${(Array.isArray(label.items) ? label.items : [])
+                .map(
+                  (item) =>
+                    `<div class="muted">${item.title || "Product"} x${Number(item.quantity || 0)}</div>`,
+                )
+                .join("")}
+            </div>
+          </div>
+        </body>
+      </html>
+      `;
+
+      const printWindow = window.open("", "_blank");
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+      toast.success("Courier label opened for print");
+    } catch (error) {
+      console.error("Print courier label error:", error);
+      toast.error(error.response?.data?.message || "Failed to print courier label");
+    } finally {
+      setCourierAction("");
+    }
+  };
+
   // Get status color
   const getStatusColor = (status) => {
     const colors = {
       pending: "bg-yellow-100 text-yellow-800",
+      confirmed: "bg-cyan-100 text-cyan-800",
       processing: "bg-blue-100 text-blue-800",
       shipped: "bg-purple-100 text-purple-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
+      returned: "bg-orange-100 text-orange-800",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
   };
@@ -315,7 +566,12 @@ const AdminOrderList = () => {
 
   // Get payment method display
   const getPaymentMethodDisplay = (order) => {
-    const method = order.paymentMethod || "";
+    const rawMethod = String(order.paymentMethod || "").trim();
+    const normalizedMethod = rawMethod.toLowerCase().replace(/[_-]+/g, " ");
+    const method =
+      normalizedMethod === "cod" || normalizedMethod === "cash on delivery"
+        ? "Cash on Delivery"
+        : rawMethod.replace(/_/g, " ");
     const transactionId = order.transactionId || "";
 
     if (transactionId && transactionId !== "N/A") {
@@ -686,7 +942,7 @@ const AdminOrderList = () => {
                   <div className="flex justify-between items-center">
                     <div className="text-xs">
                       <div className="font-medium truncate max-w-[120px]">
-                        {order.paymentMethod}
+                        {getPaymentMethodDisplay(order)}
                       </div>
                       <div
                         className={`${
@@ -902,6 +1158,48 @@ const AdminOrderList = () => {
                 </div>
               </div>
 
+              {Array.isArray(selectedOrder.statusTimeline) &&
+              selectedOrder.statusTimeline.length > 0 ? (
+                <div className="bg-gray-50 p-3 sm:p-4 rounded-lg mb-4 sm:mb-6">
+                  <h3 className="font-semibold text-black mb-2 sm:mb-3 text-sm sm:text-base">
+                    Status Timeline
+                  </h3>
+                  <div className="space-y-2">
+                    {selectedOrder.statusTimeline
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(a?.changedAt || 0).getTime() -
+                          new Date(b?.changedAt || 0).getTime(),
+                      )
+                      .map((entry, idx) => (
+                        <div
+                          key={`${entry?.status || "status"}-${idx}`}
+                          className="border border-gray-200 bg-white rounded-lg px-3 py-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span
+                              className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                                entry?.status,
+                              )}`}
+                            >
+                              {String(entry?.status || "").toUpperCase()}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {entry?.changedAt
+                                ? new Date(entry.changedAt).toLocaleString()
+                                : "N/A"}
+                            </span>
+                          </div>
+                          {entry?.note ? (
+                            <p className="text-xs sm:text-sm text-gray-700 mt-1">{entry.note}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
+
               {/* Shipping Address */}
               {selectedOrder.shippingAddress && (
                 <div className="bg-gray-50 p-3 sm:p-4 rounded-lg mb-4 sm:mb-6">
@@ -921,6 +1219,100 @@ const AdminOrderList = () => {
                   </div>
                 </div>
               )}
+
+              <div className="bg-gray-50 p-3 sm:p-4 rounded-lg mb-4 sm:mb-6">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h3 className="font-semibold text-black text-sm sm:text-base">
+                    Courier Integration
+                  </h3>
+                  <span className="text-xs text-gray-500">
+                    {selectedOrder.courier?.status
+                      ? selectedOrder.courier.status.toUpperCase()
+                      : "NOT ASSIGNED"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs sm:text-sm mb-3">
+                  <p>
+                    <span className="text-gray-600">Provider:</span>{" "}
+                    <span className="font-medium">
+                      {selectedOrder.courier?.providerName || "N/A"}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-gray-600">Consignment ID:</span>{" "}
+                    <span className="font-medium">
+                      {selectedOrder.courier?.consignmentId || "N/A"}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-gray-600">Tracking Number:</span>{" "}
+                    <span className="font-medium">
+                      {selectedOrder.courier?.trackingNumber || "N/A"}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-gray-600">Last Sync:</span>{" "}
+                    <span className="font-medium">
+                      {selectedOrder.courier?.lastSyncedAt
+                        ? new Date(selectedOrder.courier.lastSyncedAt).toLocaleString()
+                        : "N/A"}
+                    </span>
+                  </p>
+                </div>
+
+                {selectedOrder.courier?.trackingUrl ? (
+                  <a
+                    href={selectedOrder.courier.trackingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex text-xs sm:text-sm text-blue-700 underline mb-3"
+                  >
+                    Open Tracking URL
+                  </a>
+                ) : null}
+
+                {selectedOrder.courier?.labelUrl ? (
+                  <a
+                    href={selectedOrder.courier.labelUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex ml-3 text-xs sm:text-sm text-blue-700 underline mb-3"
+                  >
+                    Open Courier Label URL
+                  </a>
+                ) : null}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleGenerateCourierConsignment}
+                    disabled={courierAction !== ""}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-black text-white rounded-lg text-xs sm:text-sm disabled:opacity-60"
+                  >
+                    <FiTruck className="w-4 h-4" />
+                    {courierAction === "generate" ? "Generating..." : "Generate Consignment"}
+                  </button>
+                  <button
+                    onClick={handleSyncCourierTracking}
+                    disabled={
+                      courierAction !== "" ||
+                      (!selectedOrder.courier?.consignmentId &&
+                        !selectedOrder.courier?.trackingNumber)
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm disabled:opacity-60"
+                  >
+                    {courierAction === "sync" ? "Syncing..." : "Sync Tracking"}
+                  </button>
+                  <button
+                    onClick={handlePrintCourierLabel}
+                    disabled={courierAction !== ""}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm disabled:opacity-60"
+                  >
+                    <FiPrinter className="w-4 h-4" />
+                    {courierAction === "print" ? "Preparing..." : "Print Label"}
+                  </button>
+                </div>
+              </div>
 
               {/* Items Table */}
               <div className="mb-4 sm:mb-6">
@@ -1046,7 +1438,9 @@ const AdminOrderList = () => {
               <h2 className="text-lg sm:text-xl font-bold text-black mb-4">
                 {selectedOrder.orderStatus === "cancelled"
                   ? "Order Cancelled"
-                  : `Update Order Status - Step ${getCurrentStep(selectedOrder.orderStatus)}/4`}
+                  : selectedOrder.orderStatus === "returned"
+                    ? "Order Returned"
+                    : `Update Order Status - Step ${getCurrentStep(selectedOrder.orderStatus)}/${ORDER_PROGRESS_STATUSES.length}`}
               </h2>
 
               <p className="text-sm sm:text-base text-gray-600 mb-4">
@@ -1056,58 +1450,61 @@ const AdminOrderList = () => {
               {/* Status Steps Visualization */}
               <div className="mb-4 sm:mb-6">
                 <div className="flex items-center justify-between mb-3 sm:mb-4">
-                  {["pending", "processing", "shipped", "delivered"].map(
-                    (status, index) => {
-                      const isCurrent = selectedOrder.orderStatus === status;
-                      const isCompleted =
-                        getStatusIndex(selectedOrder.orderStatus) > index;
-                      const isCancelled =
-                        selectedOrder.orderStatus === "cancelled";
+                  {ORDER_PROGRESS_STATUSES.map((status, index) => {
+                    const isCurrent = selectedOrder.orderStatus === status;
+                    const isCompleted = getStatusIndex(selectedOrder.orderStatus) > index;
+                    const isCancelled = selectedOrder.orderStatus === "cancelled";
+                    const isReturned = selectedOrder.orderStatus === "returned";
 
-                      return (
-                        <div key={status} className="text-center flex-1">
-                          <div
-                            className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mx-auto mb-1 sm:mb-2 ${
-                              isCancelled
-                                ? "bg-red-100 border border-red-300"
+                    return (
+                      <div key={status} className="text-center flex-1">
+                        <div
+                          className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mx-auto mb-1 sm:mb-2 ${
+                            isCancelled
+                              ? "bg-red-100 border border-red-300"
+                              : isReturned
+                                ? "bg-orange-100 border border-orange-300"
                                 : isCompleted
                                   ? "bg-green-100 border border-green-500"
                                   : isCurrent
                                     ? "bg-blue-100 border border-blue-500"
                                     : "bg-gray-100 border border-gray-300"
-                            }`}
-                          >
-                            <span
-                              className={`text-xs font-bold ${
-                                isCancelled
-                                  ? "text-red-700"
+                          }`}
+                        >
+                          <span
+                            className={`text-xs font-bold ${
+                              isCancelled
+                                ? "text-red-700"
+                                : isReturned
+                                  ? "text-orange-700"
                                   : isCompleted
                                     ? "text-green-700"
                                     : isCurrent
                                       ? "text-blue-700"
                                       : "text-gray-500"
-                              }`}
-                            >
-                              {index + 1}
-                            </span>
-                          </div>
-                          <span
-                            className={`text-xs ${
-                              isCancelled
-                                ? "text-red-600"
+                            }`}
+                          >
+                            {index + 1}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-xs ${
+                            isCancelled
+                              ? "text-red-600"
+                              : isReturned
+                                ? "text-orange-600"
                                 : isCompleted
                                   ? "text-green-600"
                                   : isCurrent
                                     ? "text-blue-600 font-bold"
                                     : "text-gray-500"
-                            }`}
-                          >
-                            {status.charAt(0).toUpperCase() + status.slice(1)}
-                          </span>
-                        </div>
-                      );
-                    },
-                  )}
+                          }`}
+                        >
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Status Line */}
@@ -1117,13 +1514,19 @@ const AdminOrderList = () => {
                       className={`h-full transition-all duration-300 ${
                         selectedOrder.orderStatus === "cancelled"
                           ? "bg-red-300"
+                          : selectedOrder.orderStatus === "returned"
+                            ? "bg-orange-400"
                           : "bg-green-500"
                       }`}
                       style={{
-                        width:
-                          selectedOrder.orderStatus === "cancelled"
-                            ? "0%"
-                            : `${(getStatusIndex(selectedOrder.orderStatus) / 3) * 100}%`,
+                        width: (() => {
+                          if (selectedOrder.orderStatus === "cancelled") return "0%";
+                          if (selectedOrder.orderStatus === "returned") return "100%";
+                          const currentIndex = getStatusIndex(selectedOrder.orderStatus);
+                          const maxIndex = Math.max(1, ORDER_PROGRESS_STATUSES.length - 1);
+                          const percent = currentIndex <= 0 ? 0 : (currentIndex / maxIndex) * 100;
+                          return `${percent}%`;
+                        })(),
                       }}
                     ></div>
                   </div>
@@ -1135,6 +1538,8 @@ const AdminOrderList = () => {
                 className={`p-3 sm:p-4 rounded-lg mb-4 sm:mb-6 ${
                   selectedOrder.orderStatus === "cancelled"
                     ? "bg-red-50 border border-red-200"
+                    : selectedOrder.orderStatus === "returned"
+                      ? "bg-orange-50 border border-orange-200"
                     : "bg-blue-50 border border-blue-200"
                 }`}
               >
@@ -1143,6 +1548,8 @@ const AdminOrderList = () => {
                     className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
                       selectedOrder.orderStatus === "cancelled"
                         ? "bg-red-100"
+                        : selectedOrder.orderStatus === "returned"
+                          ? "bg-orange-100"
                         : "bg-blue-100"
                     }`}
                   >
@@ -1150,10 +1557,14 @@ const AdminOrderList = () => {
                       <FaTimesCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
                     ) : selectedOrder.orderStatus === "pending" ? (
                       <FaClock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+                    ) : selectedOrder.orderStatus === "confirmed" ? (
+                      <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                     ) : selectedOrder.orderStatus === "processing" ? (
                       <FaShippingFast className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                     ) : selectedOrder.orderStatus === "shipped" ? (
                       <FaBox className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+                    ) : selectedOrder.orderStatus === "returned" ? (
+                      <FaTimesCircle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
                     ) : (
                       <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                     )}
@@ -1170,8 +1581,7 @@ const AdminOrderList = () => {
               </div>
 
               {/* Next Step Information */}
-              {selectedOrder.orderStatus !== "cancelled" &&
-                selectedOrder.orderStatus !== "delivered" && (
+              {canProceedToNextStatus(selectedOrder.orderStatus) && (
                   <div className="bg-green-50 p-3 sm:p-4 rounded-lg border border-green-200 mb-4 sm:mb-6">
                     <h4 className="font-medium text-green-800 mb-1 sm:mb-2 text-sm sm:text-base">
                       Next Step:{" "}
@@ -1185,8 +1595,7 @@ const AdminOrderList = () => {
 
               {/* Action Buttons */}
               <div className="space-y-2 sm:space-y-3">
-                {selectedOrder.orderStatus !== "cancelled" &&
-                selectedOrder.orderStatus !== "delivered" ? (
+                {canProceedToNextStatus(selectedOrder.orderStatus) ? (
                   <>
                     <button
                       onClick={handleProceed}
@@ -1207,14 +1616,16 @@ const AdminOrderList = () => {
                       )}
                     </button>
 
-                    <button
-                      onClick={() => setShowCancelConfirm(true)}
-                      disabled={isStatusUpdating || isCancellingOrder}
-                      className="w-full py-2.5 sm:py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <FiXCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                      Cancel Order
-                    </button>
+                    {selectedOrder.orderStatus !== "delivered" ? (
+                      <button
+                        onClick={() => setShowCancelConfirm(true)}
+                        disabled={isStatusUpdating || isCancellingOrder}
+                        className="w-full py-2.5 sm:py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <FiXCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                        Cancel Order
+                      </button>
+                    ) : null}
                   </>
                 ) : (
                   <button
@@ -1238,7 +1649,7 @@ const AdminOrderList = () => {
                   className="w-full py-2.5 sm:py-3 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {selectedOrder.orderStatus === "cancelled" ||
-                  selectedOrder.orderStatus === "delivered"
+                  selectedOrder.orderStatus === "returned"
                     ? "Close"
                     : "Not Now"}
                 </button>

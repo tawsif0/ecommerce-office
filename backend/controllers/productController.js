@@ -9,6 +9,7 @@ const {
 } = require("../utils/imageUtils");
 const { uploadImageBuffer, deleteImage } = require("../config/cloudinary");
 const { isAdmin } = require("../utils/vendorUtils");
+const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
 const {
   assertVendorCanUploadProducts,
   incrementVendorUploadCount,
@@ -42,6 +43,9 @@ const isPublicVendorVisible = (vendor) => {
 
 const filterPublicProductsByVendor = (products = []) =>
   products.filter((product) => isPublicVendorVisible(product?.vendor));
+const invalidatePublicProductCache = () => {
+  clearResponseCacheByPrefix("/api/products/public");
+};
 
 const getApprovedVendorForUser = async (userId) => {
   if (!userId) return null;
@@ -522,12 +526,11 @@ exports.searchProducts = async (req, res) => {
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .limit(20)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // Ensure image URLs are properly formatted
-    const productsWithUrls = products.map((product) => product.toObject());
-    await attachImageDataToProducts(productsWithUrls);
-    const visibleProducts = filterPublicProductsByVendor(productsWithUrls);
+    await attachImageDataToProducts(products);
+    const visibleProducts = filterPublicProductsByVendor(products);
 
     res.json({
       success: true,
@@ -703,6 +706,7 @@ exports.createProduct = async (req, res) => {
     if (vendorUploadLimitContext?.limits?.subscription) {
       await incrementVendorUploadCount(vendorUploadLimitContext.limits.subscription, 1);
     }
+    invalidatePublicProductCache();
 
     res.status(201).json({
       success: true,
@@ -983,6 +987,9 @@ exports.bulkCreateProducts = async (req, res) => {
         created.length,
       );
     }
+    if (created.length > 0) {
+      invalidatePublicProductCache();
+    }
 
     res.status(statusCode).json({
       success,
@@ -1034,16 +1041,15 @@ exports.getProducts = async (req, res) => {
     const products = await Product.find(query)
       .populate("category", "name")
       .populate("vendor", "storeName slug logo status")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // Ensure image URLs are properly formatted
-    const productsWithUrls = products.map((product) => product.toObject());
-    await attachImageDataToProducts(productsWithUrls);
+    await attachImageDataToProducts(products);
 
     res.json({
       success: true,
       count: products.length,
-      products: productsWithUrls,
+      products,
     });
   } catch (error) {
     res.status(500).json({
@@ -1065,12 +1071,11 @@ exports.getActiveProducts = async (req, res) => {
       .select(
         "title price salePrice priceType showStockToPublic images category brand description colors dimensions vendor productType marketplaceType stock allowBackorder variations deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // Ensure image URLs are properly formatted
-    const productsWithUrls = products.map((product) => product.toObject());
-    await attachImageDataToProducts(productsWithUrls);
-    const visibleProducts = filterPublicProductsByVendor(productsWithUrls);
+    await attachImageDataToProducts(products);
+    const visibleProducts = filterPublicProductsByVendor(products);
 
     res.json({
       success: true,
@@ -1100,12 +1105,11 @@ exports.getProductsByType = async (req, res) => {
       .select(
         "title price salePrice priceType showStockToPublic images category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // Ensure image URLs are properly formatted
-    const productsWithUrls = products.map((product) => product.toObject());
-    await attachImageDataToProducts(productsWithUrls);
-    const visibleProducts = filterPublicProductsByVendor(productsWithUrls);
+    await attachImageDataToProducts(products);
+    const visibleProducts = filterPublicProductsByVendor(products);
 
     res.json({
       success: true,
@@ -1154,7 +1158,8 @@ exports.getProduct = async (req, res) => {
           { path: "category", select: "name" },
           { path: "vendor", select: PUBLIC_VENDOR_POPULATE_FIELDS },
         ],
-      });
+      })
+      .lean();
 
     if (!product) {
       return res.status(404).json({
@@ -1175,8 +1180,7 @@ exports.getProduct = async (req, res) => {
       });
     }
 
-    // Ensure image URLs are properly formatted
-    const productObj = product.toObject();
+    const productObj = product;
     await attachImageDataToProducts(productObj);
 
     if (Array.isArray(productObj.groupedProducts) && productObj.groupedProducts.length > 0) {
@@ -1440,6 +1444,7 @@ exports.updateProduct = async (req, res) => {
     if (productObj.images && productObj.images.length > 0) {
       await attachImageDataToProducts(productObj);
     }
+    invalidatePublicProductCache();
 
     res.json({
       success: true,
@@ -1523,6 +1528,7 @@ exports.deleteProduct = async (req, res) => {
       await Promise.all(imageDocs.map((doc) => deleteImage(doc.publicId)));
       await ProductImage.deleteMany({ _id: { $in: imageIds } });
     }
+    invalidatePublicProductCache();
 
     res.json({
       success: true,
@@ -1587,6 +1593,7 @@ exports.toggleProductActive = async (req, res) => {
     if (productObj.images && productObj.images.length > 0) {
       await attachImageDataToProducts(productObj);
     }
+    invalidatePublicProductCache();
 
     res.json({
       success: true,
@@ -1713,6 +1720,7 @@ exports.duplicateProduct = async (req, res) => {
     if (vendorUploadLimitContext?.limits?.subscription) {
       await incrementVendorUploadCount(vendorUploadLimitContext.limits.subscription, 1);
     }
+    invalidatePublicProductCache();
 
     res.status(201).json({
       success: true,
@@ -1768,6 +1776,7 @@ exports.updateProductApprovalStatus = async (req, res) => {
 
     const productObj = product.toObject();
     await attachImageDataToProducts(productObj);
+    invalidatePublicProductCache();
 
     res.json({
       success: true,

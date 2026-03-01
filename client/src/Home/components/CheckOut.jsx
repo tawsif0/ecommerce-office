@@ -1,14 +1,25 @@
 /* eslint-disable no-unused-vars */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiChevronLeft } from "react-icons/fi";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  buildDataLayerItem,
+  getDataLayerCurrency,
+  pushDataLayerEvent,
+} from "../../utils/marketingDataLayer";
+import { fetchPublicSettings } from "../../utils/publicSettings";
+import {
+  clearLandingAttribution,
+  getLandingAttribution,
+} from "../../utils/landingAttribution";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const COUPON_STORAGE_KEY = "appliedCoupon";
+const ABANDONED_CHECKOUT_SESSION_KEY = "checkoutAbandonedSessionKey";
 
 const resolveImageValue = (value) => {
   if (!value) return "";
@@ -75,6 +86,19 @@ const normalizeBangladeshPhone = (value) => {
 
 const isValidBangladeshPhone = (value) => /^01[3-9]\d{8}$/.test(value);
 
+const getOrCreateCheckoutSessionKey = () => {
+  if (typeof window === "undefined") return "";
+
+  const existing = String(
+    window.localStorage.getItem(ABANDONED_CHECKOUT_SESSION_KEY) || "",
+  ).trim();
+  if (existing) return existing;
+
+  const nextKey = `chk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  window.localStorage.setItem(ABANDONED_CHECKOUT_SESSION_KEY, nextKey);
+  return nextKey;
+};
+
 const ProductImage = ({ src, alt, className }) => {
   const [imageSrc, setImageSrc] = useState(getFullImageUrl(src));
 
@@ -117,13 +141,28 @@ const CheckOut = () => {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [shippingFee, setShippingFee] = useState(0);
   const [shippingEstimate, setShippingEstimate] = useState(null);
+  const [locationOptions, setLocationOptions] = useState({
+    cities: [],
+    subCities: [],
+  });
+  const initiateCheckoutTrackedRef = useRef(false);
+  const hasPlacedOrderRef = useRef(false);
+  const hasCapturedAbandonedRef = useRef(false);
+  const checkoutSnapshotRef = useRef({
+    cartItems: [],
+    formData: {},
+    subtotal: 0,
+    total: 0,
+  });
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
     email: user?.email || "",
     phone: user?.phone || user?.originalPhone || "",
+    alternativePhone: "",
     address: "",
     city: "",
+    subCity: "",
     district: "",
     postalCode: "",
     country: "Bangladesh",
@@ -154,7 +193,9 @@ const CheckOut = () => {
     Number(appliedCoupon?.discount || 0),
     Number(subtotal || 0),
   );
-  const total = Math.max(subtotal + shippingFee - discount, 0);
+  const isFreeShippingCoupon = Boolean(appliedCoupon?.freeShipping);
+  const effectiveShippingFee = isFreeShippingCoupon ? 0 : shippingFee;
+  const total = Math.max(subtotal + effectiveShippingFee - discount, 0);
 
   const getItemData = (item) => {
     const product = typeof item.product === "object" ? item.product : null;
@@ -177,6 +218,95 @@ const CheckOut = () => {
       variationId: String(item.variationId || "").trim(),
       variationLabel: String(item.variationLabel || "").trim(),
     };
+  };
+
+  const getDataLayerItems = () =>
+    cartItems
+      .map((item) => {
+        const itemData = getItemData(item);
+        if (!itemData.productId) return null;
+        return buildDataLayerItem({
+          productId: itemData.productId,
+          title: itemData.title,
+          price: itemData.price,
+          quantity: itemData.quantity,
+          variationLabel: itemData.variationLabel,
+        });
+      })
+      .filter(Boolean);
+
+  const buildAbandonedPayload = () => {
+    const snapshot = checkoutSnapshotRef.current || {};
+    const snapshotCartItems = Array.isArray(snapshot.cartItems) ? snapshot.cartItems : [];
+    const snapshotFormData = snapshot.formData || {};
+    const snapshotSubtotal = Number(snapshot.subtotal || 0);
+    const snapshotTotal = Number(snapshot.total || 0);
+    const attribution = getLandingAttribution();
+    const safePhone = normalizeBangladeshPhone(snapshotFormData.phone);
+
+    return {
+      sessionKey: getOrCreateCheckoutSessionKey(),
+      source: attribution?.source || "checkout",
+      landingPageSlug: attribution?.slug || "",
+      customer: {
+        name: `${String(snapshotFormData.firstName || "").trim()} ${String(snapshotFormData.lastName || "").trim()}`.trim(),
+        email: String(snapshotFormData.email || "").trim(),
+        phone: String(safePhone || "").trim(),
+        alternativePhone: String(snapshotFormData.alternativePhone || "").trim(),
+        address: String(snapshotFormData.address || "").trim(),
+        city: String(snapshotFormData.city || "").trim(),
+        subCity: String(snapshotFormData.subCity || "").trim(),
+        district: String(snapshotFormData.district || "").trim(),
+        notes: String(snapshotFormData.notes || "").trim(),
+      },
+      items: snapshotCartItems.map((item) => {
+        const itemData = getItemData(item);
+        return {
+          productId: itemData.productId,
+          quantity: itemData.quantity,
+          price: Number(itemData.price || 0),
+          title: itemData.title,
+          image: itemData.image,
+          variationId: itemData.variationId || "",
+          variationLabel: itemData.variationLabel || "",
+        };
+      }),
+      subtotal: snapshotSubtotal,
+      total: snapshotTotal,
+    };
+  };
+
+  const captureAbandonedCheckout = async ({ useBeacon = false } = {}) => {
+    if (hasPlacedOrderRef.current || hasCapturedAbandonedRef.current) return;
+    if (!Array.isArray(checkoutSnapshotRef.current?.cartItems) || !checkoutSnapshotRef.current.cartItems.length) return;
+
+    const payload = buildAbandonedPayload();
+    if (!payload.sessionKey || !Array.isArray(payload.items) || !payload.items.length) return;
+
+    hasCapturedAbandonedRef.current = true;
+
+    try {
+      if (
+        useBeacon &&
+        typeof navigator !== "undefined" &&
+        typeof navigator.sendBeacon === "function"
+      ) {
+        const blob = new Blob([JSON.stringify(payload)], {
+          type: "application/json",
+        });
+        navigator.sendBeacon(`${baseUrl}/abandoned-orders/capture`, blob);
+        return;
+      }
+
+      await axios.post(`${baseUrl}/abandoned-orders/capture`, payload, {
+        meta: {
+          skipGlobalButtonLoading: true,
+          skipGlobalLoadingToast: true,
+        },
+      });
+    } catch (_error) {
+      hasCapturedAbandonedRef.current = false;
+    }
   };
 
   const getShippingItemsPayload = () =>
@@ -263,6 +393,8 @@ const CheckOut = () => {
       const discountValue = Number(response.data?.discount || 0);
       const couponData = {
         code: response.data?.code || normalizedCode,
+        offerType: String(response.data?.offerType || "discount").toLowerCase(),
+        freeShipping: Boolean(response.data?.freeShipping),
         discount: discountValue,
         finalAmount: Number(response.data?.finalAmount || subtotal - discountValue),
       };
@@ -339,6 +471,60 @@ const CheckOut = () => {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    const loadLocationOptions = async () => {
+      try {
+        const settings = await fetchPublicSettings();
+        if (!mounted) return;
+
+        const cityOptions = Array.isArray(settings?.locations?.cityOptions)
+          ? settings.locations.cityOptions
+          : [];
+        const subCityOptions = Array.isArray(settings?.locations?.subCityOptions)
+          ? settings.locations.subCityOptions
+          : [];
+
+        setLocationOptions({
+          cities: cityOptions,
+          subCities: subCityOptions,
+        });
+      } catch (_error) {
+        if (!mounted) return;
+        setLocationOptions({
+          cities: [],
+          subCities: [],
+        });
+      }
+    };
+
+    loadLocationOptions();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cartItems.length) {
+      hasCapturedAbandonedRef.current = false;
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ABANDONED_CHECKOUT_SESSION_KEY);
+      }
+      return;
+    }
+
+    getOrCreateCheckoutSessionKey();
+  }, [cartItems.length]);
+
+  useEffect(() => {
+    checkoutSnapshotRef.current = {
+      cartItems,
+      formData,
+      subtotal,
+      total,
+    };
+  }, [cartItems, formData, subtotal, total]);
+
+  useEffect(() => {
     const savedCoupon = localStorage.getItem(COUPON_STORAGE_KEY);
     if (!savedCoupon) return;
 
@@ -393,6 +579,47 @@ const CheckOut = () => {
       clearTimeout(timeoutId);
     };
   }, [cartItems, formData.city, formData.district, formData.country]);
+
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      initiateCheckoutTrackedRef.current = false;
+      return;
+    }
+
+    if (initiateCheckoutTrackedRef.current) return;
+
+    const items = getDataLayerItems();
+    if (!items.length) return;
+
+    pushDataLayerEvent("initiate_checkout", {
+      ecommerce: {
+        currency: getDataLayerCurrency(),
+        value: Number(total || 0),
+        coupon: appliedCoupon?.code || undefined,
+        items,
+      },
+    });
+
+    initiateCheckoutTrackedRef.current = true;
+  }, [cartItems.length]);
+
+  useEffect(() => {
+    const beforeUnloadHandler = () => {
+      captureAbandonedCheckout({ useBeacon: true });
+    };
+
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnloadHandler);
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      captureAbandonedCheckout();
+    },
+    [],
+  );
 
   const fetchPaymentMethods = async () => {
     try {
@@ -481,8 +708,10 @@ const CheckOut = () => {
         return;
       }
 
-      const finalShippingFee = Number(shippingResult.shippingFee || 0);
+      const estimatedShippingFee = Number(shippingResult.shippingFee || 0);
+      const finalShippingFee = isFreeShippingCoupon ? 0 : estimatedShippingFee;
       const finalTotal = Math.max(subtotal + finalShippingFee - discount, 0);
+      const attribution = getLandingAttribution();
 
       const payload = {
         shippingAddress: {
@@ -490,8 +719,10 @@ const CheckOut = () => {
           lastName: formData.lastName,
           email: formData.email,
           phone: normalizedPhone,
+          alternativePhone: String(formData.alternativePhone || "").trim(),
           address: formData.address,
           city: formData.city,
+          subCity: String(formData.subCity || "").trim(),
           district: formData.district,
           postalCode: formData.postalCode,
           country: "Bangladesh",
@@ -512,11 +743,13 @@ const CheckOut = () => {
           };
         }),
         subtotal,
-        shippingFee: finalShippingFee,
+        shippingFee: estimatedShippingFee,
         shippingMeta: shippingResult.shippingMeta,
         discount,
         total: finalTotal,
         couponCode: appliedCoupon?.code || "",
+        source: attribution?.source || "shop",
+        landingPageSlug: attribution?.slug || "",
         paymentMethodId: resolvedMethod?._id || "",
         paymentMethod: resolvedPaymentMethodValue,
         paymentDetails: {
@@ -543,6 +776,19 @@ const CheckOut = () => {
 
       const order = response.data.order;
       const paymentRedirectUrl = String(response.data?.paymentRedirectUrl || "").trim();
+      hasPlacedOrderRef.current = true;
+
+      pushDataLayerEvent("purchase", {
+        ecommerce: {
+          transaction_id: String(order?.orderNumber || order?._id || ""),
+          value: Number(finalTotal || 0),
+          currency: getDataLayerCurrency(),
+          shipping: Number(finalShippingFee || 0),
+          coupon: appliedCoupon?.code || undefined,
+          payment_type: resolvedPaymentMethodValue || undefined,
+          items: getDataLayerItems(),
+        },
+      });
 
       if (!isLoggedIn && order) {
         const previous = JSON.parse(localStorage.getItem("guestOrders") || "[]");
@@ -552,7 +798,9 @@ const CheckOut = () => {
 
       await clearCart();
       localStorage.removeItem(COUPON_STORAGE_KEY);
+      localStorage.removeItem(ABANDONED_CHECKOUT_SESSION_KEY);
       setAppliedCoupon(null);
+      clearLandingAttribution();
 
       if (paymentRedirectUrl) {
         toast.success("Redirecting to payment gateway...");
@@ -636,6 +884,13 @@ const CheckOut = () => {
                 placeholder="Phone*"
                 className="px-3 py-3 border border-gray-200 rounded-lg"
               />
+              <input
+                name="alternativePhone"
+                value={formData.alternativePhone}
+                onChange={handleInputChange}
+                placeholder="Alternative phone (optional)"
+                className="px-3 py-3 border border-gray-200 rounded-lg md:col-span-2"
+              />
             </div>
 
             <input
@@ -646,12 +901,21 @@ const CheckOut = () => {
               className="w-full px-3 py-3 border border-gray-200 rounded-lg"
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <input
                 name="city"
                 value={formData.city}
                 onChange={handleInputChange}
                 placeholder="City*"
+                list="checkout-city-options"
+                className="px-3 py-3 border border-gray-200 rounded-lg"
+              />
+              <input
+                name="subCity"
+                value={formData.subCity}
+                onChange={handleInputChange}
+                placeholder="Sub-city (optional)"
+                list="checkout-subcity-options"
                 className="px-3 py-3 border border-gray-200 rounded-lg"
               />
               <input
@@ -659,6 +923,7 @@ const CheckOut = () => {
                 value={formData.district}
                 onChange={handleInputChange}
                 placeholder="District*"
+                list="checkout-subcity-options"
                 className="px-3 py-3 border border-gray-200 rounded-lg"
               />
               <input
@@ -669,6 +934,16 @@ const CheckOut = () => {
                 className="px-3 py-3 border border-gray-200 rounded-lg"
               />
             </div>
+            <datalist id="checkout-city-options">
+              {locationOptions.cities.map((city) => (
+                <option key={city} value={city} />
+              ))}
+            </datalist>
+            <datalist id="checkout-subcity-options">
+              {locationOptions.subCities.map((subCity) => (
+                <option key={subCity} value={subCity} />
+              ))}
+            </datalist>
 
             <textarea
               name="notes"
@@ -706,6 +981,15 @@ const CheckOut = () => {
                           checked={selectedPaymentMethodId === String(method?._id || "")}
                           onChange={() => {
                             setSelectedPaymentMethodId(String(method?._id || ""));
+                            const nextMethod = normalizePaymentMethodValue(method);
+                            pushDataLayerEvent("add_payment_info", {
+                              ecommerce: {
+                                currency: getDataLayerCurrency(),
+                                value: Number(total || 0),
+                                payment_type: nextMethod || undefined,
+                                items: getDataLayerItems(),
+                              },
+                            });
                           }}
                         />
                         <div>
@@ -807,9 +1091,19 @@ const CheckOut = () => {
               <div className="flex justify-between">
                 <span className="text-gray-600">Shipping</span>
                 <span className="font-medium">
-                  {isEstimatingShipping ? "Calculating..." : `${shippingFee.toFixed(2)} TK`}
+                  {isEstimatingShipping
+                    ? "Calculating..."
+                    : isFreeShippingCoupon
+                      ? "FREE"
+                      : `${shippingFee.toFixed(2)} TK`}
                 </span>
               </div>
+              {isFreeShippingCoupon && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Free Delivery Offer</span>
+                  <span className="font-medium text-green-600">Applied</span>
+                </div>
+              )}
               {shippingEstimate?.estimatedMaxDays > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Estimated Delivery</span>
@@ -843,6 +1137,7 @@ const CheckOut = () => {
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-green-600 font-medium">
                       Applied: {appliedCoupon.code}
+                      {appliedCoupon?.freeShipping ? " (Free delivery)" : ""}
                     </span>
                     <button
                       type="button"

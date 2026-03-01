@@ -85,6 +85,7 @@ function ProductModify({ initialMode = "list" }) {
     { key: "", value: "" },
   ]);
   const [customColorValue, setCustomColorValue] = useState("#2563eb");
+  const [brandOptions, setBrandOptions] = useState([]);
 
   // Product type options
   const productTypes = [
@@ -327,6 +328,7 @@ function ProductModify({ initialMode = "list" }) {
 
     fetchProducts();
     fetchCategories();
+    fetchBrandOptions();
 
     if (initialMode === "create") {
       setShowForm(true);
@@ -388,10 +390,23 @@ function ProductModify({ initialMode = "list" }) {
     }
   };
 
+  const fetchBrandOptions = async () => {
+    try {
+      const response = await axios.get(`${baseUrl}/brands/public`);
+      const rows = Array.isArray(response.data?.brands)
+        ? response.data.brands
+        : [];
+      setBrandOptions(rows);
+    } catch (_error) {
+      setBrandOptions([]);
+    }
+  };
+
   const handleRefresh = () => {
     setLoading(true);
     fetchProducts();
     fetchCategories();
+    fetchBrandOptions();
     toast.success("Products refreshed!");
   };
 
@@ -1085,6 +1100,7 @@ function ProductModify({ initialMode = "list" }) {
       cancelForm();
       fetchProducts();
       fetchCategories();
+      fetchBrandOptions();
 
       window.dispatchEvent(new CustomEvent("productCreated"));
     } catch (err) {
@@ -1732,8 +1748,16 @@ function ProductModify({ initialMode = "list" }) {
                         value={form.brand}
                         onChange={handleChange}
                         placeholder="Enter brand name"
+                        list="brand-options"
                         className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
                       />
+                      <datalist id="brand-options">
+                        {brandOptions.map((brand) => (
+                          <option key={brand._id || brand.slug || brand.name} value={brand.name}>
+                            {brand.name}
+                          </option>
+                        ))}
+                      </datalist>
                     </div>
 
                     {/* Physical Details */}

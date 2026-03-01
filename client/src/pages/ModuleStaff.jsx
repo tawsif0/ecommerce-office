@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
-import { FiRefreshCw, FiTrash2 } from "react-icons/fi";
+import { FiEye, FiEyeOff, FiRefreshCw, FiTrash2 } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
 
 const baseUrl = import.meta.env.VITE_API_URL;
@@ -48,6 +48,7 @@ const ModuleStaff = () => {
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
 
   const isAdmin = user?.userType === "admin";
   const canManage = isAdmin || user?.userType === "vendor" || user?.userType === "staff";
@@ -256,14 +257,28 @@ const ModuleStaff = () => {
             placeholder="Phone"
             className="px-3 py-2.5 border border-gray-200 rounded-lg"
           />
-          <input
-            name="password"
-            value={form.password}
-            onChange={handleInput}
-            placeholder="Password"
-            type="password"
-            className="px-3 py-2.5 border border-gray-200 rounded-lg"
-          />
+          <div className="relative">
+            <input
+              name="password"
+              value={form.password}
+              onChange={handleInput}
+              placeholder="Password"
+              type={showCreatePassword ? "text" : "password"}
+              className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCreatePassword((prev) => !prev)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-600 hover:bg-gray-100"
+              aria-label={showCreatePassword ? "Hide password" : "Show password"}
+            >
+              {showCreatePassword ? (
+                <FiEyeOff className="h-4 w-4" />
+              ) : (
+                <FiEye className="h-4 w-4" />
+              )}
+            </button>
+          </div>
           <input
             name="roleName"
             value={form.roleName}

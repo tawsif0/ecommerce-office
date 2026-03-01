@@ -1,5 +1,6 @@
 const Coupon = require("../models/Coupon.js");
 const Vendor = require("../models/Vendor.js");
+const Product = require("../models/Product.js");
 const {
   normalizeCouponCode,
   validateCouponForSubtotal,
@@ -33,6 +34,23 @@ const parseUsageLimit = (value) => {
   }
 
   return { value: parsed };
+};
+
+const normalizeOfferType = (value) => {
+  const normalized = String(value || "discount")
+    .trim()
+    .toLowerCase();
+  return ["discount", "free_shipping", "combo"].includes(normalized)
+    ? normalized
+    : "discount";
+};
+
+const normalizeRequiredProducts = (value) => {
+  const source = Array.isArray(value) ? value : [];
+  const ids = source
+    .map((entry) => String(entry || "").trim())
+    .filter((entry) => /^[0-9a-fA-F]{24}$/.test(entry));
+  return [...new Set(ids)];
 };
 
 const getVendorForRequester = async (req) =>
@@ -101,6 +119,8 @@ exports.applyCoupon = async (req, res) => {
       success: true,
       message: "Coupon applied successfully",
       code: validation.code,
+      offerType: validation.offerType || validation.coupon.offerType || "discount",
+      freeShipping: Boolean(validation.freeShipping),
       discount: validation.discount,
       finalAmount: validation.finalAmount,
       eligibleSubtotal: validation.eligibleSubtotal,
@@ -108,6 +128,8 @@ exports.applyCoupon = async (req, res) => {
       coupon: {
         _id: validation.coupon._id,
         code: validation.coupon.code,
+        offerType: validation.coupon.offerType || "discount",
+        freeShipping: validation.coupon.offerType === "free_shipping",
         discountType: validation.coupon.discountType,
         discountValue: validation.coupon.discountValue,
         vendor: validation.coupon.vendor || null,
@@ -130,6 +152,7 @@ exports.createCoupon = async (req, res) => {
     const {
       code,
       discountType,
+      offerType,
       discountValue,
       minPurchase,
       maxDiscount,
@@ -137,12 +160,13 @@ exports.createCoupon = async (req, res) => {
       usageLimit,
       isActive,
       vendorId,
+      requiredProducts,
     } = req.body;
 
-    if (!code || !discountValue || !validUntil) {
+    if (!code || !validUntil) {
       return res.status(400).json({
         success: false,
-        message: "Code, discount value, and valid until date are required",
+        message: "Code and valid until date are required",
       });
     }
 
@@ -154,11 +178,25 @@ exports.createCoupon = async (req, res) => {
       });
     }
 
-    const normalizedDiscountValue = toNumber(discountValue, NaN);
-    if (!Number.isFinite(normalizedDiscountValue) || normalizedDiscountValue <= 0) {
+    const normalizedOfferType = normalizeOfferType(offerType);
+    const rawDiscountValue = toNumber(discountValue, NaN);
+    const normalizedDiscountValue =
+      normalizedOfferType === "free_shipping"
+        ? Number.isFinite(rawDiscountValue) && rawDiscountValue >= 0
+          ? rawDiscountValue
+          : 0
+        : rawDiscountValue;
+
+    if (
+      !Number.isFinite(normalizedDiscountValue) ||
+      (normalizedOfferType !== "free_shipping" && normalizedDiscountValue <= 0)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Discount value must be greater than zero",
+        message:
+          normalizedOfferType === "free_shipping"
+            ? "Discount value must be a valid number"
+            : "Discount value must be greater than zero",
       });
     }
 
@@ -186,9 +224,43 @@ exports.createCoupon = async (req, res) => {
       });
     }
 
+    const normalizedRequiredProducts = normalizeRequiredProducts(requiredProducts);
+    if (normalizedOfferType === "combo" && normalizedRequiredProducts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Select at least one combo product",
+      });
+    }
+
+    if (normalizedRequiredProducts.length > 0) {
+      const products = await Product.find({ _id: { $in: normalizedRequiredProducts } })
+        .select("_id vendor")
+        .lean();
+
+      if (products.length !== normalizedRequiredProducts.length) {
+        return res.status(400).json({
+          success: false,
+          message: "One or more required products are invalid",
+        });
+      }
+
+      if (vendorResolution.vendorId) {
+        const mismatched = products.some(
+          (product) => String(product.vendor || "") !== String(vendorResolution.vendorId),
+        );
+        if (mismatched) {
+          return res.status(400).json({
+            success: false,
+            message: "Combo products must belong to the same vendor scope",
+          });
+        }
+      }
+    }
+
     const coupon = await Coupon.create({
       code: normalizedCode,
       discountType: discountType || "percentage",
+      offerType: normalizedOfferType,
       discountValue: normalizedDiscountValue,
       minPurchase: toNumber(minPurchase, 0),
       maxDiscount:
@@ -199,11 +271,13 @@ exports.createCoupon = async (req, res) => {
       usageLimit: usageLimitResult.value,
       isActive: typeof isActive === "boolean" ? isActive : true,
       vendor: vendorResolution.vendorId,
+      requiredProducts: normalizedRequiredProducts,
       createdBy: req.user.id || req.user._id,
     });
 
     const populatedCoupon = await Coupon.findById(coupon._id)
       .populate("vendor", "storeName slug")
+      .populate("requiredProducts", "title vendor")
       .lean();
 
     res.status(201).json({
@@ -240,6 +314,7 @@ exports.getCoupons = async (req, res) => {
 
     const coupons = await Coupon.find(query)
       .populate("vendor", "storeName slug")
+      .populate("requiredProducts", "title vendor")
       .sort({ createdAt: -1 });
 
     res.json({
@@ -309,6 +384,7 @@ exports.updateCoupon = async (req, res) => {
     const {
       code,
       discountType,
+      offerType,
       discountValue,
       minPurchase,
       maxDiscount,
@@ -316,6 +392,7 @@ exports.updateCoupon = async (req, res) => {
       usageLimit,
       isActive,
       vendorId,
+      requiredProducts,
     } = req.body;
 
     const updateData = {
@@ -333,16 +410,29 @@ exports.updateCoupon = async (req, res) => {
       updateData.code = normalizedCode;
     }
 
+    if (offerType !== undefined) {
+      updateData.offerType = normalizeOfferType(offerType);
+    }
+
     if (discountType !== undefined) {
       updateData.discountType = discountType;
     }
 
     if (discountValue !== undefined) {
+      const nextOfferType = normalizeOfferType(
+        updateData.offerType || permission.coupon.offerType,
+      );
       const normalizedDiscountValue = toNumber(discountValue, NaN);
-      if (!Number.isFinite(normalizedDiscountValue) || normalizedDiscountValue <= 0) {
+      if (
+        !Number.isFinite(normalizedDiscountValue) ||
+        (nextOfferType !== "free_shipping" && normalizedDiscountValue <= 0)
+      ) {
         return res.status(400).json({
           success: false,
-          message: "Discount value must be greater than zero",
+          message:
+            nextOfferType === "free_shipping"
+              ? "Discount value must be a valid number"
+              : "Discount value must be greater than zero",
         });
       }
       updateData.discountValue = normalizedDiscountValue;
@@ -400,10 +490,79 @@ exports.updateCoupon = async (req, res) => {
       }
     }
 
+    if (requiredProducts !== undefined) {
+      const normalizedRequiredProducts = normalizeRequiredProducts(requiredProducts);
+      const nextOfferType = normalizeOfferType(
+        updateData.offerType || permission.coupon.offerType,
+      );
+
+      if (nextOfferType === "combo" && normalizedRequiredProducts.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Select at least one combo product",
+        });
+      }
+
+      if (normalizedRequiredProducts.length > 0) {
+        const products = await Product.find({ _id: { $in: normalizedRequiredProducts } })
+          .select("_id vendor")
+          .lean();
+
+        if (products.length !== normalizedRequiredProducts.length) {
+          return res.status(400).json({
+            success: false,
+            message: "One or more required products are invalid",
+          });
+        }
+
+        const scopeVendorId = String(
+          updateData.vendor !== undefined ? updateData.vendor : permission.coupon.vendor || "",
+        );
+        if (scopeVendorId) {
+          const mismatched = products.some(
+            (product) => String(product.vendor || "") !== scopeVendorId,
+          );
+          if (mismatched) {
+            return res.status(400).json({
+              success: false,
+              message: "Combo products must belong to the same vendor scope",
+            });
+          }
+        }
+      }
+
+      updateData.requiredProducts = normalizedRequiredProducts;
+    }
+
+    if (
+      updateData.offerType === "combo" &&
+      requiredProducts === undefined &&
+      !Array.isArray(permission.coupon.requiredProducts)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Select at least one combo product",
+      });
+    }
+
+    if (
+      updateData.offerType === "combo" &&
+      requiredProducts === undefined &&
+      Array.isArray(permission.coupon.requiredProducts) &&
+      permission.coupon.requiredProducts.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Select at least one combo product",
+      });
+    }
+
     const coupon = await Coupon.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
-    }).populate("vendor", "storeName slug");
+    })
+      .populate("vendor", "storeName slug")
+      .populate("requiredProducts", "title vendor");
 
     res.json({
       success: true,

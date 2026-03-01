@@ -3,6 +3,7 @@ const Vendor = require("../models/Vendor");
 const Product = require("../models/Product");
 const { isAdmin, getVendorForUser } = require("../utils/marketplaceAccess");
 const { attachImageDataToProducts } = require("../utils/imageUtils");
+const { sendVendorConversationEmail } = require("../utils/emailTemplates");
 
 const getUserId = (user) => user?.id || user?._id || null;
 
@@ -98,7 +99,9 @@ exports.createConversation = async (req, res) => {
       });
     }
 
-    const vendor = await Vendor.findById(resolvedVendorId).select("_id status").lean();
+    const vendor = await Vendor.findById(resolvedVendorId)
+      .select("_id status email storeName")
+      .lean();
     if (!vendor) {
       return res.status(404).json({
         success: false,
@@ -163,6 +166,16 @@ exports.createConversation = async (req, res) => {
 
     if (populated) {
       await applyConversationImageHydration(populated);
+    }
+
+    const vendorEmail = String(vendor?.email || "").trim().toLowerCase();
+    if (vendorEmail) {
+      sendVendorConversationEmail({
+        recipientEmail: vendorEmail,
+        conversation: populated || conversation,
+        senderName: String(req.user?.name || req.user?.email || "Customer"),
+        senderRole: requesterRole,
+      }).catch(() => null);
     }
 
     res.status(201).json({
@@ -448,6 +461,23 @@ exports.replyToConversation = async (req, res) => {
 
     if (populated) {
       await applyConversationImageHydration(populated);
+    }
+
+    let recipientEmail = "";
+    if (senderRole === "customer") {
+      const vendor = await Vendor.findById(conversation.vendor).select("email").lean();
+      recipientEmail = String(vendor?.email || "").trim().toLowerCase();
+    } else {
+      recipientEmail = String(populated?.customer?.email || "").trim().toLowerCase();
+    }
+
+    if (recipientEmail) {
+      sendVendorConversationEmail({
+        recipientEmail,
+        conversation: populated || conversation,
+        senderName: String(req.user?.name || req.user?.email || "User"),
+        senderRole,
+      }).catch(() => null);
     }
 
     res.json({

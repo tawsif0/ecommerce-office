@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaTruckFast,
@@ -17,6 +17,7 @@ import {
   FaChevronRight,
 } from "react-icons/fa6";
 import { FaMapMarkerAlt } from "react-icons/fa";
+import { fetchPublicSettings } from "../../utils/publicSettings";
 
 const Footer = () => {
   const navigate = useNavigate();
@@ -25,25 +26,7 @@ const Footer = () => {
   const [scrollDir, setScrollDir] = useState("down");
   const [isAtTop, setIsAtTop] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(false);
-  // Social media links - UPDATE THESE WITH YOUR LINKS
-  const socialLinks = {
-    facebook: "https://www.facebook.com/",
-    whatsapp: "https://wa.me/8801700000000",
-  };
-
-  // Contact information with proper links
-  const contactInfo = {
-    address:
-      "Shop 12, Level 3, Bashundhara City, Panthapath, Dhaka 1215, Bangladesh",
-    addressLink:
-      "https://maps.google.com/?q=Bashundhara+City+Panthapath+Dhaka+1215+Bangladesh",
-    phone1: "+880 1700-000000",
-    phone1Link: "tel:+8801700000000",
-    phone2: "+880 1800-000000",
-    phone2Link: "tel:+8801800000000",
-    email: "support@marketplace.com.bd",
-    emailLink: "mailto:support@marketplace.com.bd",
-  };
+  const [publicSettings, setPublicSettings] = useState(null);
 
   // Function to handle navigation with scroll to top
   const handleNavigation = (path) => {
@@ -83,6 +66,57 @@ const Footer = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      const data = await fetchPublicSettings();
+      if (!cancelled) {
+        setPublicSettings(data);
+      }
+    };
+
+    loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const socialLinks = useMemo(() => {
+    const social = publicSettings?.social || {};
+    return {
+      facebook: String(social.facebook || "https://www.facebook.com/").trim(),
+      whatsapp: String(social.whatsapp || "https://wa.me/8801700000000").trim(),
+    };
+  }, [publicSettings]);
+
+  const contactInfo = useMemo(() => {
+    const contact = publicSettings?.contact || {};
+    const phone1 = String(contact.phone1 || "+880 1700-000000").trim();
+    const phone2 = String(contact.phone2 || "+880 1800-000000").trim();
+    const email = String(contact.email || "support@marketplace.com.bd").trim();
+
+    const normalizePhoneForTel = (value) => String(value || "").replace(/[^\d+]/g, "");
+
+    return {
+      address:
+        String(contact.address || "").trim() ||
+        "Shop 12, Level 3, Bashundhara City, Panthapath, Dhaka 1215, Bangladesh",
+      addressLink:
+        String(contact.addressLink || "").trim() ||
+        "https://maps.google.com/?q=Bashundhara+City+Panthapath+Dhaka+1215+Bangladesh",
+      phone1,
+      phone1Link: `tel:${normalizePhoneForTel(phone1)}`,
+      phone2,
+      phone2Link: `tel:${normalizePhoneForTel(phone2)}`,
+      email,
+      emailLink: `mailto:${email}`,
+    };
+  }, [publicSettings]);
+
+  const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
+
   // Quick links configuration
   const quickLinks = [
     { name: "Home", path: "/" },
@@ -90,6 +124,11 @@ const Footer = () => {
     { name: "About Us", path: "/about" },
     { name: "Contact", path: "/contact" },
     { name: "FAQs", path: "/faqs" },
+    { name: "Shipment Policy", path: "/policy/shipment" },
+    { name: "Delivery Policy", path: "/policy/delivery" },
+    { name: "Terms & Conditions", path: "/policy/terms" },
+    { name: "Return Policy", path: "/policy/return" },
+    { name: "Privacy Policy", path: "/policy/privacy" },
   ];
 
   return (
@@ -147,13 +186,14 @@ const Footer = () => {
                   className="inline-block cursor-pointer"
                 >
                   <h2 className="text-3xl font-bold mb-4 hover:opacity-90 transition-opacity">
-                    <span className="text-white">E-</span>
-                    <span className="text-gray-300">Commerce</span>
+                    <span className="text-white">
+                      {String(website.storeName || "E-Commerce")}
+                    </span>
                   </h2>
                 </button>
                 <p className="text-gray-400 leading-relaxed">
-                  Multi-vendor ecommerce platform for Bangladesh with trusted
-                  sellers, secure checkout, and nationwide delivery.
+                  {String(website.tagline || "").trim() ||
+                    "Multi-vendor ecommerce platform for Bangladesh with trusted sellers, secure checkout, and nationwide delivery."}
                 </p>
               </div>
 
@@ -293,7 +333,7 @@ const Footer = () => {
             {/* COPYRIGHT - CENTERED */}
             <div className="text-center">
               <p className="text-gray-400 text-sm">
-                Copyright {currentYear} E-Commerce Store. All rights reserved.
+                Copyright {currentYear} {String(website.storeName || "E-Commerce Store")}. All rights reserved.
               </p>
               <p className="text-gray-500 text-xs mt-1">
                 Built for Bangladesh marketplace operations

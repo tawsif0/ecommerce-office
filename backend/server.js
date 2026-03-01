@@ -6,19 +6,51 @@ const { processRecurringRenewals } = require("./utils/recurringSubscriptionUtils
 
 const PORT = process.env.PORT;
 const MONGODB_URI = process.env.MONGODB_URI;
+const MONGO_MAX_POOL_SIZE = Math.max(5, Number(process.env.MONGO_MAX_POOL_SIZE || 20));
+const MONGO_MIN_POOL_SIZE = Math.max(1, Number(process.env.MONGO_MIN_POOL_SIZE || 2));
 let recurringRenewalJob = null;
 
 const dropLegacyUserIndexes = async () => {
-  const allowedUserIndexFields = new Set(["email", "phone"]);
+  const allowedUserIndexes = new Set(["_id_", "email_1", "phone_1", "isBlacklisted_1"]);
+  const legacyFieldNames = new Set([
+    "referralCode",
+    "referredBy",
+    "sponsorId",
+    "affiliateId",
+    "affiliateCode",
+    "activationCode",
+    "activationStatus",
+    "walletBalance",
+    "withdrawableBalance",
+    "dkId",
+    "eaId",
+  ]);
+  const legacyNameHints = [
+    "referral",
+    "affiliate",
+    "activation",
+    "wallet",
+    "withdraw",
+    "dkid",
+    "eaid",
+  ];
 
   try {
     const usersCollection = mongoose.connection.collection("users");
     const indexes = await usersCollection.indexes();
     const indexesToDrop = indexes.filter((index) => {
-      if (index.name === "_id_") return false;
-      const fields = Object.keys(index.key || {});
-      if (!fields.length) return true;
-      return fields.some((field) => !allowedUserIndexFields.has(field));
+      const indexName = String(index?.name || "").trim();
+      if (allowedUserIndexes.has(indexName)) return false;
+
+      const fields = Object.keys(index?.key || {});
+      if (!fields.length) return false;
+
+      if (fields.some((field) => legacyFieldNames.has(field))) {
+        return true;
+      }
+
+      const normalizedName = indexName.toLowerCase();
+      return legacyNameHints.some((hint) => normalizedName.includes(hint));
     });
 
     if (!indexesToDrop.length) return;
@@ -36,6 +68,10 @@ mongoose
   .connect(MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
+    maxPoolSize: MONGO_MAX_POOL_SIZE,
+    minPoolSize: MONGO_MIN_POOL_SIZE,
+    maxIdleTimeMS: 60000,
+    serverSelectionTimeoutMS: 10000,
   })
   .then(async () => {
     console.log("Connected to MongoDB");

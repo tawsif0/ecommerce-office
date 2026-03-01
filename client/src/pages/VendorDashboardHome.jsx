@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { FiBarChart2, FiClock, FiDollarSign, FiPackage } from "react-icons/fi";
+import {
+  FiBarChart2,
+  FiClock,
+  FiDollarSign,
+  FiPackage,
+  FiArrowRight,
+  FiMail,
+  FiMessageSquare,
+  FiTag,
+  FiEdit3,
+} from "react-icons/fi";
 import {
   Bar,
   BarChart,
@@ -14,7 +24,7 @@ import { useAuth } from "../hooks/useAuth";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
-const VendorDashboardHome = () => {
+const VendorDashboardHome = ({ onTabChange }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [vendor, setVendor] = useState(null);
@@ -25,9 +35,23 @@ const VendorDashboardHome = () => {
     rejectedProducts: 0,
     totalOrders: 0,
     pendingOrders: 0,
+    confirmedOrders: 0,
+    processingOrders: 0,
+    shippedOrders: 0,
+    deliveredOrders: 0,
+    cancelledOrders: 0,
+    returnedOrders: 0,
     grossSales: 0,
     commissionTotal: 0,
     netEarnings: 0,
+    todaySales: 0,
+    monthlySales: 0,
+    inventory: {
+      totalStock: 0,
+      lowStockAlerts: 0,
+      outOfStock: 0,
+    },
+    recentOrders: [],
   });
 
   const getAuthHeaders = () => {
@@ -126,8 +150,20 @@ const VendorDashboardHome = () => {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-        <h2 className="text-lg font-semibold text-black mb-4">Revenue Snapshot</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <h2 className="text-lg font-semibold text-black mb-4">Sales Snapshot</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+          <div className="rounded-lg border border-gray-200 p-4">
+            <p className="text-gray-500">Today Sales</p>
+            <p className="text-xl font-bold text-black mt-1">
+              {Number(stats.todaySales || 0).toFixed(2)} TK
+            </p>
+          </div>
+          <div className="rounded-lg border border-gray-200 p-4">
+            <p className="text-gray-500">Monthly Sales</p>
+            <p className="text-xl font-bold text-black mt-1">
+              {Number(stats.monthlySales || 0).toFixed(2)} TK
+            </p>
+          </div>
           <div className="rounded-lg border border-gray-200 p-4">
             <p className="text-gray-500">Gross Sales</p>
             <p className="text-xl font-bold text-black mt-1">
@@ -141,9 +177,119 @@ const VendorDashboardHome = () => {
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 p-4">
-            <p className="text-gray-500">Pending Orders</p>
-            <p className="text-xl font-bold text-black mt-1">{stats.pendingOrders}</p>
+            <p className="text-gray-500">Net Earnings</p>
+            <p className="text-xl font-bold text-black mt-1">
+              {Number(stats.netEarnings || 0).toFixed(2)} TK
+            </p>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
+        <h2 className="text-lg font-semibold text-black mb-4">Order Status Overview</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-sm">
+          {[
+            ["Pending", stats.pendingOrders],
+            ["Confirmed", stats.confirmedOrders],
+            ["Processing", stats.processingOrders],
+            ["Shipped", stats.shippedOrders],
+            ["Delivered", stats.deliveredOrders],
+            ["Cancelled", stats.cancelledOrders],
+            ["Returned", stats.returnedOrders],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-gray-200 p-3">
+              <p className="text-gray-500">{label}</p>
+              <p className="text-lg font-bold text-black mt-1">{Number(value || 0)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
+          <h2 className="text-lg font-semibold text-black mb-4">Inventory Snapshot</h2>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Total Stock Units</span>
+              <span className="font-semibold text-black">
+                {Number(stats?.inventory?.totalStock || 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Low Stock Alerts</span>
+              <span className="font-semibold text-black">
+                {Number(stats?.inventory?.lowStockAlerts || 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Out of Stock</span>
+              <span className="font-semibold text-black">
+                {Number(stats?.inventory?.outOfStock || 0)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
+          <h2 className="text-lg font-semibold text-black mb-4">Recent Orders</h2>
+          {Array.isArray(stats?.recentOrders) && stats.recentOrders.length > 0 ? (
+            <div className="space-y-2">
+              {stats.recentOrders.map((order) => (
+                <div
+                  key={order.orderNumber}
+                  className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-black truncate">{order.orderNumber}</p>
+                    <p className="text-gray-500 truncate">{order.customerName || "Customer"}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-semibold text-black">
+                      {Number(order.total || 0).toFixed(2)} TK
+                    </p>
+                    <p className="text-xs text-gray-500 capitalize">{order.orderStatus}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No recent orders yet.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
+        <h2 className="text-lg font-semibold text-black mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            { label: "Vendor Orders", tab: "vendor-orders", icon: FiPackage },
+            { label: "Create Product", tab: "create-product", icon: FiEdit3 },
+            { label: "Manage Products", tab: "modify-product", icon: FiEdit3 },
+            { label: "Brands", tab: "module-brands", icon: FiTag },
+            { label: "Sales Report", tab: "module-business-reports", icon: FiBarChart2 },
+            { label: "Suppliers", tab: "module-suppliers", icon: FiPackage },
+            { label: "Purchases", tab: "module-purchases", icon: FiPackage },
+            { label: "Accounts", tab: "module-accounts", icon: FiDollarSign },
+            { label: "Customer Messages", tab: "vendor-messages", icon: FiMail },
+            { label: "Support Tickets", tab: "module-support", icon: FiMessageSquare },
+            { label: "Coupons", tab: "coupons", icon: FiTag },
+          ].map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.tab}
+                type="button"
+                onClick={() => onTabChange?.(action.tab)}
+                className="inline-flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Icon className="w-4 h-4" />
+                  {action.label}
+                </span>
+                <FiArrowRight className="w-4 h-4" />
+              </button>
+            );
+          })}
         </div>
       </div>
 

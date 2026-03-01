@@ -48,6 +48,7 @@ const ProductCreate = () => {
 
   const [errors, setErrors] = useState({});
   const [customColorValue, setCustomColorValue] = useState("#2563eb");
+  const [brandOptions, setBrandOptions] = useState([]);
 
   const [features, setFeatures] = useState([""]);
   const [specifications, setSpecifications] = useState([
@@ -117,6 +118,18 @@ const ProductCreate = () => {
     }
   };
 
+  const fetchBrandOptions = async () => {
+    try {
+      const response = await axios.get(`${baseUrl}/brands/public`);
+      const rows = Array.isArray(response.data?.brands)
+        ? response.data.brands
+        : [];
+      setBrandOptions(rows);
+    } catch (_error) {
+      setBrandOptions([]);
+    }
+  };
+
   const filterCategoriesByType = (type, categoriesList = categories) => {
     if (!type) {
       setFilteredCategories(
@@ -152,6 +165,7 @@ const ProductCreate = () => {
     }
 
     fetchCategories();
+    fetchBrandOptions();
   }, []);
 
   // Handle product type change
@@ -680,8 +694,16 @@ const ProductCreate = () => {
                       value={form.brand}
                       onChange={handleChange}
                       placeholder="Enter brand name"
+                      list="brand-options"
                       className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
                     />
+                    <datalist id="brand-options">
+                      {brandOptions.map((brand) => (
+                        <option key={brand._id || brand.slug || brand.name} value={brand.name}>
+                          {brand.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
 
                   {/* Physical Details */}

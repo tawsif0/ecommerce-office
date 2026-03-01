@@ -241,6 +241,8 @@ const AddToCart = () => {
       const discountValue = Number(response.data?.discount || 0);
       const couponData = {
         code: response.data?.code || normalizedCode,
+        offerType: String(response.data?.offerType || "discount").toLowerCase(),
+        freeShipping: Boolean(response.data?.freeShipping),
         discount: discountValue,
         finalAmount: Number(response.data?.finalAmount || subtotal - discountValue),
       };
@@ -478,6 +480,7 @@ const AddToCart = () => {
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-green-600 font-medium">
                         Applied: {appliedCoupon.code}
+                        {appliedCoupon?.freeShipping ? " (Free delivery)" : ""}
                       </span>
                       <button
                         onClick={() => clearAppliedCoupon(true)}

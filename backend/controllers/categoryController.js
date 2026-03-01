@@ -1,4 +1,10 @@
 const Category = require("../models/Category");
+const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
+
+const invalidatePublicCategoryCache = () => {
+  clearResponseCacheByPrefix("/api/categories/public");
+  clearResponseCacheByPrefix("/api/products/public");
+};
 
 const normalizeCommissionType = (value) => {
   const normalized = String(value || "inherit").trim().toLowerCase();
@@ -40,6 +46,7 @@ const createCategory = async (req, res) => {
       isActive: true,
       updatedAt: Date.now(),
     });
+    invalidatePublicCategoryCache();
 
     res.status(201).json({
       success: true,
@@ -63,7 +70,8 @@ const getPublicCategories = async (req, res) => {
   try {
     const categories = await Category.find({ isActive: true })
       .select("name type _id")
-      .sort({ name: 1 });
+      .sort({ name: 1 })
+      .lean();
 
     res.json({
       success: true,
@@ -178,6 +186,7 @@ const updateCategory = async (req, res) => {
       },
       { new: true, runValidators: true }
     );
+    invalidatePublicCategoryCache();
 
     res.json({
       success: true,
@@ -209,6 +218,7 @@ const deleteCategory = async (req, res) => {
     }
 
     await category.deleteOne();
+    invalidatePublicCategoryCache();
 
     res.json({
       success: true,

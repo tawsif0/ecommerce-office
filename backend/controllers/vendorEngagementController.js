@@ -3,6 +3,10 @@ const VendorReview = require("../models/VendorReview");
 const VendorContactMessage = require("../models/VendorContactMessage");
 const Order = require("../models/Order");
 const { isAdmin } = require("../utils/vendorUtils");
+const {
+  sendVendorContactEmail,
+  sendVendorContactAcknowledgementEmail,
+} = require("../utils/emailTemplates");
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -39,7 +43,9 @@ const getVendorBySlug = async (slug) =>
   Vendor.findOne({
     slug: String(slug || "").trim().toLowerCase(),
     status: "approved",
-  }).select("_id user storeName slug contactFormEnabled storePrivacy ratingAverage ratingCount");
+  }).select(
+    "_id user storeName slug email contactFormEnabled storePrivacy ratingAverage ratingCount",
+  );
 
 const getRequesterVendor = async (req) =>
   Vendor.findOne({ user: req.user.id || req.user._id })
@@ -277,6 +283,21 @@ exports.createVendorContactMessage = async (req, res) => {
       user: null,
       status: "new",
     });
+
+    const vendorEmail = String(vendor.email || "").trim().toLowerCase();
+    if (vendorEmail) {
+      sendVendorContactEmail({
+        vendorName: vendor.storeName || "Vendor Store",
+        vendorEmail,
+        contact,
+      }).catch(() => null);
+    }
+
+    sendVendorContactAcknowledgementEmail({
+      recipientEmail: email,
+      vendorName: vendor.storeName || "Vendor Store",
+      subject: subject || "New inquiry",
+    }).catch(() => null);
 
     res.status(201).json({
       success: true,

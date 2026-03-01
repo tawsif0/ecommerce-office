@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth");
+const { ensureMultiVendorMode } = require("../middlewares/marketplaceMode");
 const {
   getMyVerification,
   submitMyVerification,
@@ -9,10 +10,10 @@ const {
 
 const router = express.Router();
 
-router.get("/me", auth, getMyVerification);
-router.post("/me", auth, submitMyVerification);
+router.get("/me", auth, ensureMultiVendorMode, getMyVerification);
+router.post("/me", auth, ensureMultiVendorMode, submitMyVerification);
 
-router.get("/admin", auth, getAdminVerifications);
-router.patch("/admin/:id/status", auth, reviewVerification);
+router.get("/admin", auth, ensureMultiVendorMode, getAdminVerifications);
+router.patch("/admin/:id/status", auth, ensureMultiVendorMode, reviewVerification);
 
 module.exports = router;

@@ -22,16 +22,17 @@ const {
 } = require("../controllers/productEngagementController.js");
 const auth = require("../middlewares/auth.js");
 const { upload, handleMulterError } = require("../middlewares/upload.js");
+const responseCache = require("../middlewares/responseCache");
 
 const router = express.Router();
 
 // Public routes - SPECIFIC ROUTES FIRST
-router.get("/public/search", searchProducts);
-router.get("/public/suggestions", getSearchSuggestions);
+router.get("/public/search", responseCache(15000), searchProducts);
+router.get("/public/suggestions", responseCache(15000), getSearchSuggestions);
 router.get("/public/:id/reviews", getProductReviews);
-router.get("/public", getActiveProducts);
-router.get("/public/type/:productType", getProductsByType);
-router.get("/public/:id", getProduct); // Parameterized routes LAST
+router.get("/public", responseCache(30000), getActiveProducts);
+router.get("/public/type/:productType", responseCache(30000), getProductsByType);
+router.get("/public/:id", responseCache(30000), getProduct); // Parameterized routes LAST
 
 // Protected routes
 router.get("/:id/reviews/me", auth, getMyProductReview);

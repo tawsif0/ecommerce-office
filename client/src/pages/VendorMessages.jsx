@@ -12,6 +12,7 @@ import {
 import { useAuth } from "../hooks/useAuth";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+const PRESET_VENDOR_KEY = "vendorMessagesPresetVendorId";
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
@@ -102,7 +103,13 @@ const VendorMessages = () => {
     try {
       const response = await axios.get(`${baseUrl}/vendors`);
       const rows = response.data?.vendors || response.data?.data || response.data || [];
-      setVendors(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      setVendors(list);
+
+      const presetVendorId = String(localStorage.getItem(PRESET_VENDOR_KEY) || "").trim();
+      if (presetVendorId && list.some((entry) => String(entry?._id || "") === presetVendorId)) {
+        setNewConversation((prev) => ({ ...prev, vendorId: presetVendorId }));
+      }
     } catch (_error) {
       setVendors([]);
     }
@@ -185,6 +192,7 @@ const VendorMessages = () => {
         headers: getAuthHeaders(),
       });
       const conversationId = response.data?.conversation?._id || "";
+      localStorage.removeItem(PRESET_VENDOR_KEY);
       setNewConversation({ vendorId: "", subject: "", message: "" });
       toast.success("Message sent to vendor");
       await fetchConversations(conversationId);

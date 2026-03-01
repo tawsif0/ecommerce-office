@@ -1,0 +1,193 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ E-COMMERCE MANAGEMENT SYSTEM - FULL SRS ║
+║ (Single & Multi-Vendor Ready with Super Admin Control) ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+╔════════════════════════════╗
+║ 1. Project Overview ║
+╚════════════════════════════╝
+Full-featured ECMS to control all aspects of online business from one central dashboard.
+Optimized for Cash on Delivery (COD) and online payments.
+Includes modules for orders, products, inventory, customers, suppliers, finance, campaigns, landing pages, reports, abandoned orders, and customer risk analysis.
+Single Vendor Mode:
+Managed by a single admin.
+Full access to products, orders, campaigns, customers, and accounts.
+Vendor-specific features hidden.
+Multi-Vendor Mode:
+Supports multiple vendors selling through a unified platform.
+Each vendor has their own dashboard for products, orders, and reports.
+Admin controls vendor approval, commissions, and platform-wide settings.
+Goals:
+Centralized business control
+Smart order management with real-time stock tracking
+Customer behavior monitoring and fake order prevention
+Abandoned order recovery
+Accurate profit/loss calculation
+Scalable and secure architecture
+╔════════════════════════════╗
+║ 2. Sidebar Structure ║
+╚════════════════════════════╝
+Single Vendor:
+Dashboard, Orders, Products, Purchase, Supplier, Category, Slider, Brand, Accounts, Website Setup, Settings & Configuration, Campaign/Offer, Admin, Customer, Report, Landing Page
+Multi-Vendor:
+Adds Vendor Management (List, Approval/Reject, Commission) and Vendor Payouts
+Vendor Panel:
+Dashboard, My Orders, My Products, Sales Report, Profile & Settings
+╔════════════════════════════╗
+║ 3. Dashboard Module ║
+╚════════════════════════════╝
+Real-time updates: Today/Monthly Sales, Total Orders, Pending, Processing, Delivered, Cancelled, Returned
+Financials: Revenue, Expense, Net Profit
+Inventory: Stock Summary, Low Stock Alerts
+Customer Insights: Recent Orders, Abandoned Orders, High-Risk Customers
+Multi-Vendor: Admin sees aggregated stats; vendors see only own stats
+╔════════════════════════════╗
+║ 4. Order Module ║
+╚════════════════════════════╝
+Add Order Workflow:
+Customer Information: Name, Phone, Alternative Phone, Address, City, Sub City
+System checks existing orders, shows success rate and risk badge
+Product Selection: Search, select variant, quantity, auto subtotal
+Pricing: Product price, discounts, delivery charge by city, total calculation
+Order Details: Source, payment method, courier, internal notes
+Save Order: Reduce stock, generate invoice, status Pending
+Order Status System:
+Statuses: Pending → Confirmed → Processing → Shipped → Delivered → Cancelled → Returned
+Timeline logging for each admin action
+Courier API Integration:
+Automatically generate consignment IDs, store tracking, print labels
+Multi-Vendor Specifics:
+Orders can include multiple vendors' products
+Split payment calculation: vendor revenue + platform commission
+Stock updates per vendor
+Vendors see only their orders
+╔════════════════════════════╗
+║ 5. Abandoned Order System ║
+╚════════════════════════════╝
+Triggered when customer leaves before placing order
+Data captured: Name, Phone, Address, Products, Quantity, Total, Date, Source
+Admin actions: Call, convert to order, follow-up, delete, add notes
+Dashboard displays abandoned orders with filters
+Multi-Vendor: vendors see only their own abandoned orders
+╔════════════════════════════╗
+║ 6. Customer Risk Analysis ║
+╚════════════════════════════╝
+Tracks: Total Orders, Delivered, Returned, Cancelled, Exchange, Revenue, Last Order Date
+Delivery Success Rate: (Delivered Orders ÷ Total Orders) × 100
+Risk Classification: Trusted (80%+), Medium (60–79%), High (40–59%), Blacklisted (<40%)
+System shows risk badges during Add Order, Order List, Customer Profile
+Optionally block blacklisted customers to prevent fake orders
+╔════════════════════════════╗
+║ 7. Product Module ║
+╚════════════════════════════╝
+Add Product: Name, SKU, Brand, 3-Level Category, Size, Color, Custom Attributes
+Pricing: Purchase Price, Regular Price, Sale Price
+Inventory: Stock Quantity, Low Stock Alert, Barcode
+Media: Thumbnail & Gallery Images
+Description: Short & Full Description
+SEO: Meta Title & Meta Description
+Stock Logic: Decrease on order, increase on purchase
+Multi-Vendor: Vendor products need admin approval before listing
+╔════════════════════════════╗
+║ 8. Purchase Module ║
+╚════════════════════════════╝
+Add Purchase: Supplier, Invoice Number, Date, Product List, Quantity, Purchase Price
+Updates stock, supplier dues, creates expense entry
+Multi-Vendor: can track purchases per vendor if required
+╔════════════════════════════╗
+║ 9. Supplier Module ║
+╚════════════════════════════╝
+Fields: Name, Phone, Email, Address, Opening Due
+Features: Payment tracking, supplier reports
+╔════════════════════════════╗
+║ 10. Category Module ║
+╚════════════════════════════╝
+3-Level hierarchy: Main → Sub → Sub-Sub
+Supports filtering, hierarchy navigation
+╔════════════════════════════╗
+║ 11. Accounts Module ║
+╚════════════════════════════╝
+Sections: Income, Expense, Due, Balance, Fund Transfer, Employee Salary, Bill Statement
+System auto-calculates profit/loss and current balances
+Multi-Vendor: platform commissions, vendor payouts calculated
+╔════════════════════════════╗
+║ 12. Website Setup ║
+╚════════════════════════════╝
+Admin controls: Header, Footer, Theme Color, Font Family
+Static Pages: Shipment Policy, Delivery Policy, Terms & Conditions, Return Policy, Privacy Policy
+╔════════════════════════════╗
+║ 13. Settings & Config ║
+╚════════════════════════════╝
+Marketing: Facebook Pixel, Google Analytics, Custom Tracking Codes
+Courier API configuration
+Invoice setup: Logo, Address, Footer Text
+Delivery Charges: City & Sub-City
+Social Login: Google & Facebook
+Location management: City & Sub-city
+Multi-Vendor: Vendor registration & commission setup
+╔════════════════════════════╗
+║ 14. Campaign / Offer Module║
+╚════════════════════════════╝
+Offer banners, combo products, free delivery products, coupons, discount rules
+Multi-Vendor: vendor-specific offers and admin global offers
+╔════════════════════════════╗
+║ 15. Admin Module ║
+╚════════════════════════════╝
+Add/Manage Admins
+Role & Permission Management
+╔════════════════════════════╗
+║ 16. Customer Module ║
+╚════════════════════════════╝
+Profile shows personal info, order history, success rate, risk badge, total revenue, internal notes, blacklist option
+╔════════════════════════════╗
+║ 17. Report Module ║
+╚════════════════════════════╝
+Reports: Profit/Loss, Sales, Orders, Purchases, Suppliers, Stock, Abandoned Orders, Risk Customers
+Filterable by date and exportable (PDF/Excel)
+Multi-Vendor: vendor-specific & platform-wide reports
+╔════════════════════════════╗
+║ 18. Landing Page Module ║
+╚════════════════════════════╝
+Create landing pages, select products, add banners, headline, pixel ID
+Generate unique URLs, track orders per page
+Multi-Vendor: vendor products tracked separately
+╔════════════════════════════╗
+║ 19. Advanced Marketing ║
+╚════════════════════════════╝
+Pixel Setup: Facebook Pixel, GA, GTM, Custom Scripts
+Data Layer: Enable/Disable, push structured ecommerce events (view_item, add_to_cart, initiate_checkout, purchase, page_view, add_payment_info) with product details
+╔════════════════════════════╗
+║ 20. Voice Assistant ║
+╚════════════════════════════╝
+Browser-based voice recognition (Web Speech API)
+Activated via microphone icon
+Commands: show sales, open orders, add product, show high-risk customers
+Converts speech → text → triggers actions
+Visual feedback, optional voice feedback
+Multi-Vendor: admin sees all vendors, vendors see only own data
+Security: logged-in users only
+Future: voice order creation, report generation, AI assistant integration
+╔════════════════════════════╗
+║ 21. Security Requirements ║
+╚════════════════════════════╝
+Role-based access control
+Data encryption in transit & at rest
+Secure API authentication for courier & payment
+Voice commands restricted to authorized users only
+╔════════════════════════════╗
+║ 22. Scalability & Architecture ║
+╚════════════════════════════╝
+Modular, cloud-ready architecture
+High concurrency support
+API integrations: Courier, Payment, Analytics
+Multi-Vendor: vendor isolation, commission handling, admin oversight
+╔════════════════════════════╗
+║ 23. Super Admin Mode Control ║
+   
+╚════════════════════════════╝
+Super Admin assigns client access mode:
+Single Vendor: client sees only single-vendor modules
+Multi-Vendor: client sees full multi-vendor marketplace modules
+Mode switching:
+Multi → Single: all vendor modules hidden/deactivated
+Single → Multi: vendor modules activated
+Super Admin dashboard allows viewing clients, assigning mode, tracking activity, and monitoring sales

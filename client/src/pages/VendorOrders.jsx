@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
-import { FiClock, FiPackage, FiTruck } from "react-icons/fi";
+import { FiCheckCircle, FiClock, FiPackage, FiTruck, FiXCircle } from "react-icons/fi";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -60,6 +60,19 @@ const VendorOrders = () => {
     );
   }
 
+  const getStatusBadgeClass = (status) => {
+    const map = {
+      pending: "bg-yellow-100 text-yellow-700",
+      confirmed: "bg-cyan-100 text-cyan-700",
+      processing: "bg-blue-100 text-blue-700",
+      shipped: "bg-purple-100 text-purple-700",
+      delivered: "bg-green-100 text-green-700",
+      cancelled: "bg-red-100 text-red-700",
+      returned: "bg-orange-100 text-orange-700",
+    };
+    return map[String(status || "").toLowerCase()] || "bg-gray-100 text-gray-700";
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-linear-to-r from-slate-800 to-black rounded-xl p-6 md:p-8 text-white">
@@ -86,10 +99,18 @@ const VendorOrders = () => {
                 <div className="text-sm text-gray-600">
                   {new Date(order.createdAt).toLocaleString()}
                 </div>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-sm">
+                <div
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${getStatusBadgeClass(
+                    order.orderStatus,
+                  )}`}
+                >
                   {order.orderStatus === "pending" && <FiClock className="w-4 h-4" />}
+                  {order.orderStatus === "confirmed" && <FiCheckCircle className="w-4 h-4" />}
                   {order.orderStatus === "processing" && <FiPackage className="w-4 h-4" />}
                   {order.orderStatus === "shipped" && <FiTruck className="w-4 h-4" />}
+                  {order.orderStatus === "delivered" && <FiCheckCircle className="w-4 h-4" />}
+                  {order.orderStatus === "cancelled" && <FiXCircle className="w-4 h-4" />}
+                  {order.orderStatus === "returned" && <FiXCircle className="w-4 h-4" />}
                   <span className="capitalize">{order.orderStatus}</span>
                 </div>
               </div>

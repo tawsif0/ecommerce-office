@@ -1,6 +1,49 @@
 const mongoose = require("mongoose");
 const ProductImage = require("../models/ProductImage");
 
+const IMAGE_LOOKUP_CACHE_TTL_MS = Math.max(
+  10000,
+  Number(process.env.IMAGE_LOOKUP_CACHE_TTL_MS || 300000),
+);
+const IMAGE_LOOKUP_CACHE_MAX_ENTRIES = Math.max(
+  100,
+  Number(process.env.IMAGE_LOOKUP_CACHE_MAX_ENTRIES || 5000),
+);
+const imageLookupCache = new Map();
+
+const getCachedImageData = (id) => {
+  const cacheKey = String(id || "");
+  if (!cacheKey) return undefined;
+
+  const entry = imageLookupCache.get(cacheKey);
+  if (!entry) return undefined;
+
+  if (entry.expiresAt <= Date.now()) {
+    imageLookupCache.delete(cacheKey);
+    return undefined;
+  }
+
+  imageLookupCache.delete(cacheKey);
+  imageLookupCache.set(cacheKey, entry);
+  return entry.value;
+};
+
+const setCachedImageData = (id, value) => {
+  const cacheKey = String(id || "");
+  if (!cacheKey) return;
+
+  imageLookupCache.set(cacheKey, {
+    value: value || null,
+    expiresAt: Date.now() + IMAGE_LOOKUP_CACHE_TTL_MS,
+  });
+
+  while (imageLookupCache.size > IMAGE_LOOKUP_CACHE_MAX_ENTRIES) {
+    const oldestKey = imageLookupCache.keys().next().value;
+    if (!oldestKey) break;
+    imageLookupCache.delete(oldestKey);
+  }
+};
+
 const isObjectIdLike = (value) => {
   if (!value) return false;
   if (value instanceof mongoose.Types.ObjectId) return true;
@@ -37,12 +80,39 @@ const attachImageDataToProducts = async (products) => {
 
   let imageMap = new Map();
   if (imageIds.size > 0) {
-    const imageDocs = await ProductImage.find({
-      _id: { $in: Array.from(imageIds) },
-    })
-      .select("data")
-      .lean();
-    imageMap = new Map(imageDocs.map((doc) => [String(doc._id), doc.data]));
+    const missingIds = [];
+    Array.from(imageIds).forEach((id) => {
+      const cached = getCachedImageData(id);
+      if (cached !== undefined) {
+        imageMap.set(id, cached);
+      } else {
+        missingIds.push(id);
+      }
+    });
+
+    if (missingIds.length > 0) {
+      const imageDocs = await ProductImage.find({
+        _id: { $in: missingIds },
+      })
+        .select("data")
+        .lean();
+
+      const foundIds = new Set();
+      imageDocs.forEach((doc) => {
+        const id = String(doc._id);
+        const data = doc.data || null;
+        foundIds.add(id);
+        imageMap.set(id, data);
+        setCachedImageData(id, data);
+      });
+
+      missingIds.forEach((id) => {
+        if (!foundIds.has(id)) {
+          imageMap.set(id, null);
+          setCachedImageData(id, null);
+        }
+      });
+    }
   }
 
   list.forEach((product) => {

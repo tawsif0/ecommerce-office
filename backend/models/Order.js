@@ -349,5 +349,11 @@ orderSchema.pre("validate", function preValidate(next) {
   next();
 });
 
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1, createdAt: -1 });
+orderSchema.index({ "items.vendor": 1, createdAt: -1 });
+orderSchema.index({ source: 1, createdAt: -1 });
+
 const Order = mongoose.model("Order", orderSchema);
 module.exports = Order;

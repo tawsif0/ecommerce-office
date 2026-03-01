@@ -4,12 +4,15 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import {
   FiClock,
+  FiCopy,
   FiMail,
   FiMapPin,
   FiPackage,
   FiPhone,
+  FiShare2,
   FiStar,
 } from "react-icons/fi";
+import { FaFacebookF, FaTwitter, FaWhatsapp, FaPaperPlane } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth";
 import { getProductPricingDisplay } from "../utils/productPricing";
 
@@ -85,6 +88,11 @@ const VendorStore = () => {
     subject: "",
     message: "",
   });
+
+  const storeUrl = typeof window !== "undefined" ? window.location.href : "";
+  const storeShareText = vendor?.description
+    ? String(vendor.description).slice(0, 140)
+    : `Visit ${vendor?.storeName || "this store"} on our marketplace`;
 
   const hasPolicies = useMemo(() => {
     const policies = vendor?.storePolicies || {};
@@ -233,6 +241,64 @@ const VendorStore = () => {
     }
   };
 
+  const shareStoreTo = (platform) => {
+    const encodedUrl = encodeURIComponent(storeUrl);
+    const encodedText = encodeURIComponent(
+      `${vendor?.storeName || "Store"} - ${storeShareText}`,
+    );
+    const links = {
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      twitter: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`,
+      whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
+      telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`,
+    };
+    const targetUrl = links[platform];
+    if (!targetUrl) return;
+    window.open(targetUrl, "_blank", "noopener,noreferrer,width=640,height=640");
+  };
+
+  const copyStoreLink = async () => {
+    try {
+      await navigator.clipboard.writeText(storeUrl);
+      toast.success("Store link copied");
+    } catch (_error) {
+      toast.error("Failed to copy store link");
+    }
+  };
+
+  const shareStore = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: vendor?.storeName || "Vendor Store",
+          text: storeShareText,
+          url: storeUrl,
+        });
+        return;
+      }
+      await copyStoreLink();
+    } catch (_error) {
+      toast.error("Failed to share store link");
+    }
+  };
+
+  const goToVendorMessages = () => {
+    if (!isLoggedIn) {
+      toast.error("Please login to message vendor");
+      return;
+    }
+
+    const vendorId = String(vendor?._id || "").trim();
+    if (!vendorId) {
+      toast.error("Vendor is unavailable for messaging");
+      return;
+    }
+
+    localStorage.setItem("vendorMessagesPresetVendorId", vendorId);
+    localStorage.setItem("dashboardActiveTab", "vendor-messages");
+    window.location.href = "/dashboard";
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -287,6 +353,57 @@ const VendorStore = () => {
                 <span className="text-sm text-gray-600">
                   {Number(vendor.ratingAverage || 0).toFixed(1)} ({vendor.ratingCount || 0} reviews)
                 </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={goToVendorMessages}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FaPaperPlane className="w-3.5 h-3.5" />
+                  Message Vendor
+                </button>
+                <button
+                  type="button"
+                  onClick={shareStore}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FiShare2 className="w-3.5 h-3.5" />
+                  Share
+                </button>
+                <button
+                  type="button"
+                  onClick={copyStoreLink}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <FiCopy className="w-3.5 h-3.5" />
+                  Copy Link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shareStoreTo("facebook")}
+                  className="inline-flex items-center justify-center h-7 w-7 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  aria-label="Share on Facebook"
+                >
+                  <FaFacebookF className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shareStoreTo("twitter")}
+                  className="inline-flex items-center justify-center h-7 w-7 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  aria-label="Share on X/Twitter"
+                >
+                  <FaTwitter className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shareStoreTo("whatsapp")}
+                  className="inline-flex items-center justify-center h-7 w-7 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  aria-label="Share on WhatsApp"
+                >
+                  <FaWhatsapp className="w-3.5 h-3.5" />
+                </button>
               </div>
 
               <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-600">

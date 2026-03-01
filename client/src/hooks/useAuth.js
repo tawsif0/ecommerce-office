@@ -1,19 +1,18 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { wasLoadingToastShownRecently } from "../utils/globalToast";
+import { clearAuth, setAuth, setAuthLoading, setUser } from "../store/authSlice";
 
-const AuthContext = createContext();
 const baseUrl = import.meta.env.VITE_API_URL;
 const MUTATION_METHODS = new Set(["post", "put", "patch", "delete"]);
 const BUTTON_LOADING_DELAY_MS = 250;
 const TOAST_LOADING_DELAY_MS = 700;
+
+let authBootstrapped = false;
+let authListenersBound = false;
+let interceptorsBound = false;
 
 const createRequestId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -77,200 +76,201 @@ const startButtonLoadingState = (button) => {
   };
 };
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+const hydrateAuthFromStorage = (dispatch) => {
+  const storedUser = localStorage.getItem("user");
+  const storedToken = localStorage.getItem("token");
 
-  const logout = useCallback(() => {
-    ["user", "token", "dashboardActiveTab", "guestCart"].forEach((item) =>
-      localStorage.removeItem(item),
-    );
+  if (storedUser && storedToken) {
+    try {
+      dispatch(setAuth({ user: JSON.parse(storedUser), token: storedToken }));
+      return;
+    } catch (_error) {
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
+    }
+  }
 
-    setUser(null);
-    setToken(null);
+  dispatch(clearAuth());
+};
 
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("userLoggedOut"));
-      window.dispatchEvent(new CustomEvent("profileUpdated"));
-    }, 0);
+const emitAuthEvents = (eventName) => {
+  window.dispatchEvent(new CustomEvent(eventName));
+  window.dispatchEvent(new CustomEvent("profileUpdated"));
+};
 
+const performLogout = (dispatch, options = {}) => {
+  const showToast = options.showToast !== false;
+
+  ["user", "token", "dashboardActiveTab", "guestCart"].forEach((item) =>
+    localStorage.removeItem(item),
+  );
+
+  dispatch(clearAuth());
+  setTimeout(() => emitAuthEvents("userLoggedOut"), 0);
+
+  if (showToast) {
     toast.success("Successfully logged out!", {
       duration: 2000,
       position: "top-center",
       id: "logout-toast",
     });
-  }, []);
+  }
+};
 
-  useEffect(() => {
-    const toastTimerMap = new Map();
-    const buttonTimerMap = new Map();
-    const activeToastMap = new Map();
-    const buttonCleanupMap = new Map();
+const bindAuthEventListeners = (dispatch) => {
+  if (authListenersBound) return;
+  authListenersBound = true;
 
-    const clearRequestFeedback = (config) => {
-      const requestId = config?.meta?.__requestId;
-      if (!requestId) return;
+  window.addEventListener("userLoggedOut", () => {
+    dispatch(clearAuth());
+  });
 
-      const toastTimer = toastTimerMap.get(requestId);
-      if (toastTimer) {
-        clearTimeout(toastTimer);
-        toastTimerMap.delete(requestId);
-      }
+  window.addEventListener("userLoggedIn", () => {
+    hydrateAuthFromStorage(dispatch);
+  });
+};
 
-      const buttonTimer = buttonTimerMap.get(requestId);
-      if (buttonTimer) {
-        clearTimeout(buttonTimer);
-        buttonTimerMap.delete(requestId);
-      }
+const bindAxiosInterceptors = (dispatch) => {
+  if (interceptorsBound) return;
+  interceptorsBound = true;
 
-      const toastId = activeToastMap.get(requestId);
-      if (toastId) {
-        toast.dismiss(toastId);
-        activeToastMap.delete(requestId);
-      }
+  const toastTimerMap = new Map();
+  const buttonTimerMap = new Map();
+  const activeToastMap = new Map();
+  const buttonCleanupMap = new Map();
 
-      const cleanupButtonState = buttonCleanupMap.get(requestId);
-      if (cleanupButtonState) {
-        cleanupButtonState();
-        buttonCleanupMap.delete(requestId);
-      }
-    };
+  const clearRequestFeedback = (config) => {
+    const requestId = config?.meta?.__requestId;
+    if (!requestId) return;
 
-    const requestInterceptor = axios.interceptors.request.use(
-      (config) => {
-        const storedToken = localStorage.getItem("token");
-        if (storedToken) {
-          config.headers.Authorization = `Bearer ${storedToken}`;
-        }
-
-        const method = String(config?.method || "get").toLowerCase();
-        const isMutation = MUTATION_METHODS.has(method);
-        const requestId = createRequestId();
-        config.meta = { ...(config.meta || {}), __requestId: requestId };
-
-        if (!isMutation) return config;
-
-        if (!config.meta.skipGlobalButtonLoading) {
-          const activeButton = getActiveActionButton() || getFormSubmitButton();
-          if (activeButton) {
-            const buttonTimer = setTimeout(() => {
-              const cleanup = startButtonLoadingState(activeButton);
-              if (cleanup) {
-                buttonCleanupMap.set(requestId, cleanup);
-              }
-            }, BUTTON_LOADING_DELAY_MS);
-            buttonTimerMap.set(requestId, buttonTimer);
-          }
-        }
-
-        if (!config.meta.skipGlobalLoadingToast) {
-          const toastTimer = setTimeout(() => {
-            if (wasLoadingToastShownRecently()) return;
-            const loadingToastId = toast.loading(`${getActionLabel(method)}...`, {
-              id: `request-loading-${requestId}`,
-            });
-            activeToastMap.set(requestId, loadingToastId);
-          }, TOAST_LOADING_DELAY_MS);
-          toastTimerMap.set(requestId, toastTimer);
-        }
-
-        return config;
-      },
-      (error) => Promise.reject(error),
-    );
-
-    const responseInterceptor = axios.interceptors.response.use(
-      (response) => {
-        clearRequestFeedback(response.config);
-        return response;
-      },
-      (error) => {
-        clearRequestFeedback(error.config);
-
-        if (
-          error.response?.status === 401 &&
-          !error.config?.url?.includes("/auth/login") &&
-          !error.config?.url?.includes("/auth/register")
-        ) {
-          logout();
-        }
-        return Promise.reject(error);
-      },
-    );
-
-    return () => {
-      axios.interceptors.request.eject(requestInterceptor);
-      axios.interceptors.response.eject(responseInterceptor);
-      toastTimerMap.forEach((timerId) => clearTimeout(timerId));
-      buttonTimerMap.forEach((timerId) => clearTimeout(timerId));
-      activeToastMap.forEach((toastId) => toast.dismiss(toastId));
-      buttonCleanupMap.forEach((cleanup) => cleanup());
-    };
-  }, [logout]);
-
-  useEffect(() => {
-    const handleExternalLogout = () => {
-      setUser(null);
-      setToken(null);
-    };
-
-    const handleExternalLogin = () => {
-      const storedUser = localStorage.getItem("user");
-      const storedToken = localStorage.getItem("token");
-      if (!storedUser || !storedToken) return;
-
-      try {
-        setUser(JSON.parse(storedUser));
-        setToken(storedToken);
-      } catch (error) {
-        console.error("Failed to parse stored user:", error);
-      }
-    };
-
-    window.addEventListener("userLoggedOut", handleExternalLogout);
-    window.addEventListener("userLoggedIn", handleExternalLogin);
-
-    return () => {
-      window.removeEventListener("userLoggedOut", handleExternalLogout);
-      window.removeEventListener("userLoggedIn", handleExternalLogin);
-    };
-  }, []);
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    const storedToken = localStorage.getItem("token");
-
-    if (storedUser && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-        setToken(storedToken);
-      } catch (error) {
-        console.error("Error parsing auth data:", error);
-        localStorage.removeItem("user");
-        localStorage.removeItem("token");
-      }
+    const toastTimer = toastTimerMap.get(requestId);
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+      toastTimerMap.delete(requestId);
     }
 
-    setIsLoading(false);
-  }, []);
+    const buttonTimer = buttonTimerMap.get(requestId);
+    if (buttonTimer) {
+      clearTimeout(buttonTimer);
+      buttonTimerMap.delete(requestId);
+    }
 
-  const login = useCallback(async (userData, newToken) => {
-    localStorage.setItem("user", JSON.stringify(userData));
-    localStorage.setItem("token", newToken);
-    setUser(userData);
-    setToken(newToken);
+    const toastId = activeToastMap.get(requestId);
+    if (toastId) {
+      toast.dismiss(toastId);
+      activeToastMap.delete(requestId);
+    }
 
-    window.dispatchEvent(new CustomEvent("userLoggedIn"));
-    window.dispatchEvent(new CustomEvent("profileUpdated"));
-    toast.success("Successfully logged in!");
-  }, []);
+    const cleanupButtonState = buttonCleanupMap.get(requestId);
+    if (cleanupButtonState) {
+      cleanupButtonState();
+      buttonCleanupMap.delete(requestId);
+    }
+  };
 
-  const updateUser = useCallback((updatedUserData) => {
-    localStorage.setItem("user", JSON.stringify(updatedUserData));
-    setUser(updatedUserData);
-    window.dispatchEvent(new CustomEvent("profileUpdated"));
-  }, []);
+  axios.interceptors.request.use(
+    (config) => {
+      const storedToken = localStorage.getItem("token");
+      if (storedToken) {
+        config.headers.Authorization = `Bearer ${storedToken}`;
+      }
+
+      const method = String(config?.method || "get").toLowerCase();
+      const isMutation = MUTATION_METHODS.has(method);
+      const requestId = createRequestId();
+      config.meta = { ...(config.meta || {}), __requestId: requestId };
+
+      if (!isMutation) return config;
+
+      if (!config.meta.skipGlobalButtonLoading) {
+        const activeButton = getActiveActionButton() || getFormSubmitButton();
+        if (activeButton) {
+          const buttonTimer = setTimeout(() => {
+            const cleanup = startButtonLoadingState(activeButton);
+            if (cleanup) {
+              buttonCleanupMap.set(requestId, cleanup);
+            }
+          }, BUTTON_LOADING_DELAY_MS);
+          buttonTimerMap.set(requestId, buttonTimer);
+        }
+      }
+
+      if (!config.meta.skipGlobalLoadingToast) {
+        const toastTimer = setTimeout(() => {
+          if (wasLoadingToastShownRecently()) return;
+          const loadingToastId = toast.loading(`${getActionLabel(method)}...`, {
+            id: `request-loading-${requestId}`,
+          });
+          activeToastMap.set(requestId, loadingToastId);
+        }, TOAST_LOADING_DELAY_MS);
+        toastTimerMap.set(requestId, toastTimer);
+      }
+
+      return config;
+    },
+    (error) => Promise.reject(error),
+  );
+
+  axios.interceptors.response.use(
+    (response) => {
+      clearRequestFeedback(response.config);
+      return response;
+    },
+    (error) => {
+      clearRequestFeedback(error.config);
+
+      if (
+        error.response?.status === 401 &&
+        !error.config?.url?.includes("/auth/login") &&
+        !error.config?.url?.includes("/auth/register")
+      ) {
+        performLogout(dispatch, { showToast: false });
+      }
+      return Promise.reject(error);
+    },
+  );
+};
+
+export const useAuth = () => {
+  const dispatch = useDispatch();
+  const { user, token, isLoading } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    bindAxiosInterceptors(dispatch);
+    bindAuthEventListeners(dispatch);
+
+    if (!authBootstrapped) {
+      authBootstrapped = true;
+      hydrateAuthFromStorage(dispatch);
+    } else if (isLoading) {
+      dispatch(setAuthLoading(false));
+    }
+  }, [dispatch, isLoading]);
+
+  const login = useCallback(
+    async (userData, newToken) => {
+      localStorage.setItem("user", JSON.stringify(userData));
+      localStorage.setItem("token", newToken);
+      dispatch(setAuth({ user: userData, token: newToken }));
+      emitAuthEvents("userLoggedIn");
+      toast.success("Successfully logged in!");
+      return { success: true };
+    },
+    [dispatch],
+  );
+
+  const logout = useCallback(() => {
+    performLogout(dispatch, { showToast: true });
+  }, [dispatch]);
+
+  const updateUser = useCallback(
+    (updatedUserData) => {
+      localStorage.setItem("user", JSON.stringify(updatedUserData));
+      dispatch(setUser(updatedUserData));
+      window.dispatchEvent(new CustomEvent("profileUpdated"));
+    },
+    [dispatch],
+  );
 
   const refreshProfile = useCallback(async () => {
     try {
@@ -284,14 +284,13 @@ export const AuthProvider = ({ children }) => {
 
       const updatedUser = { ...(user || {}), ...response.data };
       localStorage.setItem("user", JSON.stringify(updatedUser));
-      setUser(updatedUser);
+      dispatch(setUser(updatedUser));
       window.dispatchEvent(new CustomEvent("profileUpdated"));
       return updatedUser;
-    } catch (error) {
-      console.error("Profile refresh failed:", error);
+    } catch (_error) {
       return null;
     }
-  }, [user]);
+  }, [dispatch, user]);
 
   const updateAdminSettings = useCallback(async (settings) => {
     try {
@@ -337,7 +336,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const value = {
+  return {
     user,
     token,
     isLoading,
@@ -357,14 +356,4 @@ export const AuthProvider = ({ children }) => {
     isInactive: user?.status === "inactive",
     getUserStatus: () => (user?.status ? user.status : "unknown"),
   };
-
-  return React.createElement(AuthContext.Provider, { value }, children);
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
 };

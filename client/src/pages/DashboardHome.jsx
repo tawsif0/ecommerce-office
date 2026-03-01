@@ -13,11 +13,18 @@ import {
   TicketIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
+import { fetchPublicSettings } from "../utils/publicSettings";
+import {
+  canAccessDashboardTab,
+  normalizeMarketplaceMode,
+  SINGLE_VENDOR_DISABLED_TABS,
+} from "../utils/dashboardAccess";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
 const DashboardHome = ({ user, onTabChange }) => {
   const [loading, setLoading] = useState(false);
+  const [marketplaceMode, setMarketplaceMode] = useState("multi");
   const [systemStats, setSystemStats] = useState({
     totalUsers: 0,
     activeUsers: 0,
@@ -59,6 +66,7 @@ const DashboardHome = ({ user, onTabChange }) => {
   });
 
   const isAdmin = user?.userType === "admin";
+  const isSingleMode = normalizeMarketplaceMode(marketplaceMode) === "single";
 
   const quickActions =
     user?.userType === "vendor"
@@ -81,6 +89,28 @@ const DashboardHome = ({ user, onTabChange }) => {
       fetchAdminData();
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadMarketplaceMode = async () => {
+      try {
+        const settings = await fetchPublicSettings();
+        if (!mounted) return;
+        setMarketplaceMode(
+          normalizeMarketplaceMode(settings?.marketplaceMode),
+        );
+      } catch (_error) {
+        if (!mounted) return;
+        setMarketplaceMode("multi");
+      }
+    };
+
+    loadMarketplaceMode();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const fetchAdminData = async () => {
     try {
@@ -358,11 +388,26 @@ const DashboardHome = ({ user, onTabChange }) => {
                   { label: "Website Setup", tab: "module-website-setup", icon: ArrowRightIcon },
                   { label: "Super Admin", tab: "module-super-admin", icon: ShieldCheckIcon },
                   { label: "Vendor Reports", tab: "vendor-reports", icon: ArrowRightIcon },
+                  { label: "Suppliers", tab: "module-suppliers", icon: ArrowRightIcon },
+                  { label: "Purchases", tab: "module-purchases", icon: ArrowRightIcon },
+                  { label: "Brands", tab: "module-brands", icon: ArrowRightIcon },
                   { label: "Accounts", tab: "module-accounts", icon: CurrencyDollarIcon },
+                  { label: "Vendor Payouts", tab: "module-vendor-payouts", icon: CurrencyDollarIcon },
                   { label: "Admin Users", tab: "module-admin-users", icon: ShieldCheckIcon },
                   { label: "Support Tickets", tab: "module-support", icon: TicketIcon },
                   { label: "Geolocation", tab: "module-geolocation", icon: ArrowRightIcon },
-                ].map((action) => {
+                ]
+                  .filter((action) =>
+                    isSingleMode ? !SINGLE_VENDOR_DISABLED_TABS.has(action.tab) : true,
+                  )
+                  .filter((action) =>
+                    canAccessDashboardTab({
+                      user,
+                      tab: action.tab,
+                      marketplaceMode,
+                    }),
+                  )
+                  .map((action) => {
                   const Icon = action.icon;
                   return (
                     <button
@@ -427,7 +472,15 @@ const DashboardHome = ({ user, onTabChange }) => {
       <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
         <p className="text-sm font-semibold text-gray-900 mb-3">Quick Access</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {quickActions.map((action) => {
+          {quickActions
+            .filter((action) =>
+              canAccessDashboardTab({
+                user,
+                tab: action.tab,
+                marketplaceMode,
+              }),
+            )
+            .map((action) => {
             const Icon = action.icon;
             return (
               <button

@@ -7,7 +7,7 @@ const faqItems = [
     id: 1,
     question: "What payment methods do you accept?",
     answer:
-      "We accept all major credit cards (Visa, MasterCard, American Express, Discover), PayPal, Apple Pay, and Google Pay. All transactions are encrypted and secure.",
+      "We accept Cash on Delivery (COD), major cards, mobile wallets, and supported online gateways. All transactions are encrypted and secure.",
     category: "Payment",
   },
   {

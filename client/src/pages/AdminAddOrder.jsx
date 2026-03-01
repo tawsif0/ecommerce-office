@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import { fetchPublicSettings } from "../utils/publicSettings";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -63,6 +64,10 @@ const AdminAddOrder = () => {
     sentTo: "",
   });
   const [shippingFee, setShippingFee] = useState(0);
+  const [locationOptions, setLocationOptions] = useState({
+    cities: [],
+    subCities: [],
+  });
 
   const [search, setSearch] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
@@ -109,6 +114,36 @@ const AdminAddOrder = () => {
       }
     };
     loadMethods();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadLocationOptions = async () => {
+      try {
+        const settings = await fetchPublicSettings();
+        if (!mounted) return;
+
+        setLocationOptions({
+          cities: Array.isArray(settings?.locations?.cityOptions)
+            ? settings.locations.cityOptions
+            : [],
+          subCities: Array.isArray(settings?.locations?.subCityOptions)
+            ? settings.locations.subCityOptions
+            : [],
+        });
+      } catch (_error) {
+        if (!mounted) return;
+        setLocationOptions({
+          cities: [],
+          subCities: [],
+        });
+      }
+    };
+
+    loadLocationOptions();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -305,11 +340,21 @@ const AdminAddOrder = () => {
           </div>
           <input value={customer.address} onChange={(e) => setCustomer((p) => ({ ...p, address: e.target.value }))} placeholder="Address*" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" required />
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <input value={customer.city} onChange={(e) => setCustomer((p) => ({ ...p, city: e.target.value }))} placeholder="City*" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
-            <input value={customer.subCity} onChange={(e) => setCustomer((p) => ({ ...p, subCity: e.target.value }))} placeholder="Sub city" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={customer.district} onChange={(e) => setCustomer((p) => ({ ...p, district: e.target.value }))} placeholder="District" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
+            <input value={customer.city} onChange={(e) => setCustomer((p) => ({ ...p, city: e.target.value }))} placeholder="City*" list="admin-order-city-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
+            <input value={customer.subCity} onChange={(e) => setCustomer((p) => ({ ...p, subCity: e.target.value }))} placeholder="Sub city" list="admin-order-subcity-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
+            <input value={customer.district} onChange={(e) => setCustomer((p) => ({ ...p, district: e.target.value }))} placeholder="District" list="admin-order-subcity-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
             <input value={customer.country} onChange={(e) => setCustomer((p) => ({ ...p, country: e.target.value }))} placeholder="Country" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
           </div>
+          <datalist id="admin-order-city-options">
+            {locationOptions.cities.map((city) => (
+              <option key={city} value={city} />
+            ))}
+          </datalist>
+          <datalist id="admin-order-subcity-options">
+            {locationOptions.subCities.map((subCity) => (
+              <option key={subCity} value={subCity} />
+            ))}
+          </datalist>
 
           {insights ? (
             <div className="border border-gray-200 rounded-lg p-3 text-sm text-gray-700">

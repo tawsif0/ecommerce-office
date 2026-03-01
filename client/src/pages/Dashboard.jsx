@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiLogOut } from "react-icons/fi";
@@ -9,76 +9,67 @@ import { toast } from "react-hot-toast";
 // Components
 import Sidebar from "../components/Dashboard/Sidebar";
 import MobileHeader from "../components/Dashboard/MobileHeader";
-import Settings from "../components/Dashboard/Settings";
-import AdminPaymentMethods from "./AdminPaymentMethods";
-import DashboardHome from "./DashboardHome";
-import AdminAddOrder from "./AdminAddOrder";
-import CreateCategory from "./Category/CreateCategory";
-import ModifyCategory from "./Category/ModifyCategory";
-import ProductModify from "./Product/ProductModify";
-import BulkProductUpload from "./Product/BulkProductUpload";
-import CreateBanner from "./Banner/CreateBanner";
-import ModifyBanner from "./Banner/ModifyBanner";
-import AdminOrderList from "./AdminOrderList";
-import UserOrders from "./UserOrders";
-import AdminCoupons from "./AdminCoupons";
-import AdminVendors from "./AdminVendors";
-import VendorDashboardHome from "./VendorDashboardHome";
-import VendorStoreSettings from "./VendorStoreSettings";
-import VendorOrders from "./VendorOrders";
-import AdminProductApprovals from "./AdminProductApprovals";
-import AdminShippingZones from "./AdminShippingZones";
-import VendorShippingZones from "./VendorShippingZones";
-import VendorMessages from "./VendorMessages";
-import AdminVendorReports from "./AdminVendorReports";
-import AdminVendorReviews from "./AdminVendorReviews";
-import AdminProductReports from "./AdminProductReports";
-import AdminCustomerRisk from "./AdminCustomerRisk";
-import MyWishlist from "./MyWishlist";
-import ModuleSubscriptions from "./ModuleSubscriptions";
-import ModuleBookings from "./ModuleBookings";
-import ModuleAuctions from "./ModuleAuctions";
-import ModuleStaff from "./ModuleStaff";
-import ModuleVerifications from "./ModuleVerifications";
-import ModuleAds from "./ModuleAds";
-import ModuleSupportTickets from "./ModuleSupportTickets";
-import ModuleGeolocation from "./ModuleGeolocation";
-import ModuleAbandonedOrders from "./ModuleAbandonedOrders";
-import ModuleSuppliers from "./ModuleSuppliers";
-import ModulePurchases from "./ModulePurchases";
-import ModuleAccounts from "./ModuleAccounts";
-import ModuleLandingPages from "./ModuleLandingPages";
-import ModuleVoiceAssistant from "./ModuleVoiceAssistant";
-import ModuleBusinessReports from "./ModuleBusinessReports";
-import ModuleWebsiteSetup from "./ModuleWebsiteSetup";
-import ModuleCampaignOffers from "./ModuleCampaignOffers";
-import ModuleAdminUsers from "./ModuleAdminUsers";
-import ModuleSuperAdminControl from "./ModuleSuperAdminControl";
 import { fetchPublicSettings } from "../utils/publicSettings";
+import {
+  canAccessDashboardTab,
+  isSuperAdminUser,
+  normalizeMarketplaceMode,
+  SINGLE_VENDOR_DISABLED_TABS,
+} from "../utils/dashboardAccess";
 
-const normalizeMarketplaceMode = (value) =>
-  String(value || "")
-    .trim()
-    .toLowerCase() === "single"
-    ? "single"
-    : "multi";
+const Settings = React.lazy(() => import("../components/Dashboard/Settings"));
+const AdminPaymentMethods = React.lazy(() => import("./AdminPaymentMethods"));
+const DashboardHome = React.lazy(() => import("./DashboardHome"));
+const AdminAddOrder = React.lazy(() => import("./AdminAddOrder"));
+const CreateCategory = React.lazy(() => import("./Category/CreateCategory"));
+const ModifyCategory = React.lazy(() => import("./Category/ModifyCategory"));
+const ProductModify = React.lazy(() => import("./Product/ProductModify"));
+const BulkProductUpload = React.lazy(() => import("./Product/BulkProductUpload"));
+const CreateBanner = React.lazy(() => import("./Banner/CreateBanner"));
+const ModifyBanner = React.lazy(() => import("./Banner/ModifyBanner"));
+const AdminOrderList = React.lazy(() => import("./AdminOrderList"));
+const UserOrders = React.lazy(() => import("./UserOrders"));
+const AdminCoupons = React.lazy(() => import("./AdminCoupons"));
+const AdminVendors = React.lazy(() => import("./AdminVendors"));
+const VendorDashboardHome = React.lazy(() => import("./VendorDashboardHome"));
+const VendorStoreSettings = React.lazy(() => import("./VendorStoreSettings"));
+const VendorOrders = React.lazy(() => import("./VendorOrders"));
+const AdminProductApprovals = React.lazy(() => import("./AdminProductApprovals"));
+const AdminShippingZones = React.lazy(() => import("./AdminShippingZones"));
+const VendorShippingZones = React.lazy(() => import("./VendorShippingZones"));
+const VendorMessages = React.lazy(() => import("./VendorMessages"));
+const AdminVendorReports = React.lazy(() => import("./AdminVendorReports"));
+const AdminVendorReviews = React.lazy(() => import("./AdminVendorReviews"));
+const AdminProductReports = React.lazy(() => import("./AdminProductReports"));
+const AdminCustomerRisk = React.lazy(() => import("./AdminCustomerRisk"));
+const MyWishlist = React.lazy(() => import("./MyWishlist"));
+const ModuleSubscriptions = React.lazy(() => import("./ModuleSubscriptions"));
+const ModuleBookings = React.lazy(() => import("./ModuleBookings"));
+const ModuleAuctions = React.lazy(() => import("./ModuleAuctions"));
+const ModuleStaff = React.lazy(() => import("./ModuleStaff"));
+const ModuleVerifications = React.lazy(() => import("./ModuleVerifications"));
+const ModuleAds = React.lazy(() => import("./ModuleAds"));
+const ModuleSupportTickets = React.lazy(() => import("./ModuleSupportTickets"));
+const ModuleGeolocation = React.lazy(() => import("./ModuleGeolocation"));
+const ModuleAbandonedOrders = React.lazy(() => import("./ModuleAbandonedOrders"));
+const ModuleSuppliers = React.lazy(() => import("./ModuleSuppliers"));
+const ModulePurchases = React.lazy(() => import("./ModulePurchases"));
+const ModuleAccounts = React.lazy(() => import("./ModuleAccounts"));
+const ModuleBrands = React.lazy(() => import("./ModuleBrands"));
+const ModuleVendorPayouts = React.lazy(() => import("./ModuleVendorPayouts"));
+const ModuleLandingPages = React.lazy(() => import("./ModuleLandingPages"));
+const ModuleVoiceAssistant = React.lazy(() => import("./ModuleVoiceAssistant"));
+const ModuleBusinessReports = React.lazy(() => import("./ModuleBusinessReports"));
+const ModuleWebsiteSetup = React.lazy(() => import("./ModuleWebsiteSetup"));
+const ModuleCampaignOffers = React.lazy(() => import("./ModuleCampaignOffers"));
+const ModuleAdminUsers = React.lazy(() => import("./ModuleAdminUsers"));
+const ModuleSuperAdminControl = React.lazy(() => import("./ModuleSuperAdminControl"));
 
-const SINGLE_VENDOR_DISABLED_TABS = new Set([
-  "vendors-admin",
-  "product-approvals",
-  "vendor-reports",
-  "vendor-reviews",
-  "vendor-store",
-  "vendor-orders",
-  "vendor-dashboard",
-  "vendor-shipping",
-  "vendor-messages",
-  "module-subscriptions",
-  "module-staff",
-  "module-verifications",
-  "module-ads",
-  "module-geolocation",
-]);
+const TabLoadingFallback = () => (
+  <div className="flex min-h-[220px] items-center justify-center">
+    <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-200 border-t-black" />
+  </div>
+);
 
 // Memoized content components
 const TabContent = React.memo(({
@@ -86,7 +77,26 @@ const TabContent = React.memo(({
   user,
   onTabChange,
   onMarketplaceModeChange,
+  marketplaceMode,
 }) => {
+  if (
+    activeTab !== "dashboard" &&
+    !canAccessDashboardTab({
+      user,
+      tab: activeTab,
+      marketplaceMode,
+    })
+  ) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+        <h2 className="text-xl font-semibold text-black mb-2">Access Restricted</h2>
+        <p className="text-gray-600">
+          You do not have permission to access this module.
+        </p>
+      </div>
+    );
+  }
+
   if (user?.userType === "admin" && activeTab === "dashboard") {
     return <DashboardHome user={user} onTabChange={onTabChange} />;
   }
@@ -158,6 +168,8 @@ const TabContent = React.memo(({
       return user?.userType === "admin" ? <AdminVendorReviews /> : null;
     case "customer-risk":
       return user?.userType === "admin" ? <AdminCustomerRisk /> : null;
+    case "customers":
+      return user?.userType === "admin" ? <AdminCustomerRisk /> : null;
     case "my-orders":
       return user?.userType !== "admin" ? <UserOrders /> : null;
     case "wishlist":
@@ -204,6 +216,12 @@ const TabContent = React.memo(({
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleAccounts />
       ) : null;
+    case "module-brands":
+      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
+        <ModuleBrands />
+      ) : null;
+    case "module-vendor-payouts":
+      return user?.userType === "admin" ? <ModuleVendorPayouts /> : null;
     case "module-landing-pages":
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleLandingPages />
@@ -222,7 +240,7 @@ const TabContent = React.memo(({
     case "module-admin-users":
       return user?.userType === "admin" ? <ModuleAdminUsers /> : null;
     case "module-super-admin":
-      return user?.userType === "admin" ? (
+      return user?.userType === "admin" && isSuperAdminUser(user) ? (
         <ModuleSuperAdminControl onMarketplaceModeChange={onMarketplaceModeChange} />
       ) : null;
     case "module-business-reports":
@@ -312,43 +330,42 @@ const Dashboard = () => {
   }, [user]);
 
   useEffect(() => {
-    if (normalizeMarketplaceMode(marketplaceMode) !== "single") return;
-    if (!SINGLE_VENDOR_DISABLED_TABS.has(activeTab)) return;
+    if (!user) return;
+    if (activeTab === "dashboard" || activeTab === "home") return;
+
+    if (
+      canAccessDashboardTab({
+        user,
+        tab: activeTab,
+        marketplaceMode,
+      })
+    ) {
+      return;
+    }
 
     setActiveTab("dashboard");
     localStorage.setItem("dashboardActiveTab", "dashboard");
-    toast.error("This module is disabled in single-vendor mode");
-  }, [marketplaceMode, activeTab]);
+
+    if (
+      normalizeMarketplaceMode(marketplaceMode) === "single" &&
+      SINGLE_VENDOR_DISABLED_TABS.has(activeTab)
+    ) {
+      toast.error("This module is disabled in single-vendor mode");
+      return;
+    }
+
+    if (activeTab === "module-super-admin") {
+      toast.error("Super admin access required");
+      return;
+    }
+
+    toast.error("You do not have access to this module");
+  }, [marketplaceMode, activeTab, user]);
 
   const handleTabChange = (tab) => {
     // If it's "home" tab, navigate to homepage
     if (tab === "home") {
       navigate("/");
-      return;
-    }
-    // Check if user has permission for this tab
-    const adminOnlyTabs = [
-      "payment-methods",
-      "vendors-admin",
-      "create-category",
-      "modify-category",
-      "create-banner",
-      "modify-banner",
-      "order-list",
-      "add-order",
-      "product-approvals",
-      "shipping-zones",
-      "vendor-reports",
-      "product-reports",
-      "vendor-reviews",
-      "customer-risk",
-      "module-website-setup",
-      "module-admin-users",
-      "module-super-admin",
-    ];
-
-    if (adminOnlyTabs.includes(tab) && user?.userType !== "admin") {
-      toast.error("Admin access required");
       return;
     }
 
@@ -358,6 +375,21 @@ const Dashboard = () => {
     ) {
       toast.error("This module is disabled in single-vendor mode");
       setActiveTab("dashboard");
+      return;
+    }
+
+    if (
+      !canAccessDashboardTab({
+        user,
+        tab,
+        marketplaceMode,
+      })
+    ) {
+      if (tab === "module-super-admin") {
+        toast.error("Super admin access required");
+      } else {
+        toast.error("You do not have access to this module");
+      }
       return;
     }
 
@@ -393,7 +425,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="bg-linear-to-br from-gray-50 to-gray-100 min-h-screen flex items-center justify-center p-2 md:p-4 relative">
+    <div className="dashboard-ui bg-linear-to-br from-gray-50 to-gray-100 min-h-screen flex items-center justify-center p-2 md:p-4 relative">
       {/* Mobile Header */}
       {isMobile && <MobileHeader toggleSidebar={toggleSidebar} />}
 
@@ -443,12 +475,15 @@ const Dashboard = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-              <TabContent
-                activeTab={activeTab}
-                user={user}
-                onTabChange={handleTabChange}
-                onMarketplaceModeChange={handleMarketplaceModeChange}
-              />
+                <Suspense fallback={<TabLoadingFallback />}>
+                  <TabContent
+                    activeTab={activeTab}
+                    user={user}
+                    onTabChange={handleTabChange}
+                    onMarketplaceModeChange={handleMarketplaceModeChange}
+                    marketplaceMode={marketplaceMode}
+                  />
+                </Suspense>
               </motion.div>
             </AnimatePresence>
           </div>

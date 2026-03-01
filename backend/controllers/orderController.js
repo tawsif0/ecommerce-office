@@ -807,6 +807,9 @@ const extractPaymentMethod = (paymentMethod, paymentDetails = {}) => {
   return "";
 };
 
+const isCashOnDeliveryValue = (value) =>
+  /\bcod\b|cash[\s_-]*on[\s_-]*delivery/i.test(String(value || "").trim());
+
 const normalizePaymentDetails = (
   paymentMethod,
   paymentDetails = {},
@@ -869,6 +872,9 @@ const resolvePaymentMethodSelection = async ({
   paymentDetails,
 }) => {
   const requestedMethod = extractPaymentMethod(paymentMethod, paymentDetails);
+  const requestedCanonical = String(requestedMethod || "").trim().toLowerCase();
+  const requestedDashed = requestedCanonical.replace(/[\s_]+/g, "-");
+  const requestedSpaced = requestedCanonical.replace(/[_-]+/g, " ");
   let methodDoc = null;
 
   const normalizedMethodId = String(paymentMethodId || "").trim();
@@ -879,13 +885,16 @@ const resolvePaymentMethodSelection = async ({
     }).lean();
   }
 
-  if (!methodDoc && requestedMethod) {
-    const escaped = escapeRegExp(requestedMethod);
+  if (!methodDoc && requestedCanonical) {
+    const escapedCanonical = escapeRegExp(requestedCanonical);
+    const escapedSpaced = escapeRegExp(requestedSpaced);
     methodDoc = await PaymentMethod.findOne({
       isActive: true,
       $or: [
-        { code: requestedMethod.toLowerCase() },
-        { type: { $regex: `^${escaped}$`, $options: "i" } },
+        { code: requestedCanonical },
+        { code: requestedDashed },
+        { type: { $regex: `^${escapedCanonical}$`, $options: "i" } },
+        { type: { $regex: `^${escapedSpaced}$`, $options: "i" } },
       ],
     }).lean();
   }
@@ -893,14 +902,15 @@ const resolvePaymentMethodSelection = async ({
   const channelType = String(methodDoc?.channelType || "manual")
     .trim()
     .toLowerCase();
-  const requestedLower = String(requestedMethod || "").trim().toLowerCase();
-  const inferredCod =
-    !methodDoc && (requestedLower.includes("cod") || requestedLower.includes("cash on delivery"));
+  const inferredCod = !methodDoc && isCashOnDeliveryValue(requestedMethod);
   const inferredChannel = methodDoc ? channelType : inferredCod ? "cod" : "manual";
+  const resolvedMethodName = String(
+    methodDoc?.type || (inferredCod ? "Cash on Delivery" : requestedMethod || ""),
+  ).trim();
 
   return {
     methodDoc,
-    methodName: String(methodDoc?.type || requestedMethod || "").trim(),
+    methodName: resolvedMethodName,
     channelType: inferredChannel,
     defaultAccountNo: String(methodDoc?.accountNo || "").trim(),
     requiresTransactionProof: methodDoc

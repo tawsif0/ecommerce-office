@@ -54,6 +54,7 @@ const Navbar = () => {
   // Login check state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState("user");
   const { cartCount } = useCart();
   const categoryIdSet = useMemo(
     () => new Set(categoryProductIds),
@@ -88,8 +89,10 @@ const Navbar = () => {
       try {
         const user = JSON.parse(userData);
         setUserName(user.name || user.email?.split("@")[0] || "User");
+        setUserRole(String(user.userType || "user").toLowerCase());
       } catch (e) {
         console.error("Error parsing user data:", e);
+        setUserRole("user");
       }
     }
   }, []);
@@ -100,14 +103,17 @@ const Navbar = () => {
       try {
         const user = JSON.parse(localStorage.getItem("user") || "{}");
         setUserName(user.name || user.email?.split("@")[0] || "User");
+        setUserRole(String(user.userType || "user").toLowerCase());
       } catch (e) {
         setUserName("User");
+        setUserRole("user");
       }
     };
 
     const handleLoggedOut = () => {
       setIsLoggedIn(false);
       setUserName("");
+      setUserRole("user");
     };
 
     window.addEventListener("userLoggedIn", handleLoggedIn);
@@ -509,11 +515,56 @@ const Navbar = () => {
     localStorage.removeItem("user");
     setIsLoggedIn(false);
     setUserName("");
+    setUserRole("user");
     navigate("/");
     setIsMobileMenuOpen(false);
     toast.success("Logged out successfully!");
     window.dispatchEvent(new CustomEvent("userLoggedOut"));
   };
+
+  const openDashboardTab = (tab) => {
+    if (!isLoggedIn) {
+      navigate("/login");
+      return;
+    }
+
+    localStorage.setItem("dashboardActiveTab", tab);
+    navigate("/dashboard");
+    setIsMobileMenuOpen(false);
+  };
+
+  const landingQuickLinks = useMemo(() => {
+    if (userRole === "admin") {
+      return [
+        { label: "Order Management", tab: "order-list" },
+        { label: "Customer Risk", tab: "customer-risk" },
+        { label: "Support Tickets", tab: "module-support" },
+        { label: "Vendor Messages", tab: "vendor-messages" },
+      ];
+    }
+
+    if (userRole === "vendor") {
+      return [
+        { label: "Vendor Orders", tab: "vendor-orders" },
+        { label: "Store Messages", tab: "vendor-messages" },
+        { label: "Support Tickets", tab: "module-support" },
+      ];
+    }
+
+    if (userRole === "staff") {
+      return [
+        { label: "Support Tickets", tab: "module-support" },
+        { label: "Vendor Messages", tab: "vendor-messages" },
+      ];
+    }
+
+    return [
+      { label: "My Orders", tab: "my-orders" },
+      { label: "Wishlist", tab: "wishlist" },
+      { label: "Vendor Messages", tab: "vendor-messages" },
+      { label: "Support Tickets", tab: "module-support" },
+    ];
+  }, [userRole]);
 
   // Mobile search toggle
   const toggleMobileSearch = () => {
@@ -793,13 +844,17 @@ const Navbar = () => {
                                       className={`px-2 py-0.5 rounded text-xs ${
                                         order.status === "delivered"
                                           ? "bg-green-100 text-green-700"
+                                          : order.status === "confirmed"
+                                            ? "bg-cyan-100 text-cyan-700"
                                           : order.status === "shipped"
                                             ? "bg-purple-100 text-purple-700"
-                                            : order.status === "processing"
-                                              ? "bg-blue-100 text-blue-700"
-                                              : order.status === "pending"
-                                                ? "bg-yellow-100 text-yellow-700"
-                                                : "bg-red-100 text-red-700"
+                                          : order.status === "processing"
+                                            ? "bg-blue-100 text-blue-700"
+                                          : order.status === "pending"
+                                            ? "bg-yellow-100 text-yellow-700"
+                                            : order.status === "returned"
+                                              ? "bg-orange-100 text-orange-700"
+                                            : "bg-red-100 text-red-700"
                                       }`}
                                     >
                                       {order.status}
@@ -987,6 +1042,17 @@ const Navbar = () => {
                       </svg>
                       Dashboard
                     </Link>
+                    {landingQuickLinks.map((entry) => (
+                      <button
+                        key={entry.tab}
+                        type="button"
+                        onClick={() => openDashboardTab(entry.tab)}
+                        className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-100 hover:text-black transition-colors duration-150 text-left"
+                      >
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-500 mr-3" />
+                        {entry.label}
+                      </button>
+                    ))}
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-100 transition-colors duration-150"
@@ -1195,12 +1261,16 @@ const Navbar = () => {
                                 className={`text-xs px-1.5 py-0.5 rounded ${
                                   order.status === "delivered"
                                     ? "bg-green-100 text-green-700"
+                                    : order.status === "confirmed"
+                                      ? "bg-cyan-100 text-cyan-700"
                                     : order.status === "shipped"
                                       ? "bg-purple-100 text-purple-700"
                                       : order.status === "processing"
                                         ? "bg-blue-100 text-blue-700"
                                         : order.status === "pending"
                                           ? "bg-yellow-100 text-yellow-700"
+                                          : order.status === "returned"
+                                            ? "bg-orange-100 text-orange-700"
                                           : "bg-red-100 text-red-700"
                                 }`}
                               >
@@ -1315,26 +1385,40 @@ const Navbar = () => {
             <div className="px-4 py-3 space-y-1">
               {/* Dashboard Link (mobile) */}
               {isLoggedIn && (
-                <Link
-                  to="/dashboard"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 hover:text-black rounded-lg transition-colors duration-150"
-                >
-                  <svg
-                    className="w-5 h-5 mr-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <>
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 hover:text-black rounded-lg transition-colors duration-150"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                    />
-                  </svg>
-                  Dashboard
-                </Link>
+                    <svg
+                      className="w-5 h-5 mr-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                      />
+                    </svg>
+                    Dashboard
+                  </Link>
+
+                  {landingQuickLinks.map((entry) => (
+                    <button
+                      key={entry.tab}
+                      type="button"
+                      onClick={() => openDashboardTab(entry.tab)}
+                      className="w-full flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 hover:text-black rounded-lg transition-colors duration-150 text-left"
+                    >
+                      <span className="inline-block w-2 h-2 rounded-full bg-gray-500 mr-3" />
+                      {entry.label}
+                    </button>
+                  ))}
+                </>
               )}
 
               {/* Categories Dropdown (mobile) */}

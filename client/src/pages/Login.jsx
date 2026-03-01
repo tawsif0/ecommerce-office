@@ -15,10 +15,15 @@ import {
   HomeIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "../hooks/useAuth";
+import { fetchPublicSettings } from "../utils/publicSettings";
 const baseUrl = import.meta.env.VITE_API_URL;
 const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [socialProviders, setSocialProviders] = useState({
+    google: false,
+    facebook: false,
+  });
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
@@ -41,6 +46,65 @@ const Login = () => {
       setValue("loginId", savedLoginId);
     }
   }, [setValue]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSocialSettings = async () => {
+      const settings = await fetchPublicSettings();
+      if (cancelled) return;
+
+      setSocialProviders({
+        google: Boolean(settings?.integrations?.enableGoogleLogin),
+        facebook: Boolean(settings?.integrations?.enableFacebookLogin),
+      });
+    };
+
+    loadSocialSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const socialError = query.get("socialError");
+    const socialToken = query.get("token");
+    const socialMode = query.get("social");
+
+    if (!socialMode || (!socialError && !socialToken)) {
+      return;
+    }
+
+    const clearSocialQuery = () => {
+      navigate("/login", { replace: true });
+    };
+
+    if (socialError) {
+      toast.error(socialError);
+      clearSocialQuery();
+      return;
+    }
+
+    const completeSocialLogin = async () => {
+      try {
+        setIsLoading(true);
+        const response = await axios.get(`${baseUrl}/auth/profile`, {
+          headers: { Authorization: `Bearer ${socialToken}` },
+        });
+
+        await login(response.data, socialToken);
+        navigate("/dashboard", { replace: true });
+      } catch (error) {
+        toast.error(error.response?.data?.error || "Social login failed");
+        clearSocialQuery();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    completeSocialLogin();
+  }, [login, navigate]);
 
   const loginId = watch("loginId");
 
@@ -130,6 +194,12 @@ const Login = () => {
   };
   const goToHome = () => {
     navigate("/");
+  };
+
+  const startSocialLogin = (provider) => {
+    const normalized = String(provider || "").toLowerCase();
+    if (!["google", "facebook"].includes(normalized)) return;
+    window.location.href = `${baseUrl}/auth/social/${normalized}`;
   };
   return (
     <div className="min-h-screen flex items-center justify-center bg-white p-4 overflow-hidden">
@@ -420,6 +490,29 @@ const Login = () => {
                 </span>
               </button>
             </motion.div>
+
+            {(socialProviders.google || socialProviders.facebook) && (
+              <div className="space-y-2 pt-1">
+                {socialProviders.google && (
+                  <button
+                    type="button"
+                    onClick={() => startSocialLogin("google")}
+                    className="w-full py-3 px-4 border-2 border-gray-300 rounded-xl text-sm font-semibold text-black bg-white hover:bg-gray-50 hover:border-black transition-all duration-300"
+                  >
+                    Continue with Google
+                  </button>
+                )}
+                {socialProviders.facebook && (
+                  <button
+                    type="button"
+                    onClick={() => startSocialLogin("facebook")}
+                    className="w-full py-3 px-4 border-2 border-gray-300 rounded-xl text-sm font-semibold text-black bg-white hover:bg-gray-50 hover:border-black transition-all duration-300"
+                  >
+                    Continue with Facebook
+                  </button>
+                )}
+              </div>
+            )}
           </form>
 
           <div className="mt-8">

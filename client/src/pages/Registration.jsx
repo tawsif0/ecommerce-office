@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -16,6 +16,10 @@ import {
   PhoneIcon,
   HomeIcon,
 } from "@heroicons/react/24/outline";
+import {
+  fetchPublicSettings,
+  invalidatePublicSettingsCache,
+} from "../utils/publicSettings";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -24,6 +28,12 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [accountType, setAccountType] = useState("user");
+  const [allowVendorSignup, setAllowVendorSignup] = useState(true);
+  const [isInitialSetup, setIsInitialSetup] = useState(false);
+  const [socialProviders, setSocialProviders] = useState({
+    google: false,
+    facebook: false,
+  });
   const navigate = useNavigate();
 
   const {
@@ -35,18 +45,51 @@ const Register = () => {
 
   const password = watch("password");
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPublicSettings = async () => {
+      const settings = await fetchPublicSettings({ force: true });
+      if (cancelled) return;
+
+      const marketplaceMode = String(settings?.marketplaceMode || "multi")
+        .trim()
+        .toLowerCase();
+      const vendorEnabled = Boolean(settings?.vendorRegistrationEnabled);
+      const allowVendor = marketplaceMode !== "single" && vendorEnabled;
+      const initialSetupMode = Boolean(settings?.isInitialSetup);
+
+      setAllowVendorSignup(allowVendor);
+      setIsInitialSetup(initialSetupMode);
+      setSocialProviders({
+        google: Boolean(settings?.integrations?.enableGoogleLogin),
+        facebook: Boolean(settings?.integrations?.enableFacebookLogin),
+      });
+      if (!allowVendor || initialSetupMode) {
+        setAccountType("user");
+      }
+    };
+
+    loadPublicSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const onSubmit = async (data) => {
     setIsLoading(true);
 
     try {
+      const resolvedAccountType = isInitialSetup ? "user" : accountType;
       const payload = {
         name: data.name,
         email: data.email,
         phone: data.phone,
         password: data.password,
-        accountType,
+        accountType: resolvedAccountType,
         vendorData:
-          accountType === "vendor"
+          resolvedAccountType === "vendor"
             ? {
                 storeName: data.storeName,
                 description: data.storeDescription || "",
@@ -58,7 +101,12 @@ const Register = () => {
 
       const response = await axios.post(`${baseUrl}/auth/register`, payload);
 
-      toast.success("Account created successfully.");
+      if (response?.data?.user?.adminSettings?.isSuperAdmin) {
+        toast.success("Super Admin account created successfully.");
+      } else {
+        toast.success("Account created successfully.");
+      }
+      invalidatePublicSettingsCache();
       navigate("/login", { replace: true });
     } catch (error) {
       toast.error(
@@ -67,6 +115,12 @@ const Register = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const startSocialLogin = (provider) => {
+    const normalized = String(provider || "").toLowerCase();
+    if (!["google", "facebook"].includes(normalized)) return;
+    window.location.href = `${baseUrl}/auth/social/${normalized}`;
   };
 
   return (
@@ -91,30 +145,47 @@ const Register = () => {
           </p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-gray-100 border border-gray-200">
-              <button
-                type="button"
-                onClick={() => setAccountType("user")}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                  accountType === "user"
-                    ? "bg-black text-white"
-                    : "text-gray-700 hover:bg-gray-200"
+            {isInitialSetup ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-semibold text-emerald-800">
+                  Initial Setup: This registration will create the Super Admin account.
+                </p>
+                <p className="mt-1 text-xs text-emerald-700">
+                  Account type selection is disabled until setup is completed.
+                </p>
+              </div>
+            ) : (
+              <div
+                className={`grid gap-2 p-1 rounded-xl bg-gray-100 border border-gray-200 ${
+                  allowVendorSignup ? "grid-cols-2" : "grid-cols-1"
                 }`}
               >
-                Customer Account
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountType("vendor")}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                  accountType === "vendor"
-                    ? "bg-black text-white"
-                    : "text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Vendor Account
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setAccountType("user")}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    accountType === "user"
+                      ? "bg-black text-white"
+                      : "text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  Customer Account
+                </button>
+                {allowVendorSignup ? (
+                  <button
+                    type="button"
+                    onClick={() => setAccountType("vendor")}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      accountType === "vendor"
+                        ? "bg-black text-white"
+                        : "text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Vendor Account
+                  </button>
+                ) : null}
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -140,7 +211,7 @@ const Register = () => {
               )}
             </div>
 
-            {accountType === "vendor" && (
+            {accountType === "vendor" && !isInitialSetup && (
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -342,6 +413,29 @@ const Register = () => {
                 </span>
               )}
             </motion.button>
+
+            {(socialProviders.google || socialProviders.facebook) && (
+              <div className="space-y-2">
+                {socialProviders.google && (
+                  <button
+                    type="button"
+                    onClick={() => startSocialLogin("google")}
+                    className="w-full py-3 border-2 border-gray-300 rounded-xl text-sm font-semibold text-black bg-white hover:bg-gray-50 hover:border-black transition-all duration-300"
+                  >
+                    Continue with Google
+                  </button>
+                )}
+                {socialProviders.facebook && (
+                  <button
+                    type="button"
+                    onClick={() => startSocialLogin("facebook")}
+                    className="w-full py-3 border-2 border-gray-300 rounded-xl text-sm font-semibold text-black bg-white hover:bg-gray-50 hover:border-black transition-all duration-300"
+                  >
+                    Continue with Facebook
+                  </button>
+                )}
+              </div>
+            )}
           </form>
 
           <p className="text-center text-sm text-gray-600 mt-6">

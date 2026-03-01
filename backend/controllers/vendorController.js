@@ -32,6 +32,12 @@ const ensureAdmin = (req, res) => {
   return true;
 };
 
+const roundMoney = (value) => {
+  const num = Number(value || 0);
+  if (!Number.isFinite(num)) return 0;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+};
+
 exports.registerVendor = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
@@ -531,28 +537,53 @@ exports.getVendorDashboardStats = async (req, res) => {
     const vendor = await ensureVendor(req, res);
     if (!vendor) return;
 
-    const [totalProducts, pendingProducts, approvedProducts, rejectedProducts] =
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [totalProducts, pendingProducts, approvedProducts, rejectedProducts, vendorProducts] =
       await Promise.all([
         Product.countDocuments({ vendor: vendor._id }),
         Product.countDocuments({ vendor: vendor._id, approvalStatus: "pending" }),
         Product.countDocuments({ vendor: vendor._id, approvalStatus: "approved" }),
         Product.countDocuments({ vendor: vendor._id, approvalStatus: "rejected" }),
+        Product.find({ vendor: vendor._id })
+          .select("stock lowStockThreshold")
+          .lean(),
       ]);
 
     const orders = await Order.find({ "items.vendor": vendor._id })
-      .select("items orderStatus createdAt")
+      .select("orderNumber items orderStatus createdAt shippingAddress total")
       .lean();
 
     let grossSales = 0;
     let commissionTotal = 0;
     let netEarnings = 0;
     let pendingOrders = 0;
+    let todaySales = 0;
+    let monthlySales = 0;
+
+    const orderStats = {
+      pending: 0,
+      confirmed: 0,
+      processing: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+      returned: 0,
+    };
 
     for (const order of orders) {
-      if (order.orderStatus === "pending") {
+      const normalizedStatus = String(order.orderStatus || "").toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(orderStats, normalizedStatus)) {
+        orderStats[normalizedStatus] += 1;
+      }
+
+      if (["pending", "confirmed", "processing", "shipped"].includes(normalizedStatus)) {
         pendingOrders += 1;
       }
-      if (order.orderStatus === "cancelled") {
+      if (["cancelled", "returned"].includes(normalizedStatus)) {
         continue;
       }
 
@@ -566,8 +597,42 @@ exports.getVendorDashboardStats = async (req, res) => {
         grossSales += itemTotal;
         commissionTotal += itemCommission;
         netEarnings += itemNet;
+
+        if (normalizedStatus === "delivered") {
+          const createdAt = order.createdAt ? new Date(order.createdAt) : null;
+          if (createdAt && createdAt >= startOfToday) {
+            todaySales += itemNet;
+          }
+          if (createdAt && createdAt >= startOfMonth) {
+            monthlySales += itemNet;
+          }
+        }
       }
     }
+
+    let totalStock = 0;
+    let lowStockAlerts = 0;
+    let outOfStock = 0;
+    vendorProducts.forEach((product) => {
+      const stock = Number(product.stock || 0);
+      const threshold = Number(product.lowStockThreshold || 0);
+      totalStock += stock;
+      if (stock <= 0) {
+        outOfStock += 1;
+      } else if (stock <= threshold) {
+        lowStockAlerts += 1;
+      }
+    });
+
+    const recentOrders = orders.slice(0, 6).map((order) => ({
+      orderNumber: order.orderNumber,
+      orderStatus: order.orderStatus,
+      total: roundMoney(order.total),
+      customerName: `${String(order?.shippingAddress?.firstName || "").trim()} ${String(
+        order?.shippingAddress?.lastName || "",
+      ).trim()}`.trim(),
+      createdAt: order.createdAt,
+    }));
 
     res.json({
       success: true,
@@ -578,9 +643,23 @@ exports.getVendorDashboardStats = async (req, res) => {
         rejectedProducts,
         totalOrders: orders.length,
         pendingOrders,
-        grossSales,
-        commissionTotal,
-        netEarnings,
+        confirmedOrders: orderStats.confirmed,
+        processingOrders: orderStats.processing,
+        shippedOrders: orderStats.shipped,
+        deliveredOrders: orderStats.delivered,
+        cancelledOrders: orderStats.cancelled,
+        returnedOrders: orderStats.returned,
+        grossSales: roundMoney(grossSales),
+        commissionTotal: roundMoney(commissionTotal),
+        netEarnings: roundMoney(netEarnings),
+        todaySales: roundMoney(todaySales),
+        monthlySales: roundMoney(monthlySales),
+        inventory: {
+          totalStock: Math.max(0, Number(totalStock || 0)),
+          lowStockAlerts,
+          outOfStock,
+        },
+        recentOrders,
       },
     });
   } catch (error) {
@@ -713,11 +792,15 @@ exports.getAdminVendorReports = async (req, res) => {
         const orderId = String(order._id);
 
         stat._orderSet.add(orderId);
-        if (order.orderStatus === "pending") {
+        if (["pending", "confirmed", "processing", "shipped"].includes(order.orderStatus)) {
           stat._pendingOrderSet.add(orderId);
         }
         if (order.orderStatus === "delivered") {
           stat._deliveredOrderSet.add(orderId);
+        }
+
+        if (["cancelled", "returned"].includes(order.orderStatus)) {
+          continue;
         }
 
         const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);

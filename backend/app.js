@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const compression = require("compression");
 const authRoutes = require("./routes/authRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const productRoutes = require("./routes/productRoutes");
@@ -21,9 +22,18 @@ const verificationRoutes = require("./routes/verificationRoutes");
 const adsRoutes = require("./routes/adsRoutes");
 const supportTicketRoutes = require("./routes/supportTicketRoutes");
 const vendorMessageRoutes = require("./routes/vendorMessageRoutes");
+const accountRoutes = require("./routes/accountRoutes");
+const supplierRoutes = require("./routes/supplierRoutes");
+const purchaseRoutes = require("./routes/purchaseRoutes");
+const landingPageRoutes = require("./routes/landingPageRoutes");
+const abandonedOrderRoutes = require("./routes/abandonedOrderRoutes");
+const reportRoutes = require("./routes/reportRoutes");
+const brandRoutes = require("./routes/brandRoutes");
 const path = require("path");
 
 const app = express();
+const isProduction = process.env.NODE_ENV === "production";
+app.disable("x-powered-by");
 
 // Configure CORS properly
 const allowedOrigins = [
@@ -59,14 +69,19 @@ const corsOptions = {
 // Security middleware
 app.use(helmet());
 app.use(cors(corsOptions)); // Use configured CORS options
-app.use(morgan("dev"));
+if (!isProduction) {
+  app.use(morgan("dev"));
+}
+app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve uploaded files
 app.use(
   "/uploads/products",
-  express.static(path.join(__dirname, "uploads/products")),
+  express.static(path.join(__dirname, "uploads/products"), {
+    maxAge: isProduction ? "7d" : 0,
+  }),
   (req, res, next) => {
     res.setHeader(
       "Access-Control-Allow-Origin",
@@ -80,7 +95,9 @@ app.use(
 // Also serve under /api/uploads for API consistency
 app.use(
   "/api/uploads",
-  express.static(path.join(__dirname, "uploads")),
+  express.static(path.join(__dirname, "uploads"), {
+    maxAge: isProduction ? "7d" : 0,
+  }),
   (req, res, next) => {
     res.setHeader(
       "Access-Control-Allow-Origin",
@@ -94,7 +111,9 @@ app.use(
 // Add this static file serving for banner uploads (add with other static file serving)
 app.use(
   "/uploads/banners",
-  express.static(path.join(__dirname, "uploads/banners")),
+  express.static(path.join(__dirname, "uploads/banners"), {
+    maxAge: isProduction ? "7d" : 0,
+  }),
   (req, res, next) => {
     res.setHeader(
       "Access-Control-Allow-Origin",
@@ -124,6 +143,13 @@ app.use("/api/verifications", verificationRoutes);
 app.use("/api/ads", adsRoutes);
 app.use("/api/support-tickets", supportTicketRoutes);
 app.use("/api/vendor-messages", vendorMessageRoutes);
+app.use("/api/accounts", accountRoutes);
+app.use("/api/suppliers", supplierRoutes);
+app.use("/api/purchases", purchaseRoutes);
+app.use("/api/landing-pages", landingPageRoutes);
+app.use("/api/abandoned-orders", abandonedOrderRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/brands", brandRoutes);
 // Error handling middleware
 app.use(errorHandler);
 

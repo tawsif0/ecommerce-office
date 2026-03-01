@@ -1,5 +1,6 @@
 const PaymentMethod = require("../models/PaymentMethod");
 const { sanitizePaymentMethodForPublic } = require("../utils/paymentGatewayUtils");
+const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
 
 const CHANNEL_TYPES = ["manual", "cod", "stripe", "paypal", "sslcommerz"];
 
@@ -27,6 +28,27 @@ const normalizeChannelType = (value) => {
   return CHANNEL_TYPES.includes(normalized) ? normalized : "manual";
 };
 
+const isCashOnDeliveryMethod = (method = {}) => {
+  const channelType = safeString(method?.channelType).toLowerCase();
+  if (channelType === "cod") return true;
+
+  const lookup = `${safeString(method?.code)} ${safeString(method?.type)}`.toLowerCase();
+  return /\bcod\b|cash[\s_-]*on[\s_-]*delivery/.test(lookup);
+};
+
+const buildFallbackCashOnDeliveryMethod = () => ({
+  _id: "fallback-cod",
+  code: "cash-on-delivery",
+  type: "Cash on Delivery",
+  channelType: "cod",
+  accountNo: "",
+  instructions: "Pay cash when your order is delivered.",
+  requiresTransactionProof: false,
+  displayOrder: 9999,
+  isActive: true,
+  createdAt: new Date(0),
+});
+
 const parseGatewayConfig = (value) => {
   if (!value) return {};
   if (typeof value === "object") return value;
@@ -38,6 +60,10 @@ const parseGatewayConfig = (value) => {
   } catch (_error) {
     return {};
   }
+};
+
+const invalidatePublicPaymentMethodCache = () => {
+  clearResponseCacheByPrefix("/api/auth/payment-methods");
 };
 
 const normalizeGatewayConfig = (input, channelType) => {
@@ -90,11 +116,23 @@ const ensureAdminAccess = (req, res) => {
 // Public: active payment methods for checkout
 exports.getPaymentMethods = async (req, res) => {
   try {
-    const paymentMethods = await PaymentMethod.find({ isActive: true })
+    let paymentMethods = await PaymentMethod.find({ isActive: true })
       .sort({ displayOrder: 1, createdAt: -1 })
       .lean();
 
-    res.json(paymentMethods.map((method) => sanitizePaymentMethodForPublic(method)));
+    if (!paymentMethods.some((method) => isCashOnDeliveryMethod(method))) {
+      paymentMethods = [...paymentMethods, buildFallbackCashOnDeliveryMethod()];
+    }
+
+    const normalized = paymentMethods
+      .map((method) => sanitizePaymentMethodForPublic(method))
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          Number(a?.displayOrder || 0) - Number(b?.displayOrder || 0),
+      );
+
+    res.json(normalized);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -157,6 +195,7 @@ exports.addPaymentMethod = async (req, res) => {
     });
 
     await paymentMethod.save();
+    invalidatePublicPaymentMethodCache();
     res.status(201).json(paymentMethod);
   } catch (error) {
     if (error?.code === 11000) {
@@ -230,6 +269,7 @@ exports.updatePaymentMethod = async (req, res) => {
     paymentMethod.updatedAt = new Date();
 
     await paymentMethod.save();
+    invalidatePublicPaymentMethodCache();
     res.json(paymentMethod);
   } catch (error) {
     if (error?.code === 11000) {
@@ -253,6 +293,7 @@ exports.deletePaymentMethod = async (req, res) => {
     }
 
     await paymentMethod.deleteOne();
+    invalidatePublicPaymentMethodCache();
     res.json({ message: "Payment method deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });

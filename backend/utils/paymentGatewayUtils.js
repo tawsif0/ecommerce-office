@@ -46,6 +46,14 @@ const sanitizePaymentMethodForPublic = (method) => {
   if (!method) return null;
   const config = resolveGatewayConfig(method);
   const channelType = safeString(method.channelType || "manual").toLowerCase();
+  const methodType = safeString(
+    method.type ||
+      (channelType === "cod"
+        ? "Cash on Delivery"
+        : channelType === "manual"
+          ? "Manual Payment"
+          : ""),
+  );
   const publicConfig = {};
 
   if (channelType === "stripe") {
@@ -61,7 +69,7 @@ const sanitizePaymentMethodForPublic = (method) => {
   return {
     _id: method._id,
     code: method.code,
-    type: method.type,
+    type: methodType,
     channelType,
     accountNo: method.accountNo || "",
     instructions: method.instructions || "",

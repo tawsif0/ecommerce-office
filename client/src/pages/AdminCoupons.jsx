@@ -14,6 +14,7 @@ const getAuthHeaders = () => {
 
 const initialFormState = {
   code: "",
+  offerType: "discount",
   discountType: "percentage",
   discountValue: "",
   minPurchase: "",
@@ -22,6 +23,7 @@ const initialFormState = {
   usageLimit: "",
   isActive: true,
   vendorId: "",
+  requiredProducts: [],
 };
 
 const toDateInputValue = (value) => {
@@ -35,6 +37,7 @@ const AdminCoupons = () => {
   const { user } = useAuth();
   const [coupons, setCoupons] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -71,10 +74,22 @@ const AdminCoupons = () => {
     }
   };
 
+  const fetchProducts = async () => {
+    try {
+      const response = await axios.get(`${baseUrl}/products`, {
+        headers: getAuthHeaders(),
+      });
+      setProducts(response.data?.products || []);
+    } catch {
+      setProducts([]);
+    }
+  };
+
   useEffect(() => {
     if (isAdmin || isVendor) {
       fetchCoupons();
       fetchVendors();
+      fetchProducts();
     }
   }, [isAdmin, isVendor]);
 
@@ -93,13 +108,19 @@ const AdminCoupons = () => {
 
   const buildPayload = () => ({
     code: form.code.trim().toUpperCase(),
+    offerType: form.offerType,
     discountType: form.discountType,
-    discountValue: Number(form.discountValue),
+    discountValue:
+      form.offerType === "free_shipping"
+        ? Number(form.discountValue || 0)
+        : Number(form.discountValue),
     minPurchase: form.minPurchase === "" ? 0 : Number(form.minPurchase),
     maxDiscount: form.maxDiscount === "" ? null : Number(form.maxDiscount),
     validUntil: form.validUntil,
     usageLimit: form.usageLimit === "" ? null : Number(form.usageLimit),
     isActive: Boolean(form.isActive),
+    requiredProducts:
+      form.offerType === "combo" ? form.requiredProducts.filter(Boolean) : [],
     ...(isAdmin ? { vendorId: form.vendorId || null } : {}),
   });
 
@@ -109,8 +130,16 @@ const AdminCoupons = () => {
       return false;
     }
 
-    if (!form.discountValue || Number(form.discountValue) <= 0) {
+    if (
+      form.offerType !== "free_shipping" &&
+      (!form.discountValue || Number(form.discountValue) <= 0)
+    ) {
       toast.error("Discount value must be greater than 0");
+      return false;
+    }
+
+    if (form.offerType === "combo" && form.requiredProducts.length === 0) {
+      toast.error("Please select combo products");
       return false;
     }
 
@@ -155,6 +184,7 @@ const AdminCoupons = () => {
     setEditingId(coupon._id);
     setForm({
       code: coupon.code || "",
+      offerType: coupon.offerType || "discount",
       discountType: coupon.discountType || "percentage",
       discountValue: String(coupon.discountValue ?? ""),
       minPurchase: String(coupon.minPurchase ?? ""),
@@ -169,6 +199,9 @@ const AdminCoupons = () => {
           : String(coupon.usageLimit),
       isActive: Boolean(coupon.isActive),
       vendorId: coupon.vendor?._id || "",
+      requiredProducts: Array.isArray(coupon.requiredProducts)
+        ? coupon.requiredProducts.map((entry) => entry?._id || entry).filter(Boolean)
+        : [],
     });
   };
 
@@ -233,10 +266,22 @@ const AdminCoupons = () => {
           />
 
           <select
+            name="offerType"
+            value={form.offerType}
+            onChange={handleInputChange}
+            className="px-3 py-2.5 border border-gray-200 rounded-lg"
+          >
+            <option value="discount">Discount Offer</option>
+            <option value="free_shipping">Free Delivery Offer</option>
+            <option value="combo">Combo Offer</option>
+          </select>
+
+          <select
             name="discountType"
             value={form.discountType}
             onChange={handleInputChange}
             className="px-3 py-2.5 border border-gray-200 rounded-lg"
+            disabled={form.offerType === "free_shipping"}
           >
             <option value="percentage">Percentage</option>
             <option value="fixed">Fixed</option>
@@ -251,6 +296,7 @@ const AdminCoupons = () => {
             onChange={handleInputChange}
             placeholder="Discount value"
             className="px-3 py-2.5 border border-gray-200 rounded-lg"
+            disabled={form.offerType === "free_shipping"}
           />
 
           <input
@@ -305,6 +351,30 @@ const AdminCoupons = () => {
               {vendors.map((vendor) => (
                 <option key={vendor._id} value={vendor._id}>
                   {vendor.storeName}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {form.offerType === "combo" && (
+            <select
+              multiple
+              name="requiredProducts"
+              value={form.requiredProducts}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  requiredProducts: Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value,
+                  ),
+                }))
+              }
+              className="px-3 py-2.5 border border-gray-200 rounded-lg min-h-24"
+            >
+              {products.map((product) => (
+                <option key={product._id} value={product._id}>
+                  {product.title}
                 </option>
               ))}
             </select>
@@ -378,12 +448,21 @@ const AdminCoupons = () => {
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mt-1">
-                    {coupon.discountType === "percentage"
+                    {(coupon.offerType || "discount") === "free_shipping"
+                      ? "Free delivery offer"
+                      : coupon.discountType === "percentage"
                       ? `${coupon.discountValue}%`
                       : `${coupon.discountValue} TK`}{" "}
-                    discount, min {coupon.minPurchase || 0} TK, used {coupon.usedCount || 0}
+                    {(coupon.offerType || "discount") === "free_shipping"
+                      ? ""
+                      : `discount, min ${coupon.minPurchase || 0} TK, `}used {coupon.usedCount || 0}
                     {coupon.usageLimit ? `/${coupon.usageLimit}` : ""}
                   </p>
+                  {coupon.offerType === "combo" && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Combo products: {Array.isArray(coupon.requiredProducts) ? coupon.requiredProducts.length : 0}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
                     Scope: {coupon.vendor?.storeName || "Global"}
                   </p>

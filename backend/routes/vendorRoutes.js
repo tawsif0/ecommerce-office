@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth");
+const { ensureMultiVendorMode } = require("../middlewares/marketplaceMode");
 const {
   registerVendor,
   getMyVendorProfile,
@@ -32,21 +33,41 @@ router.get("/", getPublicVendors);
 router.get("/nearby", getNearbyVendors);
 
 // Authenticated vendor routes
-router.post("/register", auth, registerVendor);
-router.get("/me/profile", auth, getMyVendorProfile);
-router.put("/me/profile", auth, updateMyVendorProfile);
-router.get("/me/stats", auth, getVendorDashboardStats);
-router.get("/me/orders", auth, getVendorOrders);
-router.get("/me/contact-messages", auth, getMyVendorMessages);
-router.patch("/me/contact-messages/:id/status", auth, updateMyVendorMessageStatus);
+router.post("/register", auth, ensureMultiVendorMode, registerVendor);
+router.get("/me/profile", auth, ensureMultiVendorMode, getMyVendorProfile);
+router.put("/me/profile", auth, ensureMultiVendorMode, updateMyVendorProfile);
+router.get("/me/stats", auth, ensureMultiVendorMode, getVendorDashboardStats);
+router.get("/me/orders", auth, ensureMultiVendorMode, getVendorOrders);
+router.get(
+  "/me/contact-messages",
+  auth,
+  ensureMultiVendorMode,
+  getMyVendorMessages,
+);
+router.patch(
+  "/me/contact-messages/:id/status",
+  auth,
+  ensureMultiVendorMode,
+  updateMyVendorMessageStatus,
+);
 
 // Admin routes
-router.get("/admin/all", auth, getAdminVendors);
-router.get("/admin/reports", auth, getAdminVendorReports);
-router.get("/admin/reviews", auth, getAdminVendorReviews);
-router.patch("/admin/:id/status", auth, updateVendorStatus);
-router.patch("/admin/:id/commission", auth, updateVendorCommission);
-router.patch("/admin/reviews/:id/status", auth, updateVendorReviewStatus);
+router.get("/admin/all", auth, ensureMultiVendorMode, getAdminVendors);
+router.get("/admin/reports", auth, ensureMultiVendorMode, getAdminVendorReports);
+router.get("/admin/reviews", auth, ensureMultiVendorMode, getAdminVendorReviews);
+router.patch("/admin/:id/status", auth, ensureMultiVendorMode, updateVendorStatus);
+router.patch(
+  "/admin/:id/commission",
+  auth,
+  ensureMultiVendorMode,
+  updateVendorCommission,
+);
+router.patch(
+  "/admin/reviews/:id/status",
+  auth,
+  ensureMultiVendorMode,
+  updateVendorReviewStatus,
+);
 
 // Public store routes
 router.get("/:slug/store", getVendorStore);

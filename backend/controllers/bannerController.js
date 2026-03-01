@@ -1,5 +1,6 @@
 const Banner = require("../models/Banner.js");
 const { uploadImageBuffer, deleteImage } = require("../config/cloudinary");
+const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
 
 const BANNER_IMAGE_OPTIONS = {
   folder: "ecommerce/banners",
@@ -22,6 +23,10 @@ const deleteBannerAssets = async (publicIds = []) => {
   const unique = Array.from(new Set(publicIds.filter(Boolean)));
   if (unique.length === 0) return;
   await Promise.all(unique.map((id) => deleteImage(id)));
+};
+
+const invalidatePublicBannerCache = () => {
+  clearResponseCacheByPrefix("/api/banners/public");
 };
 
 const normalizeImage = (img) => {
@@ -82,6 +87,7 @@ exports.createBanner = async (req, res) => {
       thumbPublicId,
       isActive: true,
     });
+    invalidatePublicBannerCache();
 
     res.status(201).json({
       success: true,
@@ -110,11 +116,10 @@ exports.createBanner = async (req, res) => {
 
 exports.getBanners = async (req, res) => {
   try {
-    const banners = await Banner.find().sort({ createdAt: -1 });
+    const banners = await Banner.find().sort({ createdAt: -1 }).lean();
 
     // IMPORTANT: Ensure image URLs are properly formatted
-    const bannersWithUrls = banners.map((banner) => {
-      const bannerObj = banner.toObject();
+    const bannersWithUrls = banners.map((bannerObj) => {
       if (bannerObj.image) bannerObj.image = normalizeImage(bannerObj.image);
       if (bannerObj.thumb) bannerObj.thumb = normalizeImage(bannerObj.thumb);
       return bannerObj;
@@ -138,11 +143,10 @@ exports.getActiveBanners = async (req, res) => {
   try {
     const banners = await Banner.find({ isActive: true }).sort({
       createdAt: -1,
-    });
+    }).lean();
 
     // Ensure image URLs are properly formatted
-    const bannersWithUrls = banners.map((banner) => {
-      const bannerObj = banner.toObject();
+    const bannersWithUrls = banners.map((bannerObj) => {
       if (bannerObj.image) bannerObj.image = normalizeImage(bannerObj.image);
       if (bannerObj.thumb) bannerObj.thumb = normalizeImage(bannerObj.thumb);
       return bannerObj;
@@ -164,7 +168,7 @@ exports.getActiveBanners = async (req, res) => {
 
 exports.getBanner = async (req, res) => {
   try {
-    const banner = await Banner.findById(req.params.id);
+    const banner = await Banner.findById(req.params.id).lean();
 
     if (!banner) {
       return res.status(404).json({
@@ -181,7 +185,7 @@ exports.getBanner = async (req, res) => {
     }
 
     // Ensure image URL is properly formatted
-    const bannerObj = banner.toObject();
+    const bannerObj = banner;
     if (bannerObj.image) bannerObj.image = normalizeImage(bannerObj.image);
     if (bannerObj.thumb) bannerObj.thumb = normalizeImage(bannerObj.thumb);
 
@@ -296,6 +300,7 @@ exports.updateBanner = async (req, res) => {
       req.body,
       { new: true, runValidators: true }
     );
+    invalidatePublicBannerCache();
 
     // Ensure image URL is properly formatted
     const bannerObj = updatedBanner.toObject();
@@ -347,6 +352,7 @@ exports.deleteBanner = async (req, res) => {
 
     await deleteBannerAssets([banner.imagePublicId, banner.thumbPublicId]);
     await banner.deleteOne();
+    invalidatePublicBannerCache();
 
     res.json({
       success: true,
@@ -382,6 +388,7 @@ exports.toggleBannerActive = async (req, res) => {
     banner.isActive = !banner.isActive;
     banner.updatedAt = Date.now();
     await banner.save();
+    invalidatePublicBannerCache();
 
     // Ensure image URL is properly formatted
     const bannerObj = banner.toObject();

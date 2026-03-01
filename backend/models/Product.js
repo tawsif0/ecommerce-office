@@ -378,6 +378,11 @@ productSchema.pre("findOneAndUpdate", function (next) {
   next();
 });
 
+productSchema.index({ isActive: 1, approvalStatus: 1, createdAt: -1 });
+productSchema.index({ isActive: 1, productType: 1, approvalStatus: 1, createdAt: -1 });
+productSchema.index({ vendor: 1, createdAt: -1 });
+productSchema.index({ category: 1, isActive: 1, createdAt: -1 });
+
 const Product = mongoose.model("Product", productSchema);
 
 module.exports = Product;

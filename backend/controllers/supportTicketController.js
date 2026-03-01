@@ -1,6 +1,11 @@
 const SupportTicket = require("../models/SupportTicket");
 const Vendor = require("../models/Vendor");
 const { isAdmin, getUserId, getVendorForUser } = require("../utils/marketplaceAccess");
+const {
+  sendSupportTicketCreatedEmail,
+  sendSupportTicketReplyEmail,
+  sendSupportTicketStatusEmail,
+} = require("../utils/emailTemplates");
 
 const mapSenderRole = (user) => {
   const role = String(user?.userType || "").toLowerCase();
@@ -114,6 +119,25 @@ exports.createTicket = async (req, res) => {
       .populate("createdBy", "name email userType")
       .populate("vendor", "storeName slug")
       .populate("messages.sender", "name email userType");
+
+    const creatorEmail = String(populated?.createdBy?.email || "").trim().toLowerCase();
+    const supportInbox = String(process.env.SUPPORT_EMAIL || "").trim().toLowerCase();
+
+    if (creatorEmail) {
+      sendSupportTicketCreatedEmail({
+        recipientEmail: creatorEmail,
+        ticket: populated,
+        isSupportInbox: false,
+      }).catch(() => null);
+    }
+
+    if (supportInbox && supportInbox !== creatorEmail) {
+      sendSupportTicketCreatedEmail({
+        recipientEmail: supportInbox,
+        ticket: populated,
+        isSupportInbox: true,
+      }).catch(() => null);
+    }
 
     res.status(201).json({
       success: true,
@@ -271,6 +295,20 @@ exports.replyTicket = async (req, res) => {
       .populate("assignedAdmin", "name email")
       .populate("messages.sender", "name email userType");
 
+    const ticketOwnerEmail = String(populated?.createdBy?.email || "")
+      .trim()
+      .toLowerCase();
+    const senderId = String(getUserId(req.user) || "");
+    const ticketOwnerId = String(populated?.createdBy?._id || "");
+
+    if (ticketOwnerEmail && senderId && senderId !== ticketOwnerId) {
+      sendSupportTicketReplyEmail({
+        recipientEmail: ticketOwnerEmail,
+        ticket: populated,
+        senderName: String(req.user?.name || req.user?.email || "Support"),
+      }).catch(() => null);
+    }
+
     res.json({
       success: true,
       message: "Reply added",
@@ -323,6 +361,7 @@ exports.updateTicketStatus = async (req, res) => {
       });
     }
 
+    const previousStatus = ticket.status;
     ticket.status = normalizedStatus;
     if (["resolved", "closed"].includes(normalizedStatus)) {
       ticket.resolvedAt = new Date();
@@ -337,6 +376,16 @@ exports.updateTicketStatus = async (req, res) => {
       .populate("vendor", "storeName slug")
       .populate("assignedAdmin", "name email")
       .populate("messages.sender", "name email userType");
+
+    const ownerEmail = String(populated?.createdBy?.email || "").trim().toLowerCase();
+    if (ownerEmail) {
+      sendSupportTicketStatusEmail({
+        recipientEmail: ownerEmail,
+        ticket: populated,
+        oldStatus: previousStatus,
+        newStatus: normalizedStatus,
+      }).catch(() => null);
+    }
 
     res.json({
       success: true,

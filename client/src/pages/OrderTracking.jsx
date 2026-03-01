@@ -109,6 +109,24 @@ const ProductImage = ({ src, alt, className }) => {
     />
   );
 };
+
+const ORDER_PROGRESS_STATUSES = [
+  "pending",
+  "confirmed",
+  "processing",
+  "shipped",
+  "delivered",
+];
+
+const formatPaymentMethodLabel = (value) => {
+  const raw = String(value || "").trim();
+  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (normalized === "cod" || normalized === "cash on delivery") {
+    return "Cash on Delivery";
+  }
+  return raw.replace(/_/g, " ");
+};
+
 const OrderTracking = () => {
   const { orderNumber } = useParams();
   const navigate = useNavigate();
@@ -168,6 +186,15 @@ const OrderTracking = () => {
           borderColor: "border-yellow-200",
           message: "Order is pending confirmation",
         };
+      case "confirmed":
+        return {
+          icon: FiCheckCircle,
+          color: "#06b6d4",
+          bgColor: "bg-cyan-50",
+          textColor: "text-cyan-700",
+          borderColor: "border-cyan-200",
+          message: "Order has been confirmed",
+        };
       case "processing":
         return {
           icon: FiPackage,
@@ -203,6 +230,15 @@ const OrderTracking = () => {
           textColor: "text-red-700",
           borderColor: "border-red-200",
           message: "Order has been cancelled",
+        };
+      case "returned":
+        return {
+          icon: FiXCircle,
+          color: "#f97316",
+          bgColor: "bg-orange-50",
+          textColor: "text-orange-700",
+          borderColor: "border-orange-200",
+          message: "Order has been returned",
         };
       default:
         return {
@@ -370,36 +406,31 @@ const OrderTracking = () => {
                   <div
                     className="absolute h-full bg-black rounded-full transition-all duration-500"
                     style={{
-                      width:
-                        order.orderStatus === "cancelled"
-                          ? "0%"
-                          : order.orderStatus === "pending"
-                            ? "0%"
-                            : order.orderStatus === "processing"
-                              ? "33%"
-                              : order.orderStatus === "shipped"
-                                ? "66%"
-                                : "100%",
+                      width: (() => {
+                        if (order.orderStatus === "cancelled") return "0%";
+                        if (order.orderStatus === "returned") return "100%";
+                        const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
+                          order.orderStatus,
+                        );
+                        if (currentIndex <= 0) return "0%";
+                        const maxIndex = Math.max(1, ORDER_PROGRESS_STATUSES.length - 1);
+                        return `${(currentIndex / maxIndex) * 100}%`;
+                      })(),
                     }}
                   ></div>
                 </div>
 
                 {/* Icons container - appears on top naturally */}
                 <div className="flex justify-between items-center relative">
-                  {["pending", "processing", "shipped", "delivered"].map(
-                    (status, index) => {
+                  {ORDER_PROGRESS_STATUSES.map((status, index) => {
                       const isActive = (() => {
-                        const statusOrder = [
-                          "pending",
-                          "processing",
-                          "shipped",
-                          "delivered",
-                        ];
-                        const currentIndex = statusOrder.indexOf(
+                        const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
                           order.orderStatus,
                         );
                         return order.orderStatus === "cancelled"
                           ? false
+                          : order.orderStatus === "returned"
+                            ? true
                           : index <= currentIndex;
                       })();
 
@@ -430,10 +461,44 @@ const OrderTracking = () => {
                           </span>
                         </div>
                       );
-                    },
-                  )}
+                    })}
                 </div>
               </div>
+
+              {Array.isArray(order.statusTimeline) && order.statusTimeline.length > 0 ? (
+                <div className="mt-6 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <h3 className="text-sm font-semibold text-black mb-3">Status Timeline</h3>
+                  <div className="space-y-2">
+                    {order.statusTimeline
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(a?.changedAt || 0).getTime() -
+                          new Date(b?.changedAt || 0).getTime(),
+                      )
+                      .map((entry, index) => (
+                        <div
+                          key={`${entry?.status || "status"}-${index}`}
+                          className="bg-white border border-gray-200 rounded-md px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-black uppercase">
+                              {entry?.status || "-"}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {entry?.changedAt
+                                ? new Date(entry.changedAt).toLocaleString()
+                                : "N/A"}
+                            </span>
+                          </div>
+                          {entry?.note ? (
+                            <p className="text-xs text-gray-600 mt-1">{entry.note}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
             </motion.div>
 
             {/* Order Details */}
@@ -487,7 +552,7 @@ const OrderTracking = () => {
                     <p className="text-sm">
                       <span className="text-gray-600">Method:</span>{" "}
                       <span className="font-medium capitalize">
-                        {order.paymentMethod?.replace(/_/g, " ")}
+                        {formatPaymentMethodLabel(order.paymentMethod)}
                       </span>
                     </p>
                     <p className="text-sm">
@@ -707,6 +772,41 @@ const OrderTracking = () => {
                   </span>
                 </div>
               </div>
+
+              {(order.courier?.consignmentId ||
+                order.courier?.trackingNumber ||
+                order.courier?.providerName) && (
+                <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Courier</span>
+                    <span className="font-medium">
+                      {order.courier?.providerName || "Courier"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Consignment</span>
+                    <span className="font-medium">
+                      {order.courier?.consignmentId || "N/A"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Tracking No</span>
+                    <span className="font-medium">
+                      {order.courier?.trackingNumber || "N/A"}
+                    </span>
+                  </div>
+                  {order.courier?.trackingUrl ? (
+                    <a
+                      href={order.courier.trackingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-blue-700 underline"
+                    >
+                      Open Courier Tracking
+                    </a>
+                  ) : null}
+                </div>
+              )}
 
               {/* Actions */}
               <div className="mt-6 space-y-3">

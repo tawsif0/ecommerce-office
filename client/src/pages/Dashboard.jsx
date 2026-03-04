@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiLogOut } from "react-icons/fi";
@@ -362,7 +362,7 @@ const Dashboard = () => {
     toast.error("You do not have access to this module");
   }, [marketplaceMode, activeTab, user]);
 
-  const handleTabChange = (tab) => {
+  const handleTabChange = useCallback((tab) => {
     // If it's "home" tab, navigate to homepage
     if (tab === "home") {
       navigate("/");
@@ -397,7 +397,20 @@ const Dashboard = () => {
     if (isMobile) {
       setIsMobileOpen(false);
     }
-  };
+  }, [isMobile, marketplaceMode, navigate, user]);
+
+  useEffect(() => {
+    const handleVoiceTabChange = (event) => {
+      const tab = String(event?.detail?.tab || "").trim();
+      if (!tab) return;
+      handleTabChange(tab);
+    };
+
+    window.addEventListener("voiceDashboardTabChange", handleVoiceTabChange);
+    return () => {
+      window.removeEventListener("voiceDashboardTabChange", handleVoiceTabChange);
+    };
+  }, [handleTabChange]);
 
   const handleMarketplaceModeChange = (mode) => {
     setMarketplaceMode(normalizeMarketplaceMode(mode));

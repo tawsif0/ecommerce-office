@@ -13,6 +13,7 @@ const { AccountEntry } = require("../models/AccountEntry");
 const { readMarketplaceMode } = require("../middlewares/marketplaceMode");
 const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
 const { buildUniqueStoreSlug } = require("../utils/vendorUtils");
+const { getVoiceDatasetForClient } = require("../utils/voiceDataset");
 
 const createTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -2117,5 +2118,27 @@ exports.updateCustomerBlacklist = async (req, res) => {
   } catch (error) {
     console.error("Update customer blacklist error:", error);
     return res.status(500).json({ error: error.message || "Server error" });
+  }
+};
+
+exports.getVoiceDataset = async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const force = String(req.query?.force || "").trim() === "1";
+    const dataset = getVoiceDatasetForClient({ force });
+
+    return res.status(200).json({
+      success: true,
+      dataset,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: "Failed to build voice dataset",
+      details: error.message,
+    });
   }
 };

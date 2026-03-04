@@ -1,4 +1,14 @@
 @import "tailwindcss";
+
+:root {
+  --brand-theme-color: #000000;
+  --brand-font-family: inherit;
+}
+
+body {
+  font-family: var(--brand-font-family, inherit);
+}
+
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;

@@ -7,8 +7,53 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useCart } from "../../context/CartContext";
 import { FiPackage } from "react-icons/fi";
+import { fetchPublicSettings } from "../../utils/publicSettings";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+
+const normalizeThemeColor = (value) => {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (/^#[0-9a-f]{3}$/i.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+  }
+
+  if (/^#[0-9a-f]{6}$/i.test(raw)) {
+    return raw;
+  }
+
+  return "#000000";
+};
+
+const getReadableTextColor = (backgroundHex) => {
+  const normalized = normalizeThemeColor(backgroundHex);
+  const r = Number.parseInt(normalized.slice(1, 3), 16);
+  const g = Number.parseInt(normalized.slice(3, 5), 16);
+  const b = Number.parseInt(normalized.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? "#111827" : "#ffffff";
+};
+
+const toPublicAssetUrl = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("data:")
+  ) {
+    return raw;
+  }
+
+  if (raw.startsWith("/")) {
+    return baseUrl ? `${baseUrl}${raw}` : raw;
+  }
+
+  return baseUrl ? `${baseUrl}/${raw.replace(/^\/+/, "")}` : raw;
+};
 
 const Navbar = () => {
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
@@ -55,6 +100,7 @@ const Navbar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState("user");
+  const [publicSettings, setPublicSettings] = useState(null);
   const { cartCount } = useCart();
   const categoryIdSet = useMemo(
     () => new Set(categoryProductIds),
@@ -68,6 +114,33 @@ const Navbar = () => {
       return true;
     });
   }, [categories, hasCategoryProductIndex, categoryIdSet]);
+
+  const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
+  const contact = useMemo(() => publicSettings?.contact || {}, [publicSettings]);
+  const brandName = useMemo(() => {
+    const resolved = String(website?.storeName || "E-Commerce").trim();
+    return resolved || "E-Commerce";
+  }, [website?.storeName]);
+  const brandLogoUrl = useMemo(
+    () => toPublicAssetUrl(website?.logoUrl || ""),
+    [website?.logoUrl],
+  );
+  const themeColor = useMemo(
+    () => normalizeThemeColor(website?.themeColor),
+    [website?.themeColor],
+  );
+  const themeTextColor = useMemo(
+    () => getReadableTextColor(themeColor),
+    [themeColor],
+  );
+  const supportPhone = useMemo(() => {
+    const resolved = String(contact?.phone1 || "").trim();
+    return resolved || "+880 1700-000000";
+  }, [contact?.phone1]);
+  const supportEmail = useMemo(() => {
+    const resolved = String(contact?.email || "").trim();
+    return resolved || "support@demo.com";
+  }, [contact?.email]);
 
   // Helper function to detect if query looks like an order number
   const isOrderNumberQuery = (query) => {
@@ -95,6 +168,29 @@ const Navbar = () => {
         setUserRole("user");
       }
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPublicSettings = async (force = false) => {
+      const settings = await fetchPublicSettings({ force });
+      if (!cancelled) {
+        setPublicSettings(settings);
+      }
+    };
+
+    loadPublicSettings(false);
+
+    const handleSettingsUpdated = () => {
+      loadPublicSettings(true);
+    };
+
+    window.addEventListener("publicSettingsUpdated", handleSettingsUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("publicSettingsUpdated", handleSettingsUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -597,16 +693,19 @@ const Navbar = () => {
   return (
     <header className="font-sans">
       {/* Top bar - Hidden on mobile */}
-      <div className="hidden lg:block bg-linear-to-r from-gray-900 to-black py-1.5 px-4">
-        <div className="max-w-7xl mx-auto flex justify-end items-center text-xs text-gray-300">
+      <div
+        className="hidden lg:block py-1.5 px-4"
+        style={{ backgroundColor: themeColor, color: `${themeTextColor}CC` }}
+      >
+        <div className="max-w-7xl mx-auto flex justify-end items-center text-xs">
           <div className="flex items-center space-x-6">
             {/* Phone - Clickable */}
             <a
-              href="tel:+919876543210"
-              className="flex items-center space-x-2 group hover:text-white transition-colors duration-200"
+              href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+              className="flex items-center space-x-2 group transition-colors duration-200"
             >
               <svg
-                className="w-4 h-4 text-gray-300 group-hover:text-white transition-transform duration-200 group-hover:scale-110"
+                className="w-4 h-4 transition-transform duration-200 group-hover:scale-110"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
@@ -616,16 +715,16 @@ const Navbar = () => {
               >
                 <path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
               </svg>
-              <span className="group-hover:underline">(+91) 9876-543-210</span>
+              <span className="group-hover:underline">{supportPhone}</span>
             </a>
 
             {/* Email - Clickable */}
             <a
-              href="mailto:support@demo.com"
-              className="flex items-center space-x-2 group hover:text-white transition-colors duration-200"
+              href={`mailto:${supportEmail}`}
+              className="flex items-center space-x-2 group transition-colors duration-200"
             >
               <svg
-                className="w-4 h-4 text-gray-300 group-hover:text-white transition-transform duration-200 group-hover:scale-110"
+                className="w-4 h-4 transition-transform duration-200 group-hover:scale-110"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
@@ -635,7 +734,7 @@ const Navbar = () => {
               >
                 <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              <span className="group-hover:underline">support@demo.com</span>
+              <span className="group-hover:underline">{supportEmail}</span>
             </a>
           </div>
         </div>
@@ -647,8 +746,15 @@ const Navbar = () => {
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <div className="flex items-center lg:hidden">
-              <Link to="/" className="text-2xl font-bold text-black">
-                E-Commerce
+              <Link to="/" className="flex items-center gap-2 text-2xl font-bold text-black">
+                {brandLogoUrl ? (
+                  <img
+                    src={brandLogoUrl}
+                    alt={brandName}
+                    className="h-8 w-8 rounded-lg object-cover border border-gray-200"
+                  />
+                ) : null}
+                <span>{brandName}</span>
               </Link>
             </div>
 
@@ -1614,13 +1720,25 @@ const Navbar = () => {
       </nav>
 
       {/* Bottom Navigation Bar (Desktop only) */}
-      <div className="hidden lg:block bg-linear-to-r from-gray-900 to-black">
+      <div
+        className="hidden lg:block"
+        style={{ backgroundColor: themeColor, color: themeTextColor }}
+      >
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between px-8">
             {/* Logo */}
             <div className="flex items-center">
               <Link to="/" className="shrink-0 flex items-center py-4">
-                <div className="text-2xl font-bold text-white">E-Commerce</div>
+                <div className="flex items-center gap-2">
+                  {brandLogoUrl ? (
+                    <img
+                      src={brandLogoUrl}
+                      alt={brandName}
+                      className="h-9 w-9 rounded-lg object-cover border border-white/30"
+                    />
+                  ) : null}
+                  <div className="text-2xl font-bold">{brandName}</div>
+                </div>
               </Link>
             </div>
 
@@ -1643,12 +1761,14 @@ const Navbar = () => {
                     key={item}
                     to={to}
                     className={({ isActive }) =>
-                      `py-4 font-medium transition-colors duration-200 ${
-                        isActive
-                          ? "text-white border-b-2 border-white"
-                          : "text-gray-300 hover:text-white hover:border-b-2 hover:border-gray-400"
+                      `py-4 font-medium transition-opacity duration-200 ${
+                        isActive ? "opacity-100 border-b-2" : "opacity-80 hover:opacity-100"
                       }`
                     }
+                    style={({ isActive }) => ({
+                      color: themeTextColor,
+                      borderColor: isActive ? themeTextColor : "transparent",
+                    })}
                   >
                     {item}
                   </NavLink>

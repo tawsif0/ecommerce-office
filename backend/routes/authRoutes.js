@@ -40,6 +40,7 @@ router.get("/admin/all-users", auth, authController.getAllUsers);
 router.patch("/admin/users/:userId", auth, authController.updateUserByAdmin);
 router.get("/admin/system-stats", auth, authController.getSystemStats);
 router.get("/admin/customer-risk", auth, authController.getCustomerRiskProfiles);
+router.get("/admin/voice-dataset", auth, authController.getVoiceDataset);
 router.get(
   "/admin/customers/:userId/profile",
   auth,

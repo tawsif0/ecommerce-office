@@ -15,6 +15,29 @@ import Navbar from "./Home/components/Navbar";
 import Footer from "./Home/components/Footer";
 import { fetchPublicSettings } from "./utils/publicSettings";
 import { pushDataLayerEvent } from "./utils/marketingDataLayer";
+import GlobalVoiceAssistant from "./components/GlobalVoiceAssistant";
+
+const normalizeThemeColor = (value) => {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (/^#[0-9a-f]{3}$/i.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+  }
+
+  if (/^#[0-9a-f]{6}$/i.test(raw)) {
+    return raw;
+  }
+
+  return "#000000";
+};
+
+const normalizeFontFamily = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw || raw.toLowerCase() === "inherit") return "inherit";
+  return raw;
+};
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Login = lazy(() => import("./pages/Login"));
@@ -142,6 +165,36 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
+    const applyWebsiteTheme = async (force = false) => {
+      const settings = await fetchPublicSettings({ force });
+      if (cancelled) return;
+
+      const website = settings?.website || {};
+      const themeColor = normalizeThemeColor(website?.themeColor);
+      const fontFamily = normalizeFontFamily(website?.fontFamily);
+
+      if (typeof document !== "undefined") {
+        document.documentElement.style.setProperty("--brand-theme-color", themeColor);
+        document.documentElement.style.setProperty("--brand-font-family", fontFamily);
+      }
+    };
+
+    applyWebsiteTheme(false);
+
+    const handleSettingsUpdated = () => {
+      applyWebsiteTheme(true);
+    };
+
+    window.addEventListener("publicSettingsUpdated", handleSettingsUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("publicSettingsUpdated", handleSettingsUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const appendScriptOnce = (id, src, options = {}) => {
       if (document.getElementById(id)) return;
       const script = document.createElement("script");
@@ -229,6 +282,7 @@ function App() {
         gutter={10}
         toastOptions={GLOBAL_TOAST_OPTIONS}
       />
+      <GlobalVoiceAssistant />
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           {/* Auth routes - redirect if already logged in */}

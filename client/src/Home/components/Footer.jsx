@@ -19,6 +19,43 @@ import {
 import { FaMapMarkerAlt } from "react-icons/fa";
 import { fetchPublicSettings } from "../../utils/publicSettings";
 
+const baseUrl = import.meta.env.VITE_API_URL || "";
+
+const normalizeThemeColor = (value) => {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (/^#[0-9a-f]{3}$/i.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+  }
+
+  if (/^#[0-9a-f]{6}$/i.test(raw)) {
+    return raw;
+  }
+
+  return "#000000";
+};
+
+const toPublicAssetUrl = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("data:")
+  ) {
+    return raw;
+  }
+
+  if (raw.startsWith("/")) {
+    return baseUrl ? `${baseUrl}${raw}` : raw;
+  }
+
+  return baseUrl ? `${baseUrl}/${raw.replace(/^\/+/, "")}` : raw;
+};
+
 const Footer = () => {
   const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
@@ -69,17 +106,24 @@ const Footer = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const loadSettings = async () => {
-      const data = await fetchPublicSettings();
+    const loadSettings = async (force = false) => {
+      const data = await fetchPublicSettings({ force });
       if (!cancelled) {
         setPublicSettings(data);
       }
     };
 
-    loadSettings();
+    loadSettings(false);
+
+    const handleSettingsUpdated = () => {
+      loadSettings(true);
+    };
+
+    window.addEventListener("publicSettingsUpdated", handleSettingsUpdated);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("publicSettingsUpdated", handleSettingsUpdated);
     };
   }, []);
 
@@ -116,6 +160,14 @@ const Footer = () => {
   }, [publicSettings]);
 
   const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
+  const brandColor = useMemo(
+    () => normalizeThemeColor(website?.themeColor),
+    [website?.themeColor],
+  );
+  const brandLogo = useMemo(
+    () => toPublicAssetUrl(website?.logoUrl || ""),
+    [website?.logoUrl],
+  );
 
   // Quick links configuration
   const quickLinks = [
@@ -185,8 +237,15 @@ const Footer = () => {
                   onClick={() => handleNavigation("/")}
                   className="inline-block cursor-pointer"
                 >
-                  <h2 className="text-3xl font-bold mb-4 hover:opacity-90 transition-opacity">
-                    <span className="text-white">
+                  <h2 className="text-3xl font-bold mb-4 hover:opacity-90 transition-opacity flex items-center gap-3">
+                    {brandLogo ? (
+                      <img
+                        src={brandLogo}
+                        alt={String(website.storeName || "Store")}
+                        className="h-10 w-10 rounded-xl object-cover border border-white/30"
+                      />
+                    ) : null}
+                    <span style={{ color: brandColor }}>
                       {String(website.storeName || "E-Commerce")}
                     </span>
                   </h2>

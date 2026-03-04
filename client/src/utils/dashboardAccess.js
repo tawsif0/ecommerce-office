@@ -142,7 +142,6 @@ const VENDOR_ALLOWED_TABS = new Set([
   "module-support",
   "module-geolocation",
   "module-abandoned",
-  "module-voice",
 ]);
 
 const STAFF_ALLOWED_TABS = new Set([
@@ -166,7 +165,6 @@ const STAFF_ALLOWED_TABS = new Set([
   "module-support",
   "module-geolocation",
   "module-abandoned",
-  "module-voice",
 ]);
 
 const USER_ALLOWED_TABS = new Set([
@@ -179,7 +177,6 @@ const USER_ALLOWED_TABS = new Set([
   "module-bookings",
   "module-auctions",
   "module-support",
-  "module-voice",
 ]);
 
 const ADMIN_TAB_PERMISSION_MAP = {

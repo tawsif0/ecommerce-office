@@ -3,14 +3,108 @@ import axios from "axios";
 const baseUrl = import.meta.env.VITE_API_URL;
 const CACHE_KEY = "publicStoreSettings";
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+const DEFAULT_NAV_LINK_PATHS = {
+  "daily deals": "/shop?collection=deals",
+  "top categories": "/#top-categories",
+  "new arrivals": "/shop?collection=new-arrivals",
+  "buyer protection": "/faqs#buyer-protection",
+  "track order": "/track-order",
+};
+const LEGACY_CATALOG_TITLE = "{storeName} catalog with stock-aware shopping";
+const LEGACY_CATALOG_DESCRIPTION =
+  "Browse categories, compare pricing modes, and surface only the stock visibility you choose to publish.";
+const DEFAULT_CATALOG_TITLE = "Shop the full {storeName} catalog";
+const DEFAULT_CATALOG_DESCRIPTION =
+  "Browse categories, compare pricing options, and discover curated deals across the marketplace.";
+const DEFAULT_STOREFRONT_NAV_LINKS = [
+  { label: "Daily Deals", path: DEFAULT_NAV_LINK_PATHS["daily deals"] },
+  { label: "Top Categories", path: DEFAULT_NAV_LINK_PATHS["top categories"] },
+  { label: "New Arrivals", path: DEFAULT_NAV_LINK_PATHS["new arrivals"] },
+  { label: "Buyer Protection", path: DEFAULT_NAV_LINK_PATHS["buyer protection"] },
+  { label: "Track Order", path: DEFAULT_NAV_LINK_PATHS["track order"] },
+];
+const DEFAULT_STOREFRONT_TRUST_BULLETS = [
+  "COD-friendly Bangladesh checkout flow",
+  "Product stock only shows publicly when enabled",
+  "Orders and purchases already sync inventory",
+];
+
+const cloneNavLinks = (links = DEFAULT_STOREFRONT_NAV_LINKS) =>
+  links.map((entry) => ({
+    label: String(entry?.label || "").trim(),
+    path: String(entry?.path || "").trim() || "/",
+  }));
+
+const normalizeStorefrontText = (value, fallback, legacyValues = []) => {
+  const normalized = String(value || "").trim();
+  if (!normalized || legacyValues.includes(normalized)) {
+    return fallback;
+  }
+  return normalized;
+};
+
+const normalizeStringList = (value, fallback = []) => {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[\n,]+/)
+      : [];
+  const uniqueValues = new Set();
+
+  source.forEach((entry) => {
+    const normalized = String(entry || "").trim();
+    if (normalized) {
+      uniqueValues.add(normalized);
+    }
+  });
+
+  const items = Array.from(uniqueValues);
+  return items.length > 0 ? items : [...fallback];
+};
+
+const normalizeStorefrontNavLinks = (value) => {
+  if (!Array.isArray(value)) {
+    return cloneNavLinks();
+  }
+
+  const uniqueValues = new Map();
+  value.forEach((entry) => {
+    const label = String(entry?.label || "").trim();
+    const normalizedLabel = label.toLowerCase();
+    const inputPath = String(entry?.path || "").trim();
+    const defaultPath = DEFAULT_NAV_LINK_PATHS[normalizedLabel] || "/";
+    const path =
+      !inputPath ||
+      (normalizedLabel === "daily deals" && inputPath === "/shop") ||
+      (normalizedLabel === "top categories" && inputPath === "/shop") ||
+      (normalizedLabel === "new arrivals" && inputPath === "/shop") ||
+      (normalizedLabel === "buyer protection" && inputPath === "/faqs") ||
+      (normalizedLabel === "track order" && inputPath === "/contact")
+        ? defaultPath
+        : inputPath;
+    if (!label) return;
+    uniqueValues.set(`${label}|${path}`, { label, path });
+  });
+
+  const items = Array.from(uniqueValues.values());
+  return items.length > 0 ? items : cloneNavLinks();
+};
 
 const DEFAULT_SETTINGS = {
   isInitialSetup: false,
   marketplaceMode: "multi",
   vendorRegistrationEnabled: true,
+  publicStockSummaryEnabled: false,
+  marketplace: {
+    marketplaceMode: "multi",
+    vendorRegistrationEnabled: true,
+    publicStockSummaryEnabled: false,
+  },
   website: {
     storeName: "E-Commerce",
     tagline: "",
+    logoMode: "image",
+    logoText: "",
     logoUrl: "",
     themeColor: "#000000",
     fontFamily: "inherit",
@@ -65,6 +159,51 @@ const DEFAULT_SETTINGS = {
     cityOptions: [],
     subCityOptions: [],
   },
+  storefront: {
+    marketLabel: "Bangladesh marketplace",
+    categoryRailEyebrow: "Shop by Category",
+    categoryRailTitle: "All Departments",
+    categoryRailButtonLabel: "Explore marketplace",
+    heroFallbackTitle: "{storeName} deals built for Bangladesh shoppers",
+    heroFallbackDescription:
+      "Organize campaigns, categories, and product discovery in a stronger marketplace-style landing flow.",
+    heroPrimaryLabel: "Shop campaign",
+    heroSecondaryLabel: "Browse all products",
+    sidebarControlEyebrow: "Marketplace control",
+    sidebarControlTitle: "Shop by stock, not guesswork",
+    sidebarControlDescription:
+      "Orders reserve stock, purchases increase stock, and public stock remains optional per product.",
+    sidebarControlButtonLabel: "Open storefront",
+    discoveryEyebrow: "Top discovery lanes",
+    highlightsEyebrow: "Marketplace Highlights",
+    highlightsTitle: "{storeName} shopping channels built for fast browsing",
+    highlightsDescription:
+      "Bring campaign-style discovery, category-led shelves, and strong stock visibility into one marketplace flow.",
+    flashEyebrow: "Flash Picks",
+    flashTitle: "Deal-driven shelves inspired by global marketplaces",
+    flashDescription:
+      "Build home discovery around campaigns, category lanes, and clear price states without breaking your current commerce wiring.",
+    flashPrimaryLabel: "Open shop",
+    flashSecondaryLabel: "Open dashboard",
+    trustEyebrow: "Buyer trust",
+    trustBullets: [...DEFAULT_STOREFRONT_TRUST_BULLETS],
+    topCategoriesEyebrow: "Top categories",
+    dealsEyebrow: "Limited-price shelves",
+    dealsTitle: "Flash deal picks",
+    dealsButtonLabel: "See all",
+    categoryFloorEyebrow: "Category channel",
+    categoryFloorDescription:
+      "Discover the main shelf, active stock, and featured products in this category.",
+    categoryFloorButtonLabel: "Browse category",
+    categoryFloorPanelButtonLabel: "Shop now",
+    recommendedEyebrow: "Recommended shelf",
+    recommendedTitle: "New arrivals for the marketplace",
+    recommendedButtonLabel: "View catalog",
+    catalogTitle: DEFAULT_CATALOG_TITLE,
+    catalogDescription: DEFAULT_CATALOG_DESCRIPTION,
+    footerCaption: "Built for Bangladesh marketplace operations",
+    navQuickLinks: cloneNavLinks(),
+  },
 };
 
 let inMemorySettings = null;
@@ -76,6 +215,13 @@ const normalizeMarketplaceMode = (value) =>
     .toLowerCase() === "single"
     ? "single"
     : "multi";
+
+const normalizeLogoMode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "text"
+    ? "text"
+    : "image";
 
 const mergeSettings = (incoming = {}) => {
   const normalizedMarketplaceMode = normalizeMarketplaceMode(
@@ -91,6 +237,11 @@ const mergeSettings = (incoming = {}) => {
       : vendorRegistrationSource === undefined
         ? DEFAULT_SETTINGS.vendorRegistrationEnabled
         : Boolean(vendorRegistrationSource);
+  const publicStockSummarySource =
+    incoming?.publicStockSummaryEnabled === undefined
+      ? incoming?.marketplace?.publicStockSummaryEnabled
+      : incoming.publicStockSummaryEnabled;
+  const publicStockSummaryEnabled = Boolean(publicStockSummarySource);
 
   return {
     ...DEFAULT_SETTINGS,
@@ -98,7 +249,21 @@ const mergeSettings = (incoming = {}) => {
     isInitialSetup: Boolean(incoming?.isInitialSetup),
     marketplaceMode: normalizedMarketplaceMode,
     vendorRegistrationEnabled,
-    website: { ...DEFAULT_SETTINGS.website, ...(incoming.website || {}) },
+    publicStockSummaryEnabled,
+    marketplace: {
+      ...DEFAULT_SETTINGS.marketplace,
+      ...(incoming.marketplace || {}),
+      marketplaceMode: normalizedMarketplaceMode,
+      vendorRegistrationEnabled,
+      publicStockSummaryEnabled,
+    },
+    website: {
+      ...DEFAULT_SETTINGS.website,
+      ...(incoming.website || {}),
+      logoMode: normalizeLogoMode(incoming?.website?.logoMode),
+      logoText: String(incoming?.website?.logoText || "").trim(),
+      logoUrl: String(incoming?.website?.logoUrl || "").trim(),
+    },
     contact: { ...DEFAULT_SETTINGS.contact, ...(incoming.contact || {}) },
     social: { ...DEFAULT_SETTINGS.social, ...(incoming.social || {}) },
     policies: { ...DEFAULT_SETTINGS.policies, ...(incoming.policies || {}) },
@@ -117,6 +282,25 @@ const mergeSettings = (incoming = {}) => {
       subCityOptions: Array.isArray(incoming?.locations?.subCityOptions)
         ? incoming.locations.subCityOptions
         : DEFAULT_SETTINGS.locations.subCityOptions,
+    },
+    storefront: {
+      ...DEFAULT_SETTINGS.storefront,
+      ...(incoming.storefront || {}),
+      catalogTitle: normalizeStorefrontText(
+        incoming?.storefront?.catalogTitle,
+        DEFAULT_SETTINGS.storefront.catalogTitle,
+        [LEGACY_CATALOG_TITLE],
+      ),
+      catalogDescription: normalizeStorefrontText(
+        incoming?.storefront?.catalogDescription,
+        DEFAULT_SETTINGS.storefront.catalogDescription,
+        [LEGACY_CATALOG_DESCRIPTION],
+      ),
+      trustBullets: normalizeStringList(
+        incoming?.storefront?.trustBullets,
+        DEFAULT_STOREFRONT_TRUST_BULLETS,
+      ),
+      navQuickLinks: normalizeStorefrontNavLinks(incoming?.storefront?.navQuickLinks),
     },
   };
 };
@@ -189,7 +373,22 @@ export const fetchPublicSettings = async ({ force = false } = {}) => {
   }
 };
 
+export const normalizePublicSettingsPayload = (payload = {}) => mergeSettings(payload);
+
 export const getDefaultPublicSettings = () => mergeSettings();
+
+export const primePublicSettingsCache = (settings) => {
+  const normalized = mergeSettings(settings || {});
+  inMemorySettings = normalized;
+  inMemoryTimestamp = Date.now();
+  writeCache(normalized);
+  return normalized;
+};
+
+export const broadcastPublicSettingsUpdated = () => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("publicSettingsUpdated"));
+};
 
 export const invalidatePublicSettingsCache = () => {
   inMemorySettings = null;
@@ -201,4 +400,23 @@ export const invalidatePublicSettingsCache = () => {
   } catch {
     // ignore cache reset issues
   }
+};
+
+export const toPublicAssetUrl = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("data:")
+  ) {
+    return raw;
+  }
+
+  if (raw.startsWith("/")) {
+    return baseUrl ? `${baseUrl}${raw}` : raw;
+  }
+
+  return baseUrl ? `${baseUrl}/${raw.replace(/^\/+/, "")}` : raw;
 };

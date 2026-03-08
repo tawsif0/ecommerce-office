@@ -265,6 +265,35 @@ const DashboardHome = ({ user, onTabChange }) => {
               </motion.div>
             </div>
 
+            <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Commerce Control</p>
+                  <p className="text-xs text-gray-500">
+                    Fast access to stock, order, and catalog operations.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: "Manage Products", tab: "modify-product" },
+                  { label: "Inventory Center", tab: "module-inventory" },
+                  { label: "Create Purchase", tab: "module-purchases" },
+                  { label: "Order List", tab: "order-list" },
+                  { label: "Product Reports", tab: "product-reports" },
+                ].map((action) => (
+                  <button
+                    key={action.tab}
+                    type="button"
+                    onClick={() => onTabChange?.(action.tab)}
+                    className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-black transition hover:border-black hover:bg-white"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                 <p className="text-sm font-semibold text-gray-900 mb-3">Financials</p>
@@ -299,6 +328,12 @@ const DashboardHome = ({ user, onTabChange }) => {
               <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                 <p className="text-sm font-semibold text-gray-900 mb-3">Inventory</p>
                 <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Total Stock Units</span>
+                    <span className="font-semibold text-black">
+                      {Number(systemStats?.inventory?.totalStock || 0)}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Products</span>
                     <span className="font-semibold text-black">
@@ -380,6 +415,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 {[
                   { label: "Add Order", tab: "add-order", icon: ShoppingBagIcon },
                   { label: "Order List", tab: "order-list", icon: ShoppingBagIcon },
+                  { label: "Inventory Center", tab: "module-inventory", icon: ArrowRightIcon },
                   { label: "Customer Risk", tab: "customer-risk", icon: ShieldCheckIcon },
                   { label: "Abandoned Orders", tab: "module-abandoned", icon: TicketIcon },
                   { label: "Campaign Center", tab: "module-campaign-offers", icon: TicketIcon },

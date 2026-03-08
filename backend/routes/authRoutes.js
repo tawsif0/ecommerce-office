@@ -4,6 +4,7 @@ const authController = require("../controllers/authController");
 const paymentController = require("../controllers/paymentController");
 const auth = require("../middlewares/auth");
 const responseCache = require("../middlewares/responseCache");
+const { upload, handleMulterError } = require("../middlewares/upload");
 
 // Public routes
 router.post("/register", authController.registerUser);
@@ -25,6 +26,13 @@ router.get("/admin/settings", auth, authController.getSettings);
 
 // Admin only routes
 router.put("/admin/settings", auth, authController.updateSettings);
+router.post(
+  "/admin/settings/logo-upload",
+  auth,
+  upload.single("logo"),
+  handleMulterError,
+  authController.uploadWebsiteLogo
+);
 router.get(
   "/admin/marketplace-control",
   auth,
@@ -41,6 +49,7 @@ router.patch("/admin/users/:userId", auth, authController.updateUserByAdmin);
 router.get("/admin/system-stats", auth, authController.getSystemStats);
 router.get("/admin/customer-risk", auth, authController.getCustomerRiskProfiles);
 router.get("/admin/voice-dataset", auth, authController.getVoiceDataset);
+router.post("/admin/voice-plan", auth, authController.planVoiceAction);
 router.get(
   "/admin/customers/:userId/profile",
   auth,

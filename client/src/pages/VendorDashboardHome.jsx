@@ -265,6 +265,7 @@ const VendorDashboardHome = ({ onTabChange }) => {
             { label: "Vendor Orders", tab: "vendor-orders", icon: FiPackage },
             { label: "Create Product", tab: "create-product", icon: FiEdit3 },
             { label: "Manage Products", tab: "modify-product", icon: FiEdit3 },
+            { label: "Inventory Center", tab: "module-inventory", icon: FiPackage },
             { label: "Brands", tab: "module-brands", icon: FiTag },
             { label: "Sales Report", tab: "module-business-reports", icon: FiBarChart2 },
             { label: "Suppliers", tab: "module-suppliers", icon: FiPackage },

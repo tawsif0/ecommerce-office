@@ -17,9 +17,8 @@ import {
   FaChevronRight,
 } from "react-icons/fa6";
 import { FaMapMarkerAlt } from "react-icons/fa";
-import { fetchPublicSettings } from "../../utils/publicSettings";
-
-const baseUrl = import.meta.env.VITE_API_URL || "";
+import usePublicSettings from "../../hooks/usePublicSettings";
+import { toPublicAssetUrl } from "../../utils/publicSettings";
 
 const normalizeThemeColor = (value) => {
   const raw = String(value || "")
@@ -37,24 +36,12 @@ const normalizeThemeColor = (value) => {
   return "#000000";
 };
 
-const toPublicAssetUrl = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-
-  if (
-    raw.startsWith("http://") ||
-    raw.startsWith("https://") ||
-    raw.startsWith("data:")
-  ) {
-    return raw;
-  }
-
-  if (raw.startsWith("/")) {
-    return baseUrl ? `${baseUrl}${raw}` : raw;
-  }
-
-  return baseUrl ? `${baseUrl}/${raw.replace(/^\/+/, "")}` : raw;
-};
+const normalizeLogoMode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "text"
+    ? "text"
+    : "image";
 
 const Footer = () => {
   const navigate = useNavigate();
@@ -63,7 +50,7 @@ const Footer = () => {
   const [scrollDir, setScrollDir] = useState("down");
   const [isAtTop, setIsAtTop] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(false);
-  const [publicSettings, setPublicSettings] = useState(null);
+  const { settings: publicSettings } = usePublicSettings();
 
   // Function to handle navigation with scroll to top
   const handleNavigation = (path) => {
@@ -103,30 +90,6 @@ const Footer = () => {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadSettings = async (force = false) => {
-      const data = await fetchPublicSettings({ force });
-      if (!cancelled) {
-        setPublicSettings(data);
-      }
-    };
-
-    loadSettings(false);
-
-    const handleSettingsUpdated = () => {
-      loadSettings(true);
-    };
-
-    window.addEventListener("publicSettingsUpdated", handleSettingsUpdated);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener("publicSettingsUpdated", handleSettingsUpdated);
-    };
-  }, []);
-
   const socialLinks = useMemo(() => {
     const social = publicSettings?.social || {};
     return {
@@ -160,14 +123,30 @@ const Footer = () => {
   }, [publicSettings]);
 
   const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
+  const storefront = useMemo(() => publicSettings?.storefront || {}, [publicSettings]);
   const brandColor = useMemo(
     () => normalizeThemeColor(website?.themeColor),
     [website?.themeColor],
   );
-  const brandLogo = useMemo(
-    () => toPublicAssetUrl(website?.logoUrl || ""),
-    [website?.logoUrl],
+  const brandLogoMode = useMemo(
+    () => normalizeLogoMode(website?.logoMode),
+    [website?.logoMode],
   );
+  const brandLogoText = useMemo(() => {
+    const resolved = String(website?.logoText || "").trim();
+    return resolved || String(website?.storeName || "E-Commerce").trim() || "E-Commerce";
+  }, [website?.logoText, website?.storeName]);
+  const brandLogo = useMemo(
+    () =>
+      brandLogoMode === "text"
+        ? ""
+        : toPublicAssetUrl(website?.logoUrl || ""),
+    [brandLogoMode, website?.logoUrl],
+  );
+  const footerCaption = useMemo(() => {
+    const resolved = String(storefront?.footerCaption || "").trim();
+    return resolved || "Built for Bangladesh marketplace operations";
+  }, [storefront?.footerCaption]);
 
   // Quick links configuration
   const quickLinks = [
@@ -238,16 +217,27 @@ const Footer = () => {
                   className="inline-block cursor-pointer"
                 >
                   <h2 className="text-3xl font-bold mb-4 hover:opacity-90 transition-opacity flex items-center gap-3">
-                    {brandLogo ? (
-                      <img
-                        src={brandLogo}
-                        alt={String(website.storeName || "Store")}
-                        className="h-10 w-10 rounded-xl object-cover border border-white/30"
-                      />
-                    ) : null}
-                    <span style={{ color: brandColor }}>
-                      {String(website.storeName || "E-Commerce")}
-                    </span>
+                    {brandLogoMode === "text" ? (
+                      <span
+                        className="inline-flex min-h-11 items-center rounded-xl px-4 text-lg font-black tracking-[0.08em] text-white"
+                        style={{ backgroundColor: brandColor }}
+                      >
+                        {brandLogoText}
+                      </span>
+                    ) : (
+                      <>
+                        {brandLogo ? (
+                          <img
+                            src={brandLogo}
+                            alt={String(website.storeName || "Store")}
+                            className="h-10 w-10 rounded-xl object-cover border border-white/30"
+                          />
+                        ) : null}
+                        <span style={{ color: brandColor }}>
+                          {String(website.storeName || "E-Commerce")}
+                        </span>
+                      </>
+                    )}
                   </h2>
                 </button>
                 <p className="text-gray-400 leading-relaxed">
@@ -395,7 +385,7 @@ const Footer = () => {
                 Copyright {currentYear} {String(website.storeName || "E-Commerce Store")}. All rights reserved.
               </p>
               <p className="text-gray-500 text-xs mt-1">
-                Built for Bangladesh marketplace operations
+                {footerCaption}
               </p>
             </div>
           </div>

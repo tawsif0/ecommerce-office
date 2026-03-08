@@ -133,6 +133,16 @@ const OrderTracking = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [trackingInput, setTrackingInput] = useState("");
+
+  const submitTrackingLookup = () => {
+    const value = String(trackingInput || "").trim();
+    if (!value) {
+      toast.error("Enter an order number first.");
+      return;
+    }
+    navigate(`/track-order/${encodeURIComponent(value)}`);
+  };
 
   // Fetch order details
   const fetchOrderDetails = async () => {
@@ -159,9 +169,12 @@ const OrderTracking = () => {
 
   useEffect(() => {
     if (orderNumber) {
+      setTrackingInput(orderNumber);
       fetchOrderDetails();
     } else {
-      setError("No order number provided");
+      setTrackingInput("");
+      setOrder(null);
+      setError("");
       setLoading(false);
     }
   }, [orderNumber]);
@@ -289,6 +302,59 @@ const OrderTracking = () => {
   }
 
   if (error || !order) {
+    if (!orderNumber) {
+      return (
+        <div className="min-h-screen bg-gray-50 py-12">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="rounded-[28px] border border-gray-200 bg-white p-8 shadow-sm">
+              <button
+                onClick={() => navigate("/")}
+                className="flex items-center gap-2 text-gray-600 hover:text-black mb-8 transition-colors group"
+              >
+                <FiChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                <span className="font-medium">Back to Home</span>
+              </button>
+
+              <div className="max-w-2xl">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+                  Order Tracking
+                </p>
+                <h1 className="mt-3 text-3xl font-black text-black">
+                  Enter your order number
+                </h1>
+                <p className="mt-3 text-gray-600 leading-7">
+                  Track delivery progress, payment status, and ordered products from a
+                  single tracking screen.
+                </p>
+
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    value={trackingInput}
+                    onChange={(event) => setTrackingInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        submitTrackingLookup();
+                      }
+                    }}
+                    placeholder="Enter order number like ORD-1769584921417-5450"
+                    className="flex-1 rounded-2xl border border-gray-300 px-4 py-3 text-sm focus:border-black focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={submitTrackingLookup}
+                    className="rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
+                  >
+                    Track Order
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

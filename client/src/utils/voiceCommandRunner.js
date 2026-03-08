@@ -34,8 +34,8 @@ const KEYWORDS = {
   purchases: ["purchases", "purchase", "ক্রয়", "পারচেজ"],
   brands: ["brands", "brand", "ব্র্যান্ড"],
   reports: ["reports", "report", "analytics", "রিপোর্ট", "এনালিটিক্স"],
+  inventory: ["inventory", "stock center", "stock management", "stock", "inventory center"],
   accounts: ["accounts", "accounting", "ledger", "হিসাব", "অ্যাকাউন্ট"],
-  payouts: ["payouts", "payout", "vendor payout", "পেআউট", "ভেন্ডর পেমেন্ট"],
   productPage: [
     "product page",
     "create product page",
@@ -59,6 +59,7 @@ const DASHBOARD_HINTS = [
   "open support tickets",
   "open landing pages",
   "open purchases",
+  "open inventory center",
   "open suppliers",
   "open accounts",
   "open brands",
@@ -270,6 +271,9 @@ export const executeVoiceCommand = ({
   if (hasAnyKeyword(text, KEYWORDS.reports)) {
     return openTab("module-business-reports", "Opened business reports");
   }
+  if (hasAnyKeyword(text, KEYWORDS.inventory)) {
+    return openTab("module-inventory", "Opened inventory center");
+  }
   if (hasAnyKeyword(text, KEYWORDS.accounts)) return openTab("module-accounts", "Opened accounts");
 
   if (hasAnyKeyword(text, KEYWORDS.payouts)) {
@@ -318,3 +322,5 @@ export const executeVoiceCommand = ({
   applyAction("Command not mapped. Try one of the suggested commands.");
   return { handled: false };
 };
+
+

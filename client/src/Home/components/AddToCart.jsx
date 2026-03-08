@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaTrash, FaArrowLeft, FaShoppingBag } from "react-icons/fa";
-import { FiMinus, FiPlus } from "react-icons/fi";
+import { FiMinus, FiPlus, FiShield, FiTag, FiTruck } from "react-icons/fi";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { useCart } from "../../context/CartContext";
@@ -90,6 +90,8 @@ const ProductImage = ({ src, alt, className }) => {
   );
 };
 
+const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} TK`;
+
 const AddToCart = () => {
   const navigate = useNavigate();
   const {
@@ -109,6 +111,10 @@ const AddToCart = () => {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   const subtotal = getCartSubtotal();
+  const totalUnits = cartItems.reduce(
+    (sum, item) => sum + Number(item.quantity || 1),
+    0,
+  );
   const discount = Math.min(
     Number(appliedCoupon?.discount || 0),
     Number(subtotal || 0),
@@ -319,200 +325,421 @@ const AddToCart = () => {
 
   if (isLoading) {
     return (
-      <section className="min-h-screen bg-white py-10">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gray-100 rounded-full mb-4">
+      <section className="min-h-screen bg-[#f5f5f5] py-10">
+        <div className="max-w-6xl mx-auto px-4 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border border-gray-200 bg-white shadow-sm mb-4">
             <FaShoppingBag className="w-6 h-6 text-gray-400 animate-pulse" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900">Loading cart...</h3>
+          <p className="mt-2 text-sm text-gray-500">
+            Preparing your marketplace basket.
+          </p>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="min-h-screen bg-white py-8 md:py-12">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="min-h-screen bg-[#f5f5f5] py-8 md:py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
           onClick={() => navigate("/shop")}
-          className="flex items-center gap-2 text-gray-600 hover:text-black mb-8 transition-colors group"
+          className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black mb-6 transition-colors group"
         >
           <FaArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          <span className="text-sm font-medium">Back to Shopping</span>
+          <span>Back to Shopping</span>
         </button>
 
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center">
-            <FaShoppingBag className="w-5 h-5 text-white" />
+        <div className="mb-8 overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+          <div className="grid gap-0 lg:grid-cols-[1.35fr,0.85fr]">
+            <div className="p-6 md:p-8 lg:p-10">
+              <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white">
+                Marketplace Cart
+              </span>
+              <div className="mt-5 max-w-2xl">
+                <h1 className="text-3xl font-bold tracking-tight text-black md:text-4xl">
+                  Review products, lock your pricing, and move to checkout fast.
+                </h1>
+                <p className="mt-3 text-sm leading-6 text-gray-600 md:text-base">
+                  Your basket keeps coupon pricing synced, preserves product options,
+                  and prepares delivery across Bangladesh before payment.
+                </p>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                    Products
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-black">{cartCount}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Distinct items in cart
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                    Units
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-black">{totalUnits}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Total quantities selected
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                    Current Total
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-black">
+                    {formatCurrency(total)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Coupon adjusts automatically
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 bg-[radial-gradient(circle_at_top_left,_rgba(0,0,0,0.08),_transparent_60%),linear-gradient(135deg,_#111111_0%,_#2a2a2a_100%)] p-6 text-white md:p-8 lg:border-l lg:border-t-0 lg:p-10">
+              <div className="max-w-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
+                  Checkout Benefits
+                </p>
+                <h2 className="mt-4 text-2xl font-semibold leading-tight">
+                  Built for quick ordering with fewer mistakes.
+                </h2>
+                <div className="mt-6 space-y-3">
+                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <FiShield className="mt-0.5 h-5 w-5 shrink-0 text-white" />
+                    <div>
+                      <p className="text-sm font-semibold">Protected checkout</p>
+                      <p className="mt-1 text-xs leading-5 text-white/70">
+                        Product options, quantities, and pricing stay aligned into the
+                        order flow.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <FiTruck className="mt-0.5 h-5 w-5 shrink-0 text-white" />
+                    <div>
+                      <p className="text-sm font-semibold">Bangladesh-ready delivery</p>
+                      <p className="mt-1 text-xs leading-5 text-white/70">
+                        Shipping is estimated later using destination and vendor rules.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <FiTag className="mt-0.5 h-5 w-5 shrink-0 text-white" />
+                    <div>
+                      <p className="text-sm font-semibold">Coupon-safe totals</p>
+                      <p className="mt-1 text-xs leading-5 text-white/70">
+                        Applied coupon discounts stay refreshed whenever your cart changes.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-black">Your Cart ({cartCount})</h1>
         </div>
 
         {cartItems.length === 0 ? (
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-10 text-center">
-            <p className="text-gray-600 mb-4">Your cart is empty.</p>
+          <div className="rounded-[28px] border border-dashed border-gray-300 bg-white p-10 text-center shadow-sm">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
+              <FaShoppingBag className="h-6 w-6 text-gray-500" />
+            </div>
+            <h2 className="mt-5 text-2xl font-semibold text-black">
+              Your cart is empty
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-600">
+              Add products from the shop to compare pricing, apply coupons, and
+              continue to checkout.
+            </p>
             <button
               onClick={() => navigate("/shop")}
-              className="px-5 py-2 bg-black text-white rounded-lg"
+              className="mt-6 inline-flex items-center rounded-full bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
             >
               Continue Shopping
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-4">
-              {cartItems.map((item) => {
-                const itemData = getItemData(item);
-                const key = `${itemData.productId}-${itemData.variationId || ""}-${itemData.color || ""}-${itemData.dimensions || ""}`;
-                return (
-                  <div
-                    key={key}
-                    className="bg-white border border-gray-200 rounded-xl p-4 flex gap-4"
-                  >
-                    <ProductImage
-                      src={itemData.image}
-                      alt={itemData.title}
-                      className="w-24 h-24 object-cover rounded-lg"
-                    />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
+            <div className="space-y-4">
+              <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+                <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
+                      Basket Items
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold text-black">
+                      {cartCount} products ready for checkout
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Update quantity, remove items, or continue shopping before placing the order.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                      {totalUnits} total units
+                    </span>
+                    {appliedCoupon?.code ? (
+                      <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+                        Coupon {appliedCoupon.code} active
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                        No coupon applied yet
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{itemData.title}</h3>
-                      <p className="text-sm text-gray-500 mt-1">Price: {itemData.price} TK</p>
-                      {itemData.variationLabel && (
-                        <p className="text-sm text-gray-500">
-                          Variant: {itemData.variationLabel}
-                        </p>
-                      )}
-                      {itemData.color && (
-                        <p className="text-sm text-gray-500">Color: {itemData.color}</p>
-                      )}
-                      {itemData.dimensions && (
-                        <p className="text-sm text-gray-500">Size: {itemData.dimensions}</p>
-                      )}
+                <div className="divide-y divide-gray-100">
+                  {cartItems.map((item) => {
+                    const itemData = getItemData(item);
+                    const key = `${itemData.productId}-${itemData.variationId || ""}-${itemData.color || ""}-${itemData.dimensions || ""}`;
+                    return (
+                      <div
+                        key={key}
+                        className="grid gap-4 py-5 md:grid-cols-[112px_minmax(0,1fr)_auto]"
+                      >
+                        <ProductImage
+                          src={itemData.image}
+                          alt={itemData.title}
+                          className="h-28 w-28 rounded-2xl border border-gray-200 object-cover bg-gray-100"
+                        />
 
-                      <div className="flex items-center justify-between mt-3">
-                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                          <button
-                            onClick={() =>
-                              handleUpdateCartItem(
-                                itemData.productId,
-                                Math.max(1, itemData.quantity - 1),
-                                itemData.color,
-                                itemData.dimensions,
-                                itemData.variationId,
-                              )
-                            }
-                            className="px-3 py-2 hover:bg-gray-50"
-                            disabled={updatingItemId === key}
-                          >
-                            <FiMinus />
-                          </button>
-                          <span className="px-3 py-2 text-sm font-medium">{itemData.quantity}</span>
-                          <button
-                            onClick={() =>
-                              handleUpdateCartItem(
-                                itemData.productId,
-                                itemData.quantity + 1,
-                                itemData.color,
-                                itemData.dimensions,
-                                itemData.variationId,
-                              )
-                            }
-                            className="px-3 py-2 hover:bg-gray-50"
-                            disabled={updatingItemId === key}
-                          >
-                            <FiPlus />
-                          </button>
+                        <div className="min-w-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className="text-base font-semibold leading-6 text-gray-900">
+                                {itemData.title}
+                              </h3>
+                              <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
+                                {itemData.variationLabel ? (
+                                  <span className="rounded-full bg-gray-100 px-2.5 py-1">
+                                    Variant: {itemData.variationLabel}
+                                  </span>
+                                ) : null}
+                                {itemData.color ? (
+                                  <span className="rounded-full bg-gray-100 px-2.5 py-1">
+                                    Color: {itemData.color}
+                                  </span>
+                                ) : null}
+                                {itemData.dimensions ? (
+                                  <span className="rounded-full bg-gray-100 px-2.5 py-1">
+                                    Size: {itemData.dimensions}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() =>
+                                handleRemoveCartItem(
+                                  itemData.productId,
+                                  itemData.color,
+                                  itemData.dimensions,
+                                  itemData.variationId,
+                                  itemData.title,
+                                )
+                              }
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-red-100 text-red-500 transition hover:bg-red-50 hover:text-red-600"
+                              title="Remove item"
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+
+                          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="inline-flex items-center overflow-hidden rounded-full border border-gray-200 bg-white">
+                              <button
+                                onClick={() =>
+                                  handleUpdateCartItem(
+                                    itemData.productId,
+                                    Math.max(1, itemData.quantity - 1),
+                                    itemData.color,
+                                    itemData.dimensions,
+                                    itemData.variationId,
+                                  )
+                                }
+                                className="px-4 py-2.5 text-gray-700 transition hover:bg-gray-50"
+                                disabled={updatingItemId === key}
+                              >
+                                <FiMinus />
+                              </button>
+                              <span className="min-w-[3rem] px-3 py-2.5 text-center text-sm font-semibold text-black">
+                                {itemData.quantity}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  handleUpdateCartItem(
+                                    itemData.productId,
+                                    itemData.quantity + 1,
+                                    itemData.color,
+                                    itemData.dimensions,
+                                    itemData.variationId,
+                                  )
+                                }
+                                className="px-4 py-2.5 text-gray-700 transition hover:bg-gray-50"
+                                disabled={updatingItemId === key}
+                              >
+                                <FiPlus />
+                              </button>
+                            </div>
+
+                            <div className="text-left sm:text-right">
+                              <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
+                                Unit Price
+                              </p>
+                              <p className="mt-1 text-sm font-medium text-gray-600">
+                                {formatCurrency(itemData.price)}
+                              </p>
+                            </div>
+                          </div>
                         </div>
 
-                        <button
-                          onClick={() =>
-                            handleRemoveCartItem(
-                              itemData.productId,
-                              itemData.color,
-                              itemData.dimensions,
-                              itemData.variationId,
-                              itemData.title,
-                            )
-                          }
-                          className="text-red-500 hover:text-red-600"
-                          title="Remove item"
-                        >
-                          <FaTrash />
-                        </button>
+                        <div className="flex flex-row items-end justify-between gap-3 border-t border-gray-100 pt-4 md:min-w-[110px] md:flex-col md:items-end md:justify-between md:border-l md:border-t-0 md:pl-4 md:pt-0">
+                          <div className="text-left md:text-right">
+                            <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
+                              Line Total
+                            </p>
+                            <p className="mt-1 text-lg font-bold text-black">
+                              {formatCurrency(itemData.price * itemData.quantity)}
+                            </p>
+                          </div>
+                          {updatingItemId === key ? (
+                            <span className="text-xs font-medium text-gray-500">
+                              Updating...
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl p-5 h-fit">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Items</span>
-                  <span className="font-medium">{cartCount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="font-semibold">{subtotal.toFixed(2)} TK</span>
-                </div>
-
-                <div className="pt-3 border-t border-gray-200 space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      value={couponCode}
-                      onChange={(event) => setCouponCode(event.target.value)}
-                      placeholder="Coupon code"
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    />
-                    <button
-                      onClick={() => applyCoupon()}
-                      disabled={isApplyingCoupon}
-                      className="px-3 py-2 bg-gray-900 text-white rounded-lg text-sm disabled:opacity-60"
-                    >
-                      {isApplyingCoupon ? "Applying..." : "Apply"}
-                    </button>
-                  </div>
-
-                  {appliedCoupon?.code && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-green-600 font-medium">
-                        Applied: {appliedCoupon.code}
-                        {appliedCoupon?.freeShipping ? " (Free delivery)" : ""}
-                      </span>
-                      <button
-                        onClick={() => clearAppliedCoupon(true)}
-                        className="text-red-500 hover:text-red-600"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {discount > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Discount</span>
-                    <span className="font-semibold text-green-600">
-                      -{discount.toFixed(2)} TK
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex justify-between border-t border-gray-200 pt-2 text-base">
-                  <span className="font-semibold">Total</span>
-                  <span className="font-bold">{total.toFixed(2)} TK</span>
+                    );
+                  })}
                 </div>
               </div>
+            </div>
 
-              <button
-                onClick={handleCheckout}
-                className="mt-5 w-full py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-900"
-              >
-                Proceed to Checkout
-              </button>
+            <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+              <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+                <h3 className="text-xl font-semibold text-gray-900">Order Summary</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Final shipping is calculated at checkout.
+                </p>
+
+                <div className="mt-6 space-y-3 text-sm">
+                  <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3">
+                    <span className="text-gray-600">Products</span>
+                    <span className="font-semibold text-black">{cartCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3">
+                    <span className="text-gray-600">Units</span>
+                    <span className="font-semibold text-black">{totalUnits}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-semibold text-black">
+                      {formatCurrency(subtotal)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                      Coupon
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        value={couponCode}
+                        onChange={(event) => setCouponCode(event.target.value)}
+                        placeholder="Enter coupon code"
+                        className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2.5 text-sm outline-none transition focus:border-black"
+                      />
+                      <button
+                        onClick={() => applyCoupon()}
+                        disabled={isApplyingCoupon}
+                        className="rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isApplyingCoupon ? "Applying..." : "Apply"}
+                      </button>
+                    </div>
+
+                    {appliedCoupon?.code ? (
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-green-50 px-3 py-2.5 text-xs">
+                        <span className="font-medium text-green-700">
+                          Applied: {appliedCoupon.code}
+                          {appliedCoupon?.freeShipping ? " with free delivery" : ""}
+                        </span>
+                        <button
+                          onClick={() => clearAppliedCoupon(true)}
+                          className="font-semibold text-red-500 transition hover:text-red-600"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {discount > 0 ? (
+                    <div className="flex items-center justify-between rounded-2xl bg-green-50 px-4 py-3">
+                      <span className="text-green-700">Discount</span>
+                      <span className="font-semibold text-green-700">
+                        -{formatCurrency(discount)}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  <div className="border-t border-gray-200 pt-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-base font-semibold text-black">Total</span>
+                      <span className="text-2xl font-bold text-black">
+                        {formatCurrency(total)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleCheckout}
+                  className="mt-6 w-full rounded-full bg-black px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-900"
+                >
+                  Proceed to Checkout
+                </button>
+                <button
+                  onClick={() => navigate("/shop")}
+                  className="mt-3 w-full rounded-full border border-gray-200 px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-black hover:text-black"
+                >
+                  Continue Shopping
+                </button>
+              </div>
+
+              <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                  Why buy here
+                </p>
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
+                      <FiShield className="h-5 w-5 text-black" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-black">Protected order flow</p>
+                      <p className="mt-1 text-xs leading-5 text-gray-500">
+                        Product options and price changes stay synced up to checkout.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
+                      <FiTruck className="h-5 w-5 text-black" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-black">Shipping in Bangladesh</p>
+                      <p className="mt-1 text-xs leading-5 text-gray-500">
+                        Delivery fee and timeline are estimated by your destination at checkout.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

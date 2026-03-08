@@ -10,10 +10,12 @@ const Product = require("../models/Product");
 const Purchase = require("../models/Purchase");
 const AbandonedOrder = require("../models/AbandonedOrder");
 const { AccountEntry } = require("../models/AccountEntry");
+const { uploadImageBuffer, deleteImage } = require("../config/cloudinary");
 const { readMarketplaceMode } = require("../middlewares/marketplaceMode");
 const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
 const { buildUniqueStoreSlug } = require("../utils/vendorUtils");
 const { getVoiceDatasetForClient } = require("../utils/voiceDataset");
+const { planVoiceCommand, getVoicePlannerConfig } = require("../utils/voicePlanner");
 
 const createTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -109,6 +111,173 @@ const normalizeStringList = (value) => {
   return Array.from(uniqueValues);
 };
 
+const DEFAULT_NAV_LINK_PATHS = {
+  "daily deals": "/shop?collection=deals",
+  "top categories": "/#top-categories",
+  "new arrivals": "/shop?collection=new-arrivals",
+  "buyer protection": "/faqs#buyer-protection",
+  "track order": "/track-order",
+};
+const LEGACY_CATALOG_TITLE = "{storeName} catalog with stock-aware shopping";
+const LEGACY_CATALOG_DESCRIPTION =
+  "Browse categories, compare pricing modes, and surface only the stock visibility you choose to publish.";
+const DEFAULT_CATALOG_TITLE = "Shop the full {storeName} catalog";
+const DEFAULT_CATALOG_DESCRIPTION =
+  "Browse categories, compare pricing options, and discover curated deals across the marketplace.";
+const DEFAULT_STOREFRONT_NAV_LINKS = [
+  { label: "Daily Deals", path: DEFAULT_NAV_LINK_PATHS["daily deals"] },
+  { label: "Top Categories", path: DEFAULT_NAV_LINK_PATHS["top categories"] },
+  { label: "New Arrivals", path: DEFAULT_NAV_LINK_PATHS["new arrivals"] },
+  { label: "Buyer Protection", path: DEFAULT_NAV_LINK_PATHS["buyer protection"] },
+  { label: "Track Order", path: DEFAULT_NAV_LINK_PATHS["track order"] },
+];
+
+const DEFAULT_STOREFRONT_TRUST_BULLETS = [
+  "COD-friendly Bangladesh checkout flow",
+  "Product stock only shows publicly when enabled",
+  "Orders and purchases already sync inventory",
+];
+
+const normalizeStorefrontNavLinks = (value) => {
+  if (!Array.isArray(value)) {
+    return DEFAULT_STOREFRONT_NAV_LINKS.map((entry) => ({ ...entry }));
+  }
+
+  const uniqueValues = new Map();
+  value.forEach((entry) => {
+    const label = String(entry?.label || "").trim();
+    const normalizedLabel = label.toLowerCase();
+    const inputPath = String(entry?.path || "").trim();
+    const defaultPath = DEFAULT_NAV_LINK_PATHS[normalizedLabel] || "/";
+    const path =
+      !inputPath ||
+      (normalizedLabel === "daily deals" && inputPath === "/shop") ||
+      (normalizedLabel === "top categories" && inputPath === "/shop") ||
+      (normalizedLabel === "new arrivals" && inputPath === "/shop") ||
+      (normalizedLabel === "buyer protection" && inputPath === "/faqs") ||
+      (normalizedLabel === "track order" && inputPath === "/contact")
+        ? defaultPath
+        : inputPath;
+    if (!label) return;
+    uniqueValues.set(`${label}|${path}`, { label, path });
+  });
+
+  const items = Array.from(uniqueValues.values());
+  return items.length > 0
+    ? items
+    : DEFAULT_STOREFRONT_NAV_LINKS.map((entry) => ({ ...entry }));
+};
+
+const normalizeStorefrontText = (value, fallback, legacyValues = []) => {
+  const normalized = String(value || "").trim();
+  if (!normalized || legacyValues.includes(normalized)) {
+    return fallback;
+  }
+  return normalized;
+};
+
+const normalizeStorefrontSettings = (value = {}) => {
+  const storefront = isPlainObject(value) ? value : {};
+  const trustBullets = normalizeStringList(storefront.trustBullets || []);
+
+  return {
+    marketLabel: String(storefront.marketLabel || "Bangladesh marketplace").trim(),
+    categoryRailEyebrow: String(storefront.categoryRailEyebrow || "Shop by Category").trim(),
+    categoryRailTitle: String(storefront.categoryRailTitle || "All Departments").trim(),
+    categoryRailButtonLabel: String(
+      storefront.categoryRailButtonLabel || "Explore marketplace",
+    ).trim(),
+    heroFallbackTitle: String(
+      storefront.heroFallbackTitle || "{storeName} deals built for Bangladesh shoppers",
+    ).trim(),
+    heroFallbackDescription: String(
+      storefront.heroFallbackDescription ||
+        "Organize campaigns, categories, and product discovery in a stronger marketplace-style landing flow.",
+    ).trim(),
+    heroPrimaryLabel: String(storefront.heroPrimaryLabel || "Shop campaign").trim(),
+    heroSecondaryLabel: String(storefront.heroSecondaryLabel || "Browse all products").trim(),
+    sidebarControlEyebrow: String(
+      storefront.sidebarControlEyebrow || "Marketplace control",
+    ).trim(),
+    sidebarControlTitle: String(
+      storefront.sidebarControlTitle || "Shop by stock, not guesswork",
+    ).trim(),
+    sidebarControlDescription: String(
+      storefront.sidebarControlDescription ||
+        "Orders reserve stock, purchases increase stock, and public stock remains optional per product.",
+    ).trim(),
+    sidebarControlButtonLabel: String(
+      storefront.sidebarControlButtonLabel || "Open storefront",
+    ).trim(),
+    discoveryEyebrow: String(storefront.discoveryEyebrow || "Top discovery lanes").trim(),
+    highlightsEyebrow: String(
+      storefront.highlightsEyebrow || "Marketplace Highlights",
+    ).trim(),
+    highlightsTitle: String(
+      storefront.highlightsTitle || "{storeName} shopping channels built for fast browsing",
+    ).trim(),
+    highlightsDescription: String(
+      storefront.highlightsDescription ||
+        "Bring campaign-style discovery, category-led shelves, and strong stock visibility into one marketplace flow.",
+    ).trim(),
+    flashEyebrow: String(storefront.flashEyebrow || "Flash Picks").trim(),
+    flashTitle: String(
+      storefront.flashTitle || "Deal-driven shelves inspired by global marketplaces",
+    ).trim(),
+    flashDescription: String(
+      storefront.flashDescription ||
+        "Build home discovery around campaigns, category lanes, and clear price states without breaking your current commerce wiring.",
+    ).trim(),
+    flashPrimaryLabel: String(storefront.flashPrimaryLabel || "Open shop").trim(),
+    flashSecondaryLabel: String(storefront.flashSecondaryLabel || "Open dashboard").trim(),
+    trustEyebrow: String(storefront.trustEyebrow || "Buyer trust").trim(),
+    trustBullets:
+      trustBullets.length > 0
+        ? trustBullets
+        : [...DEFAULT_STOREFRONT_TRUST_BULLETS],
+    topCategoriesEyebrow: String(storefront.topCategoriesEyebrow || "Top categories").trim(),
+    dealsEyebrow: String(storefront.dealsEyebrow || "Limited-price shelves").trim(),
+    dealsTitle: String(storefront.dealsTitle || "Flash deal picks").trim(),
+    dealsButtonLabel: String(storefront.dealsButtonLabel || "See all").trim(),
+    categoryFloorEyebrow: String(
+      storefront.categoryFloorEyebrow || "Category channel",
+    ).trim(),
+    categoryFloorDescription: String(
+      storefront.categoryFloorDescription ||
+        "Discover the main shelf, active stock, and featured products in this category.",
+    ).trim(),
+    categoryFloorButtonLabel: String(
+      storefront.categoryFloorButtonLabel || "Browse category",
+    ).trim(),
+    categoryFloorPanelButtonLabel: String(
+      storefront.categoryFloorPanelButtonLabel || "Shop now",
+    ).trim(),
+    recommendedEyebrow: String(
+      storefront.recommendedEyebrow || "Recommended shelf",
+    ).trim(),
+    recommendedTitle: String(
+      storefront.recommendedTitle || "New arrivals for the marketplace",
+    ).trim(),
+    recommendedButtonLabel: String(
+      storefront.recommendedButtonLabel || "View catalog",
+    ).trim(),
+    catalogTitle: normalizeStorefrontText(
+      storefront.catalogTitle,
+      DEFAULT_CATALOG_TITLE,
+      [LEGACY_CATALOG_TITLE],
+    ),
+    catalogDescription: normalizeStorefrontText(
+      storefront.catalogDescription,
+      DEFAULT_CATALOG_DESCRIPTION,
+      [LEGACY_CATALOG_DESCRIPTION],
+    ),
+    footerCaption: String(
+      storefront.footerCaption || "Built for Bangladesh marketplace operations",
+    ).trim(),
+    navQuickLinks: normalizeStorefrontNavLinks(storefront.navQuickLinks),
+  };
+};
+
 const ACCOUNT_INCOME_TYPES = new Set(["income", "adjustment"]);
 const ACCOUNT_EXPENSE_TYPES = new Set([
   "expense",
@@ -160,6 +329,13 @@ const normalizeMarketplaceMode = (value) => {
     .toLowerCase();
   return mode === "single" ? "single" : "multi";
 };
+
+const normalizeWebsiteLogoMode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "text"
+    ? "text"
+    : "image";
 
 const PRIMARY_ADMIN_SORT = {
   createdAt: 1,
@@ -220,16 +396,22 @@ const readMarketplaceControl = (settings = {}) => {
     marketplace.vendorRegistrationEnabled === undefined
       ? settings.vendorRegistrationEnabled
       : marketplace.vendorRegistrationEnabled;
+  const explicitPublicStockSummary =
+    marketplace.publicStockSummaryEnabled === undefined
+      ? settings.publicStockSummaryEnabled
+      : marketplace.publicStockSummaryEnabled;
   const vendorRegistrationEnabled =
     marketplaceMode === "single"
       ? false
       : explicitVendorRegistration === undefined
       ? true
       : Boolean(explicitVendorRegistration);
+  const publicStockSummaryEnabled = Boolean(explicitPublicStockSummary);
 
   return {
     marketplaceMode,
     vendorRegistrationEnabled,
+    publicStockSummaryEnabled,
   };
 };
 
@@ -242,15 +424,24 @@ const buildPublicSettingsPayload = (settings = {}, { isInitialSetup = false } = 
   const invoice = settings?.invoice || {};
   const courier = settings?.courier || {};
   const locations = settings?.locations || {};
+  const storefront = settings?.storefront || {};
   const control = readMarketplaceControl(settings);
 
   return {
     isInitialSetup: Boolean(isInitialSetup),
     marketplaceMode: control.marketplaceMode,
     vendorRegistrationEnabled: control.vendorRegistrationEnabled,
+    publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+    marketplace: {
+      marketplaceMode: control.marketplaceMode,
+      vendorRegistrationEnabled: control.vendorRegistrationEnabled,
+      publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+    },
     website: {
       storeName: String(website.storeName || "E-Commerce").trim(),
       tagline: String(website.tagline || "").trim(),
+      logoMode: normalizeWebsiteLogoMode(website.logoMode),
+      logoText: String(website.logoText || "").trim(),
       logoUrl: String(website.logoUrl || "").trim(),
       themeColor: String(website.themeColor || "#000000").trim(),
       fontFamily: String(website.fontFamily || "inherit").trim(),
@@ -300,6 +491,7 @@ const buildPublicSettingsPayload = (settings = {}, { isInitialSetup = false } = 
       cityOptions: normalizeStringList(locations.cityOptions || []),
       subCityOptions: normalizeStringList(locations.subCityOptions || []),
     },
+    storefront: normalizeStorefrontSettings(storefront),
   };
 };
 
@@ -1023,10 +1215,12 @@ exports.getSettings = async (req, res) => {
       ...primarySettings,
       marketplaceMode: control.marketplaceMode,
       vendorRegistrationEnabled: control.vendorRegistrationEnabled,
+      publicStockSummaryEnabled: control.publicStockSummaryEnabled,
       marketplace: {
         ...marketplace,
         marketplaceMode: control.marketplaceMode,
         vendorRegistrationEnabled: control.vendorRegistrationEnabled,
+        publicStockSummaryEnabled: control.publicStockSummaryEnabled,
       },
     });
   } catch (error) {
@@ -1099,6 +1293,14 @@ exports.updateSettings = async (req, res) => {
         : requestedVendorRegistrationInput === undefined
           ? currentControl.vendorRegistrationEnabled
           : Boolean(requestedVendorRegistrationInput);
+    const requestedPublicStockSummaryInput =
+      incomingMarketplace.publicStockSummaryEnabled !== undefined
+        ? incomingMarketplace.publicStockSummaryEnabled
+        : incoming.publicStockSummaryEnabled;
+    const requestedPublicStockSummary =
+      requestedPublicStockSummaryInput === undefined
+        ? currentControl.publicStockSummaryEnabled
+        : Boolean(requestedPublicStockSummaryInput);
 
     const nextSettings = {
       ...currentSettings,
@@ -1111,13 +1313,18 @@ exports.updateSettings = async (req, res) => {
       invoice: mergeSettingsSection(currentSettings, incoming, "invoice"),
       courier: mergeSettingsSection(currentSettings, incoming, "courier"),
       locations: mergeSettingsSection(currentSettings, incoming, "locations"),
+      storefront: normalizeStorefrontSettings({
+        ...mergeSettingsSection(currentSettings, incoming, "storefront"),
+      }),
       marketplaceMode: requestedMode,
       vendorRegistrationEnabled: requestedVendorRegistration,
+      publicStockSummaryEnabled: requestedPublicStockSummary,
       marketplace: {
         ...(isPlainObject(currentSettings.marketplace) ? currentSettings.marketplace : {}),
         ...incomingMarketplace,
         marketplaceMode: requestedMode,
         vendorRegistrationEnabled: requestedVendorRegistration,
+        publicStockSummaryEnabled: requestedPublicStockSummary,
       },
     };
 
@@ -1133,15 +1340,79 @@ exports.updateSettings = async (req, res) => {
         ...nextSettings,
         marketplaceMode: control.marketplaceMode,
         vendorRegistrationEnabled: control.vendorRegistrationEnabled,
+        publicStockSummaryEnabled: control.publicStockSummaryEnabled,
         marketplace: {
           ...(isPlainObject(nextSettings.marketplace) ? nextSettings.marketplace : {}),
           marketplaceMode: control.marketplaceMode,
           vendorRegistrationEnabled: control.vendorRegistrationEnabled,
+          publicStockSummaryEnabled: control.publicStockSummaryEnabled,
         },
       },
     });
   } catch (error) {
     console.error("Update settings error:", error);
+    return res.status(500).json({ error: error.message || "Server error" });
+  }
+};
+
+exports.uploadWebsiteLogo = async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    if (!req.file?.buffer) {
+      return res.status(400).json({ error: "Logo image file is required" });
+    }
+
+    const primaryAdmin = await getPrimaryAdminUser();
+    if (!primaryAdmin) {
+      return res.status(404).json({ error: "Primary admin account not found" });
+    }
+
+    const currentSettings = isPlainObject(primaryAdmin.adminSettings)
+      ? primaryAdmin.adminSettings
+      : {};
+    const currentWebsite = isPlainObject(currentSettings.website)
+      ? currentSettings.website
+      : {};
+    const previousPublicId = String(currentWebsite.logoPublicId || "").trim();
+
+    const uploaded = await uploadImageBuffer(req.file.buffer, {
+      folder: "marketplace/site-brand",
+      resource_type: "image",
+    });
+
+    if (!uploaded?.secure_url) {
+      return res.status(500).json({ error: "Logo upload failed" });
+    }
+
+    primaryAdmin.adminSettings = {
+      ...currentSettings,
+      website: {
+        ...currentWebsite,
+        logoMode: "image",
+        logoUrl: String(uploaded.secure_url || "").trim(),
+        logoPublicId: String(uploaded.public_id || "").trim(),
+      },
+    };
+
+    await primaryAdmin.save();
+
+    if (previousPublicId && previousPublicId !== uploaded.public_id) {
+      await deleteImage(previousPublicId).catch(() => null);
+    }
+
+    clearPublicSettingsCache();
+
+    return res.json({
+      success: true,
+      message: "Website logo uploaded successfully",
+      logoUrl: String(uploaded.secure_url || "").trim(),
+      settings: buildPublicSettingsPayload(primaryAdmin.adminSettings),
+    });
+  } catch (error) {
+    console.error("Upload website logo error:", error);
     return res.status(500).json({ error: error.message || "Server error" });
   }
 };
@@ -1320,15 +1591,21 @@ exports.updateMarketplaceControl = async (req, res) => {
         : req.body?.vendorRegistrationEnabled === undefined
         ? currentControl.vendorRegistrationEnabled
         : Boolean(req.body.vendorRegistrationEnabled);
+    const requestedPublicStockSummary =
+      req.body?.publicStockSummaryEnabled === undefined
+        ? currentControl.publicStockSummaryEnabled
+        : Boolean(req.body.publicStockSummaryEnabled);
 
     primaryAdmin.adminSettings = {
       ...currentSettings,
       marketplaceMode: requestedMode,
       vendorRegistrationEnabled: requestedVendorRegistration,
+      publicStockSummaryEnabled: requestedPublicStockSummary,
       marketplace: {
         ...(currentSettings.marketplace || {}),
         marketplaceMode: requestedMode,
         vendorRegistrationEnabled: requestedVendorRegistration,
+        publicStockSummaryEnabled: requestedPublicStockSummary,
       },
     };
 
@@ -2139,6 +2416,73 @@ exports.getVoiceDataset = async (req, res) => {
       success: false,
       error: "Failed to build voice dataset",
       details: error.message,
+    });
+  }
+};
+
+exports.planVoiceAction = async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const command = String(req.body?.command || "").trim();
+    if (!command) {
+      return res.status(400).json({
+        success: false,
+        error: "Voice command is required",
+      });
+    }
+
+    const dataset = getVoiceDatasetForClient({ force: false });
+    const result = await planVoiceCommand({
+      command,
+      currentPath: req.body?.currentPath,
+      dashboardTab: req.body?.dashboardTab,
+      dataset,
+    });
+
+    return res.status(200).json({
+      success: true,
+      planner: result,
+    });
+  } catch (error) {
+    const message = String(error?.message || "Voice planner unavailable");
+    const upstreamStatus = Number(error?.response?.status || 0);
+    const isConnectionError =
+      String(error?.code || "").toLowerCase() === "econnrefused" ||
+      message.toLowerCase().includes("connect") ||
+      message.toLowerCase().includes("timeout");
+    const plannerConfig = getVoicePlannerConfig();
+    const resolvedProvider = plannerConfig.resolvedProvider || plannerConfig.provider;
+    const isGroqMissingKey = resolvedProvider === "groq" && !plannerConfig.hasGroqKey;
+    const isGeminiMissingKey = resolvedProvider === "gemini" && !plannerConfig.hasGeminiKey;
+    const isRateLimitError =
+      upstreamStatus === 429 ||
+      message.toLowerCase().includes("rate limit") ||
+      message.toLowerCase().includes("resource_exhausted") ||
+      message.toLowerCase().includes("quota");
+    const providerLabel =
+      resolvedProvider === "groq"
+        ? `Groq API (${plannerConfig.groqModel})`
+        : resolvedProvider === "gemini"
+          ? `Gemini API (${plannerConfig.geminiModel})`
+          : `Ollama (${plannerConfig.ollamaModel})`;
+
+    return res
+      .status(isGroqMissingKey || isGeminiMissingKey || isConnectionError ? 503 : isRateLimitError ? 429 : 500)
+      .json({
+      success: false,
+      error: isGroqMissingKey
+        ? "Groq planner is selected but GROQ_API_KEY is missing in backend/.env."
+        : isGeminiMissingKey
+        ? "Gemini planner is selected but GEMINI_API_KEY is missing in backend/.env."
+        : isRateLimitError
+          ? `${providerLabel} is rate-limited or out of free quota right now. Check the provider limits and try again.`
+        : isConnectionError
+          ? `${providerLabel} is unavailable right now. Check the planner service and try again.`
+        : "Failed to plan voice action",
+      details: message,
     });
   }
 };

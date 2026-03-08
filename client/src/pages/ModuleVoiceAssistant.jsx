@@ -42,6 +42,22 @@ const ModuleVoiceAssistant = ({ user }) => {
 
   const role = String(user?.userType || "user").toLowerCase();
   const commandHints = useMemo(() => getVoiceCommandHints(role), [role]);
+  const providerSetupHint = useMemo(() => {
+    const errorText = String(lastError || "").toLowerCase();
+    if (errorText.includes("groq") || errorText.includes("groq_api_key")) {
+      return "Add `GROQ_API_KEY` in `backend/.env`, set `VOICE_PLANNER_PROVIDER=groq` or `auto`, then restart the backend.";
+    }
+
+    if (errorText.includes("gemini") || errorText.includes("gemini_api_key")) {
+      return "Add `GEMINI_API_KEY` in `backend/.env`, set `VOICE_PLANNER_PROVIDER=gemini` or `auto`, then restart the backend.";
+    }
+
+    if (errorText.includes("ollama")) {
+      return "Ollama fallback only works when the backend server can reach the Ollama service. Check `VOICE_LLM_BASE_URL`, the model name, and the Ollama process.";
+    }
+
+    return "";
+  }, [lastError]);
 
   const startListening = () => {
     dispatch(setVoiceError(""));
@@ -98,7 +114,7 @@ const ModuleVoiceAssistant = ({ user }) => {
         </div>
         <h1 className="text-2xl md:text-3xl font-bold">Voice Assistant</h1>
         <p className="text-zinc-200 mt-2">
-          Global voice control is active from all pages. Use Auto mode for Bangla + English.
+          Admin dashboard voice control uses browser speech recognition with a configured planner provider. Use Auto mode for Bangla + English.
         </p>
       </div>
 
@@ -240,13 +256,19 @@ const ModuleVoiceAssistant = ({ user }) => {
           </div>
         ) : null}
 
+        {providerSetupHint ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            {providerSetupHint}
+          </div>
+        ) : null}
+
         <div className="rounded-xl border border-gray-200 p-4 space-y-3">
           <p className="text-sm font-semibold text-black">Manual Command (Fallback)</p>
           <div className="flex flex-col md:flex-row gap-2">
             <input
               value={manualCommand}
               onChange={(event) => setManualCommand(event.target.value)}
-              placeholder="Type command like: open dashboard / ড্যাশবোর্ড খুলুন"
+              placeholder="Type command like: open dashboard or create product"
               className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg"
             />
             <button

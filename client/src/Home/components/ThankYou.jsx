@@ -89,6 +89,8 @@ const getFullImageUrl = (imagePath) => {
   return null;
 };
 
+const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} TK`;
+
 // Image component with fallback (same as in CheckOut)
 const ProductImage = ({ src, alt, className }) => {
   const [imgSrc, setImgSrc] = useState(getFullImageUrl(src));
@@ -303,18 +305,26 @@ const ThankYou = () => {
       toast.success("Order number copied!");
     }
   };
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
+  const estimatedDeliveryLabel =
+    Number(order?.shippingMeta?.estimatedMaxDays || 0) > 0
+      ? Number(order?.shippingMeta?.estimatedMinDays || 0) > 0
+        ? `${order.shippingMeta.estimatedMinDays}-${order.shippingMeta.estimatedMaxDays} business days`
+        : `${order.shippingMeta.estimatedMaxDays} business days`
+      : "3-5 business days";
+
   if (loading) {
     return (
-      <div className="min-h-screen w-full bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-6 animate-pulse">
-            <FaBoxOpen className="w-8 h-8 text-gray-400" />
+      <div className="flex min-h-screen w-full items-center justify-center bg-[#f5f5f5] px-4 py-12">
+        <div className="w-full max-w-xl rounded-[28px] border border-black/5 bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-gray-50 animate-pulse">
+            <FaBoxOpen className="h-8 w-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            Loading Order Details
+          <h3 className="mt-5 text-xl font-semibold text-gray-900">
+            Loading order details
           </h3>
-          <p className="text-gray-600">
-            Please wait while we fetch your order information...
+          <p className="mt-2 text-sm text-gray-600">
+            Preparing your confirmation summary and delivery status.
           </p>
         </div>
       </div>
@@ -323,22 +333,21 @@ const ThankYou = () => {
 
   if (!order) {
     return (
-      <div className="min-h-screen w-full bg-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-gray-50 rounded-2xl p-8 md:p-12 text-center border border-gray-200">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <FaBoxOpen className="w-10 h-10 text-gray-400" />
+      <div className="min-h-screen w-full bg-[#f5f5f5] py-12">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <div className="rounded-[28px] border border-dashed border-gray-300 bg-white p-8 text-center shadow-sm md:p-12">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gray-100">
+              <FaBoxOpen className="h-10 w-10 text-gray-400" />
             </div>
-            <h2 className="text-xl md:text-2xl font-semibold text-gray-900 mb-3">
-              Order Not Found
+            <h2 className="mt-6 text-2xl font-semibold text-gray-900">
+              Order not found
             </h2>
-            <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              We couldn't find your order details. Please check your orders
-              page.
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-600">
+              We could not find order details for this session. Open your orders page to continue tracking.
             </p>
             <button
               onClick={() => navigate("/orders")}
-              className="px-6 py-3 bg-black text-white rounded-full font-medium hover:bg-gray-800 transition-colors"
+              className="mt-6 inline-flex items-center rounded-full bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
             >
               View My Orders
             </button>
@@ -349,97 +358,117 @@ const ThankYou = () => {
   }
 
   return (
-    <div className="min-h-screen w-full bg-white py-8 md:py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8 md:mb-12">
+    <div className="min-h-screen w-full bg-[#f5f5f5] py-8 md:py-12">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-6">
           <button
             onClick={() => navigate("/")}
-            className="flex items-center gap-2 text-gray-600 hover:text-black mb-6 transition-colors group"
+            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition hover:text-black group"
           >
-            <span className="text-sm font-medium">Back to Home</span>
-            <FiChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            <span>Back to Home</span>
+            <FiChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </button>
+        </div>
 
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-50 rounded-full mb-4">
-              <FaCheckCircle className="w-8 h-8 text-green-600" />
+        <div className="mb-6 overflow-hidden rounded-[30px] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+          <div className="grid gap-0 lg:grid-cols-[1.3fr,0.9fr]">
+            <div className="p-6 md:p-8 lg:p-10">
+              <span className="inline-flex items-center rounded-full bg-green-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white">
+                Order Confirmed
+              </span>
+              <div className="mt-5 flex items-start gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-green-50">
+                  <FaCheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight text-black md:text-4xl">
+                    Thank you. Your order has been placed successfully.
+                  </h1>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600 md:text-base">
+                    Keep your order number handy for tracking. The order summary, payment details, and shipping destination are all listed below.
+                  </p>
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-[#fafafa] px-4 py-2 text-sm font-medium text-black">
+                      <span>Order #{order.orderNumber}</span>
+                      <button
+                        onClick={copyOrderNumber}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:text-black"
+                        title="Copy order number"
+                      >
+                        <FiCopy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <span className={`rounded-full px-4 py-2 text-sm font-medium border ${getStatusColor(order.orderStatus)}`}>
+                      {(order.orderStatus || "pending").charAt(0).toUpperCase() +
+                        (order.orderStatus || "pending").slice(1)}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-black mb-3">
-              Order Confirmed!
-            </h1>
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <p className="text-gray-600">
-                Thank you for your purchase. Your order{" "}
-                <span className="font-semibold text-black">
-                  #{order.orderNumber}
-                </span>{" "}
-                has been received.
+
+            <div className="border-t border-gray-100 bg-[radial-gradient(circle_at_top_left,_rgba(0,0,0,0.08),_transparent_60%),linear-gradient(135deg,_#111111_0%,_#2a2a2a_100%)] p-6 text-white md:p-8 lg:border-l lg:border-t-0 lg:p-10">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
+                Quick Facts
               </p>
-              <button
-                onClick={copyOrderNumber}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Copy order number"
-              >
-                <FiCopy className="w-4 h-4 text-gray-500" />
-              </button>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/60">Placed On</p>
+                  <p className="mt-2 text-lg font-semibold">{formatDate(order.createdAt)}</p>
+                  <p className="mt-1 text-xs text-white/70">{formatTime(order.createdAt)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/60">Payment</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatPaymentMethodLabel(order.paymentMethod)}
+                  </p>
+                  <p className="mt-1 text-xs text-white/70 capitalize">
+                    Status: {order.paymentStatus || "pending"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/60">Order Total</p>
+                  <p className="mt-2 text-2xl font-bold">{formatCurrency(order.total)}</p>
+                  <p className="mt-1 text-xs text-white/70">Estimated delivery: {estimatedDeliveryLabel}</p>
+                </div>
+              </div>
             </div>
-            <p className="text-gray-600">
-              You can track your order using the order number above.
-            </p>
           </div>
         </div>
 
-        {/* Order Status Card */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center">
-                <FaReceipt className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-black">
-                  Order Status
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Track your order progress
-                </p>
-              </div>
+        <div className="mb-6 rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                Order Status
+              </p>
+              <h2 className="mt-1 text-xl font-semibold text-black">
+                Track progress from placement to delivery
+              </h2>
             </div>
-            <span
-              className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(
-                order.orderStatus,
-              )}`}
-            >
-              {order.orderStatus?.charAt(0).toUpperCase() +
-                order.orderStatus?.slice(1)}
+            <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">
+              Delivery window: {estimatedDeliveryLabel}
             </span>
           </div>
 
-          {/* Status Timeline */}
-          <div className="relative">
-            <div className="absolute top-5 left-8 right-8 h-1 bg-gray-200 rounded-full">
+          <div className="relative mt-8">
+            <div className="absolute left-8 right-8 top-5 hidden h-1 rounded-full bg-gray-200 md:block">
               <div
-                className="h-full bg-green-500 rounded-full transition-all duration-500"
+                className="h-full rounded-full bg-green-500 transition-all duration-500"
                 style={{
                   width: (() => {
                     if (order.orderStatus === "cancelled") return "0%";
                     if (order.orderStatus === "returned") return "100%";
-                    const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
-                      order.orderStatus,
-                    );
+                    const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(order.orderStatus);
                     if (currentIndex <= 0) return "0%";
-                    const maxIndex = Math.max(
-                      1,
-                      ORDER_PROGRESS_STATUSES.length - 1,
-                    );
+                    const maxIndex = Math.max(1, ORDER_PROGRESS_STATUSES.length - 1);
                     return `${(currentIndex / maxIndex) * 100}%`;
                   })(),
                 }}
-              ></div>
+              />
             </div>
 
-            <div className="grid grid-cols-5 gap-2 relative">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
               {[
                 { status: "pending", label: "Placed", Icon: FaCheckCircle },
                 { status: "confirmed", label: "Confirmed", Icon: FaCheckCircle },
@@ -447,9 +476,7 @@ const ThankYou = () => {
                 { status: "shipped", label: "Shipped", Icon: FaTruck },
                 { status: "delivered", label: "Delivered", Icon: FiPackage },
               ].map((step, index) => {
-                const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
-                  order.orderStatus,
-                );
+                const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(order.orderStatus);
                 const isActive =
                   order.orderStatus === "cancelled"
                     ? false
@@ -461,21 +488,19 @@ const ThankYou = () => {
                 return (
                   <div key={step.status} className="text-center">
                     <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg ${
+                      className={`mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full shadow-sm ${
                         isActive ? "bg-green-500" : "bg-gray-200"
                       }`}
                     >
                       <IconComponent
-                        className={`w-4 h-4 ${isActive ? "text-white" : "text-gray-400"}`}
+                        className={`h-4 w-4 ${isActive ? "text-white" : "text-gray-400"}`}
                       />
                     </div>
-                    <span className="text-xs font-medium text-black">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-black">
                       {step.label}
                     </span>
-                    <p className="text-xs text-gray-500">
-                      {step.status === "pending"
-                        ? formatDate(order.createdAt)
-                        : "Soon"}
+                    <p className="mt-1 text-xs text-gray-500">
+                      {step.status === "pending" ? formatDate(order.createdAt) : "Pending update"}
                     </p>
                   </div>
                 );
@@ -484,40 +509,36 @@ const ThankYou = () => {
           </div>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Order Details */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Order Summary Card */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)]">
+          <div className="space-y-6">
+            <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+              <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                    <FaReceipt className="w-5 h-5 text-gray-600" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100">
+                    <FaReceipt className="h-5 w-5 text-black" />
                   </div>
-                  <h2 className="text-xl font-semibold text-black">
-                    Order Summary
-                  </h2>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                      Order Summary
+                    </p>
+                    <h2 className="mt-1 text-xl font-semibold text-black">
+                      {orderItems.length} item{orderItems.length === 1 ? "" : "s"} in this order
+                    </h2>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500">
-                  Order #:{" "}
-                  <span className="font-semibold text-black">
-                    {order.orderNumber}
-                  </span>
-                </div>
+                <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">
+                  Order #{order.orderNumber}
+                </span>
               </div>
 
-              {/* Products List */}
-              <div className="space-y-4 mb-6">
-                {order.items?.map((item, index) => {
+              <div className="mt-5 space-y-4">
+                {orderItems.map((item, index) => {
                   const displayColor =
-                    item.color && item.color.toLowerCase() !== "default"
+                    item.color && String(item.color).toLowerCase() !== "default"
                       ? item.color
                       : "";
                   const product =
-                    item?.product && typeof item.product === "object"
-                      ? item.product
-                      : null;
+                    item?.product && typeof item.product === "object" ? item.product : null;
                   const title = item.title || product?.title || "Product";
                   const image = resolveImageValue(
                     item.image || product?.images?.[0] || product?.image || "",
@@ -525,54 +546,63 @@ const ThankYou = () => {
                   const quantity = Number(item.quantity || 1);
                   const unitPrice = Number(item.price ?? product?.price ?? 0);
                   const itemTotal = unitPrice * quantity;
+
                   return (
                     <div
                       key={index}
-                      className="flex gap-4 pb-4 border-b border-gray-100 last:border-0"
+                      className="flex gap-4 rounded-2xl border border-gray-100 bg-[#fafafa] p-4"
                     >
-                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
                         {image ? (
                           <ProductImage
                             src={image}
                             alt={title}
-                            className="w-full h-full object-cover"
+                            className="h-full w-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <FiPackage className="w-6 h-6 text-gray-400" />
+                          <div className="flex h-full w-full items-center justify-center">
+                            <FiPackage className="h-6 w-6 text-gray-400" />
                           </div>
                         )}
                       </div>
 
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">
-                          {title}
-                        </h3>
-                        <div className="flex items-center justify-between mt-1">
-                          <div className="text-sm text-gray-500">
-                            Qty: {quantity}
-                            {item.variationLabel && (
-                              <span className="ml-2">
-                                Variant: {item.variationLabel}
-                              </span>
-                            )}
-                            {displayColor && (
-                              <span className="ml-2 inline-flex items-center gap-1">
-                                • Colors:
-                                {displayColor && (
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
+                              <span className="rounded-full bg-white px-2.5 py-1">Qty: {quantity}</span>
+                              {item.variationLabel ? (
+                                <span className="rounded-full bg-white px-2.5 py-1">
+                                  Variant: {item.variationLabel}
+                                </span>
+                              ) : null}
+                              {displayColor ? (
+                                <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1">
+                                  <span>Color</span>
                                   <span
-                                    className="w-3 h-3 rounded-full border border-gray-300"
+                                    className="h-3 w-3 rounded-full border border-gray-300"
                                     style={{ backgroundColor: displayColor }}
                                   />
-                                )}
-                              </span>
-                            )}
-                            {item.dimensions && (
-                              <span className="ml-2">• dimensions: {item.dimensions}</span>
-                            )}
+                                </span>
+                              ) : null}
+                              {item.dimensions ? (
+                                <span className="rounded-full bg-white px-2.5 py-1">
+                                  Size: {item.dimensions}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
-                          <div className="font-semibold text-gray-900">
-                            ৳{itemTotal.toFixed(2)}
+                          <div className="text-left md:text-right">
+                            <p className="text-xs uppercase tracking-[0.16em] text-gray-400">
+                              Line total
+                            </p>
+                            <p className="mt-1 text-lg font-bold text-black">
+                              {formatCurrency(itemTotal)}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {formatCurrency(unitPrice)} each
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -581,126 +611,113 @@ const ThankYou = () => {
                 })}
               </div>
 
-              {/* Price Breakdown */}
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
+              <div className="mt-5 space-y-3 border-t border-gray-100 pt-5">
+                <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3 text-sm">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="text-gray-900">
-                    ৳{order.subtotal?.toFixed(2)}
-                  </span>
+                  <span className="font-medium text-black">{formatCurrency(order.subtotal)}</span>
                 </div>
-                {order.shippingFee > 0 && (
-                  <div className="flex justify-between text-sm">
+                {order.shippingFee > 0 ? (
+                  <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3 text-sm">
                     <span className="text-gray-600">Shipping</span>
-                    <span className="text-gray-900">
-                      ৳{order.shippingFee?.toFixed(2)}
-                    </span>
+                    <span className="font-medium text-black">{formatCurrency(order.shippingFee)}</span>
                   </div>
-                )}
-
-                {order.discount > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Discount</span>
-                    <span className="text-red-600">
-                      -৳{order.discount?.toFixed(2)}
-                    </span>
+                ) : null}
+                {order.discount > 0 ? (
+                  <div className="flex items-center justify-between rounded-2xl bg-green-50 px-4 py-3 text-sm">
+                    <span className="text-green-700">Discount</span>
+                    <span className="font-medium text-green-700">-{formatCurrency(order.discount)}</span>
                   </div>
-                )}
-
-                {order.tax > 0 && (
-                  <div className="flex justify-between text-sm">
+                ) : null}
+                {order.tax > 0 ? (
+                  <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3 text-sm">
                     <span className="text-gray-600">Tax</span>
-                    <span className="text-gray-900">
-                      ৳{order.tax?.toFixed(2)}
-                    </span>
+                    <span className="font-medium text-black">{formatCurrency(order.tax)}</span>
                   </div>
-                )}
-
-                <div className="border-t border-gray-200 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-black">Total</span>
-                    <span className="text-2xl font-bold text-black">
-                      ৳{order.total?.toFixed(2)}
-                    </span>
+                ) : null}
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-semibold text-black">Total</span>
+                    <span className="text-2xl font-bold text-black">{formatCurrency(order.total)}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Shipping Information Card */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                  <FaMapMarkerAlt className="w-5 h-5 text-gray-600" />
+            <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100">
+                  <FaMapMarkerAlt className="h-5 w-5 text-black" />
                 </div>
-                <h2 className="text-xl font-semibold text-black">
-                  Shipping Information
-                </h2>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                    Fulfillment Details
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold text-black">
+                    Shipping and payment information
+                  </h2>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="font-medium text-black mb-3 flex items-center gap-2">
-                    <FaUser className="w-4 h-4 text-gray-500" />
+              <div className="mt-6 grid gap-6 md:grid-cols-2">
+                <div className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-black">
+                    <FaUser className="h-4 w-4 text-gray-500" />
                     Shipping Address
                   </h3>
-                  <div className="text-sm text-gray-600 space-y-2">
+                  <div className="mt-4 space-y-2 text-sm text-gray-600">
                     <p className="font-medium text-black">
-                      {order.shippingAddress?.firstName}{" "}
-                      {order.shippingAddress?.lastName}
+                      {order.shippingAddress?.firstName} {order.shippingAddress?.lastName}
                     </p>
-                    {order.shippingAddress?.company && (
+                    {order.shippingAddress?.company ? (
                       <p className="flex items-center gap-2">
-                        <FaBuilding className="w-3 h-3" />
+                        <FaBuilding className="h-3 w-3" />
                         {order.shippingAddress.company}
                       </p>
-                    )}
-                    <p className="flex items-center gap-2">
-                      <FaMapMarkerAlt className="w-3 h-3" />
-                      {order.shippingAddress?.address}
-                    </p>
-                    {order.shippingAddress?.apartment && (
-                      <p className="ml-5">{order.shippingAddress.apartment}</p>
-                    )}
-                    <p>
-                      {order.shippingAddress?.city},{" "}
-                      {order.shippingAddress?.district}
+                    ) : null}
+                    <p className="flex items-start gap-2">
+                      <FaMapMarkerAlt className="mt-1 h-3 w-3 shrink-0" />
+                      <span>
+                        {order.shippingAddress?.address}
+                        {order.shippingAddress?.apartment ? `, ${order.shippingAddress.apartment}` : ""}
+                      </span>
                     </p>
                     <p>
-                      {order.shippingAddress?.postalCode},{" "}
-                      {order.shippingAddress?.country}
+                      {order.shippingAddress?.city}, {order.shippingAddress?.district}
                     </p>
-                    {order.shippingAddress?.phone && (
+                    <p>
+                      {order.shippingAddress?.postalCode}, {order.shippingAddress?.country}
+                    </p>
+                    {order.shippingAddress?.phone ? (
                       <p className="flex items-center gap-2">
-                        <FaPhone className="w-3 h-3" />
+                        <FaPhone className="h-3 w-3" />
                         {order.shippingAddress.phone}
                       </p>
-                    )}
-                    {order.shippingAddress?.email && (
+                    ) : null}
+                    {order.shippingAddress?.email ? (
                       <p className="flex items-center gap-2">
-                        <FaEnvelope className="w-3 h-3" />
+                        <FaEnvelope className="h-3 w-3" />
                         {order.shippingAddress.email}
                       </p>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="font-medium text-black mb-3 flex items-center gap-2">
-                    <FaCreditCard className="w-4 h-4 text-gray-500" />
+                <div className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-black">
+                    <FaCreditCard className="h-4 w-4 text-gray-500" />
                     Payment Details
                   </h3>
-                  <div className="text-sm text-gray-600 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-700">Method:</span>
-                      <span className="font-medium text-black capitalize">
+                  <div className="mt-4 space-y-3 text-sm text-gray-600">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Method</span>
+                      <span className="font-medium text-black">
                         {formatPaymentMethodLabel(order.paymentMethod)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-700">Status:</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Status</span>
                       <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${
                           order.paymentStatus === "completed"
                             ? "bg-green-100 text-green-700"
                             : order.paymentStatus === "pending"
@@ -708,136 +725,89 @@ const ThankYou = () => {
                               : "bg-red-100 text-red-700"
                         }`}
                       >
-                        {order.paymentStatus?.charAt(0).toUpperCase() +
-                          order.paymentStatus?.slice(1) || "Pending"}
+                        {(order.paymentStatus || "pending").charAt(0).toUpperCase() +
+                          (order.paymentStatus || "pending").slice(1)}
                       </span>
                     </div>
-                    {String(
-                      formatPaymentMethodLabel(order.paymentMethod || ""),
-                    ).toLowerCase() === "cash on delivery" && (
-                      <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <p className="text-xs text-gray-700">
-                          Please have the exact amount ready for delivery.
-                        </p>
+                    {String(formatPaymentMethodLabel(order.paymentMethod || "")).toLowerCase() ===
+                    "cash on delivery" ? (
+                      <div className="rounded-2xl border border-gray-200 bg-white p-3 text-xs leading-5 text-gray-700">
+                        Please keep the payable amount ready for delivery confirmation.
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column - Order Info & Actions */}
-          <div className="space-y-6">
-            {/* Order Quick Info */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-              <h3 className="text-lg font-semibold text-black mb-6">
-                Order Details
-              </h3>
-
-              <div className="space-y-5">
+          <div className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+            <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+              <h3 className="text-lg font-semibold text-black">Order Actions</h3>
+              <div className="mt-6 space-y-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                    <FaReceipt className="w-5 h-5 text-gray-600" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100">
+                    <FaReceipt className="h-5 w-5 text-black" />
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Order Number</p>
-                    <p className="font-semibold text-black">
-                      {order.orderNumber}
-                    </p>
+                    <p className="font-semibold text-black">{order.orderNumber}</p>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                    <FaCalendarAlt className="w-5 h-5 text-gray-600" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100">
+                    <FaCalendarAlt className="h-5 w-5 text-black" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Order Date & Time</p>
-                    <p className="font-semibold text-black">
-                      {formatDate(order.createdAt)}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      <FiClock className="inline w-3 h-3 mr-1" />
-                      {formatTime(order.createdAt)}
-                    </p>
+                    <p className="text-xs text-gray-500">Order Date and Time</p>
+                    <p className="font-semibold text-black">{formatDate(order.createdAt)}</p>
+                    <p className="text-xs text-gray-500">{formatTime(order.createdAt)}</p>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                    <FaCreditCard className="w-5 h-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Payment Status</p>
-                    <p className="font-semibold text-black capitalize">
-                      {order.paymentStatus || "Pending"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                    <FaTruck className="w-5 h-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Estimated Delivery</p>
-                    <p className="font-semibold text-black">
-                      3-5 Business Days
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                    <FiDollarSign className="w-5 h-5 text-gray-600" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100">
+                    <FiDollarSign className="h-5 w-5 text-black" />
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Total Amount</p>
-                    <p className="text-xl font-bold text-black">
-                      ৳{order.total?.toFixed(2)}
-                    </p>
+                    <p className="text-xl font-bold text-black">{formatCurrency(order.total)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100">
+                    <FaTruck className="h-5 w-5 text-black" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Estimated Delivery</p>
+                    <p className="font-semibold text-black">{estimatedDeliveryLabel}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="mt-8 space-y-3">
                 <button
                   onClick={() => navigate(`/track-order/${order.orderNumber}`)}
-                  className="w-full py-3 bg-black text-white font-medium rounded-lg hover:bg-gray-900 transition-colors flex items-center justify-center gap-2"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-black px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-900"
                 >
-                  <FiTruck className="w-4 h-4" />
+                  <FiTruck className="h-4 w-4" />
                   Track This Order
                 </button>
                 <button
                   onClick={() => navigate("/")}
-                  className="w-full py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                  className="inline-flex w-full items-center justify-center rounded-full border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-black hover:text-black"
                 >
                   Continue Shopping
                 </button>
               </div>
             </div>
 
-            {/* Need Help Card */}
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
-              <h4 className="text-sm font-medium text-black mb-3">
-                Need Help?
+            <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+              <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
+                Need Help
               </h4>
-              <p className="text-xs text-gray-600 mb-4">
-                If you have any questions about your order, our support team is
-                here to help.
+              <p className="mt-3 text-sm leading-6 text-gray-600">
+                Use the tracking page for live shipment updates. If payment or delivery looks incorrect, review your account orders and contact support from there.
               </p>
-              <div className="text-xs text-gray-500 space-y-2">
-                <div className="flex items-center gap-2">
-                  <FaPhone className="w-3 h-3" />
-                  <span>+880 1XXX-XXXXXX</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <FaEnvelope className="w-3 h-3" />
-                  <span>support@example.com</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -847,6 +817,7 @@ const ThankYou = () => {
 };
 
 export default ThankYou;
+
 
 
 

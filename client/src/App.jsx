@@ -6,16 +6,18 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { useAuth } from "./hooks/useAuth";
+import usePublicSettings from "./hooks/usePublicSettings";
 import { Toaster } from "react-hot-toast";
 import { GLOBAL_TOAST_OPTIONS } from "./utils/globalToast";
 
 // Home components
 import Navbar from "./Home/components/Navbar";
 import Footer from "./Home/components/Footer";
-import { fetchPublicSettings } from "./utils/publicSettings";
 import { pushDataLayerEvent } from "./utils/marketingDataLayer";
 import GlobalVoiceAssistant from "./components/GlobalVoiceAssistant";
+import { loadPublicSettings } from "./store/publicSettingsSlice";
 
 const normalizeThemeColor = (value) => {
   const raw = String(value || "")
@@ -45,20 +47,16 @@ const Register = lazy(() => import("./pages/Registration"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Banner = lazy(() => import("./Home/pages/Banner"));
-const BestSellingProducts = lazy(() => import("./Home/pages/BestSellingProducts"));
+const MarketplaceAds = lazy(() => import("./Home/pages/MarketplaceAds"));
+const MarketplaceHomeFloors = lazy(() => import("./Home/pages/MarketplaceHomeFloors"));
 const FAQ = lazy(() => import("./Home/pages/FAQ"));
 const Contact = lazy(() => import("./Home/pages/Contact"));
-const FeaturedProducts = lazy(() => import("./Home/pages/FeaturedProducts"));
-const LatestProducts = lazy(() => import("./Home/pages/LatestProducts"));
-const PopularCategory = lazy(() => import("./Home/pages/PopularCategory"));
-const MarketplaceAds = lazy(() => import("./Home/pages/MarketplaceAds"));
 const ProductDetails = lazy(() => import("./Home/subPages/ProductDetails"));
 const ProductGrid = lazy(() => import("./Home/subPages/ProductGrid"));
 const AddToCart = lazy(() => import("./Home/components/AddToCart"));
 const CheckOut = lazy(() => import("./Home/components/CheckOut"));
 const AboutUs = lazy(() => import("./Home/pages/AboutUs"));
 const ThankYou = lazy(() => import("./Home/components/ThankYou"));
-const HotDeals = lazy(() => import("./Home/pages/HotDeals"));
 const OrderTracking = lazy(() => import("./pages/OrderTracking"));
 const VendorStore = lazy(() => import("./pages/VendorStore"));
 const LandingPageView = lazy(() => import("./Home/pages/LandingPageView"));
@@ -69,11 +67,7 @@ function HomePage() {
     <>
       <Banner />
       <MarketplaceAds placement="home_sidebar" limit={3} />
-      <PopularCategory />
-      <HotDeals />
-      <FeaturedProducts />
-      <BestSellingProducts />
-      <LatestProducts />
+      <MarketplaceHomeFloors />
     </>
   );
 }
@@ -86,11 +80,32 @@ function RouteLoadingFallback() {
   );
 }
 
+function HashScrollHandler() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const hash = String(location.hash || "").replace(/^#/, "").trim();
+    if (!hash) return;
+
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(hash);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [location.hash, location.pathname, location.search]);
+
+  return null;
+}
+
 // Layout component for public pages (with Navbar and Footer)
 function PublicLayout() {
   return (
     <>
       <Navbar />
+      <HashScrollHandler />
       <main className="min-h-screen">
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
@@ -133,6 +148,7 @@ function PublicLayout() {
               path="/success"
               element={<Navigate to="/thank-you" replace />}
             />
+            <Route path="/track-order" element={<OrderTracking />} />
             <Route path="/track-order/:orderNumber" element={<OrderTracking />} />
             {/* Catch-all route - redirect to home */}
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -160,41 +176,35 @@ function PageViewTracker() {
 }
 
 function App() {
+  const dispatch = useDispatch();
   const { user, isLoading } = useAuth();
+  const { settings } = usePublicSettings();
 
   useEffect(() => {
-    let cancelled = false;
-
-    const applyWebsiteTheme = async (force = false) => {
-      const settings = await fetchPublicSettings({ force });
-      if (cancelled) return;
-
-      const website = settings?.website || {};
-      const themeColor = normalizeThemeColor(website?.themeColor);
-      const fontFamily = normalizeFontFamily(website?.fontFamily);
-
-      if (typeof document !== "undefined") {
-        document.documentElement.style.setProperty("--brand-theme-color", themeColor);
-        document.documentElement.style.setProperty("--brand-font-family", fontFamily);
-      }
-    };
-
-    applyWebsiteTheme(false);
+    if (typeof window === "undefined") return undefined;
 
     const handleSettingsUpdated = () => {
-      applyWebsiteTheme(true);
+      dispatch(loadPublicSettings({ force: true }));
     };
 
     window.addEventListener("publicSettingsUpdated", handleSettingsUpdated);
     return () => {
-      cancelled = true;
       window.removeEventListener("publicSettingsUpdated", handleSettingsUpdated);
     };
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
-    let cancelled = false;
+    const website = settings?.website || {};
+    const themeColor = normalizeThemeColor(website?.themeColor);
+    const fontFamily = normalizeFontFamily(website?.fontFamily);
 
+    if (typeof document !== "undefined") {
+      document.documentElement.style.setProperty("--brand-theme-color", themeColor);
+      document.documentElement.style.setProperty("--brand-font-family", fontFamily);
+    }
+  }, [settings]);
+
+  useEffect(() => {
     const appendScriptOnce = (id, src, options = {}) => {
       if (document.getElementById(id)) return;
       const script = document.createElement("script");
@@ -220,51 +230,40 @@ function App() {
         .replace(/<\/script>/gi, "")
         .trim();
 
-    const initTracking = async () => {
-      const settings = await fetchPublicSettings();
-      if (cancelled) return;
+    const integrations = settings?.integrations || {};
+    const gaId = String(integrations.googleAnalyticsId || "").trim();
+    const gtmId = String(integrations.gtmId || "").trim();
+    const fbPixelId = String(integrations.facebookPixelId || "").trim();
+    const customTrackingCode = sanitizeInlineScript(
+      integrations.customTrackingCode || "",
+    );
 
-      const integrations = settings?.integrations || {};
-      const gaId = String(integrations.googleAnalyticsId || "").trim();
-      const gtmId = String(integrations.gtmId || "").trim();
-      const fbPixelId = String(integrations.facebookPixelId || "").trim();
-      const customTrackingCode = sanitizeInlineScript(
-        integrations.customTrackingCode || "",
+    if (gaId) {
+      appendScriptOnce("ga-script-src", `https://www.googletagmanager.com/gtag/js?id=${gaId}`);
+      appendInlineScriptOnce(
+        "ga-script-inline",
+        `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', '${gaId}');`,
       );
+    }
 
-      if (gaId) {
-        appendScriptOnce("ga-script-src", `https://www.googletagmanager.com/gtag/js?id=${gaId}`);
-        appendInlineScriptOnce(
-          "ga-script-inline",
-          `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', '${gaId}');`,
-        );
-      }
+    if (gtmId) {
+      appendInlineScriptOnce(
+        "gtm-script-inline",
+        `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');`,
+      );
+    }
 
-      if (gtmId) {
-        appendInlineScriptOnce(
-          "gtm-script-inline",
-          `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');`,
-        );
-      }
+    if (fbPixelId) {
+      appendInlineScriptOnce(
+        "fb-pixel-inline",
+        `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init', '${fbPixelId}');fbq('track', 'PageView');`,
+      );
+    }
 
-      if (fbPixelId) {
-        appendInlineScriptOnce(
-          "fb-pixel-inline",
-          `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init', '${fbPixelId}');fbq('track', 'PageView');`,
-        );
-      }
-
-      if (customTrackingCode) {
-        appendInlineScriptOnce("custom-tracking-inline", customTrackingCode);
-      }
-    };
-
-    initTracking();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (customTrackingCode) {
+      appendInlineScriptOnce("custom-tracking-inline", customTrackingCode);
+    }
+  }, [settings]);
 
   if (isLoading) {
     return (

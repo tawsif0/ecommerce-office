@@ -14,6 +14,29 @@ import {
 } from "react-icons/fi";
 import { FaImage } from "react-icons/fa6";
 import { motion } from "framer-motion";
+import usePublicSettings from "../../hooks/usePublicSettings";
+import { getDefaultPublicSettings } from "../../utils/publicSettings";
+import {
+  getPublicStockBadgeText,
+  isPublicStockVisible,
+} from "../../utils/publicProduct";
+const INITIAL_DISPLAY_LIMIT = 20;
+
+const DEFAULT_STOREFRONT = getDefaultPublicSettings().storefront;
+
+const applyTemplate = (value, replacements = {}) => {
+  let resolved = String(value || "").trim();
+  Object.entries(replacements).forEach(([key, replacement]) => {
+    resolved = resolved.replaceAll(`{${key}}`, String(replacement || "").trim());
+  });
+  return resolved;
+};
+
+const getSafeStoreName = (value) => {
+  const normalized = String(value || "").trim();
+  return normalized.length > 1 ? normalized : "E-Commerce";
+};
+
 const ProductGrid = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,8 +48,9 @@ const ProductGrid = () => {
   const [selectedCategoryType, setSelectedCategoryType] = useState("all");
   const [categoryName, setCategoryName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [collectionType, setCollectionType] = useState("all");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [displayLimit, setDisplayLimit] = useState(5); // New state for limiting products
+  const [displayLimit, setDisplayLimit] = useState(INITIAL_DISPLAY_LIMIT);
   const [allProductsVisible, setAllProductsVisible] = useState(false);
   const [viewMode, setViewMode] = useState(() => {
     const savedViewMode = localStorage.getItem("shopViewMode");
@@ -39,6 +63,21 @@ const ProductGrid = () => {
     types: true,
     price: true,
   });
+  const { settings } = usePublicSettings();
+  const branding = React.useMemo(
+    () => ({
+      storeName: getSafeStoreName(settings?.website?.storeName),
+      tagline: String(settings?.website?.tagline || "").trim(),
+    }),
+    [settings],
+  );
+  const storefront = React.useMemo(
+    () => ({
+      ...DEFAULT_STOREFRONT,
+      ...(settings?.storefront || {}),
+    }),
+    [settings],
+  );
 
   const baseUrl = import.meta.env.VITE_API_URL;
   const getCategoryIdFromProduct = (product) => {
@@ -145,12 +184,20 @@ const ProductGrid = () => {
     setViewMode(mode);
     localStorage.setItem("shopViewMode", mode);
   };
+  const collectionLabel =
+    collectionType === "deals"
+      ? "Daily Deals"
+      : collectionType === "new-arrivals"
+        ? "New Arrivals"
+        : "";
   // Parse URL parameters
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const categoryParam = params.get("category");
     const typeParam = params.get("type");
     const searchParam = params.get("search");
+    const collectionParam = String(params.get("collection") || "all").trim().toLowerCase();
+    const sortParam = String(params.get("sort") || "").trim().toLowerCase();
 
     if (categoryParam) {
       setSelectedCategory(categoryParam);
@@ -169,6 +216,18 @@ const ProductGrid = () => {
     } else {
       setSearchTerm("");
     }
+
+    if (["deals", "new-arrivals"].includes(collectionParam)) {
+      setCollectionType(collectionParam);
+      setSortBy(collectionParam === "new-arrivals" ? "newest" : "featured");
+    } else {
+      setCollectionType("all");
+      if (["featured", "price-low", "price-high", "name", "newest"].includes(sortParam)) {
+        setSortBy(sortParam);
+      } else {
+        setSortBy("featured");
+      }
+    }
   }, [location.search]);
 
   // Fetch products and categories
@@ -186,6 +245,7 @@ const ProductGrid = () => {
     products,
     selectedCategory,
     selectedCategoryType,
+    collectionType,
     categories,
     sortBy,
     priceRange,
@@ -194,9 +254,9 @@ const ProductGrid = () => {
   useEffect(() => {
     // Reset display limit when filters change
     if (!allProductsVisible) {
-      setDisplayLimit(5);
+      setDisplayLimit(INITIAL_DISPLAY_LIMIT);
     }
-  }, [selectedCategory, selectedCategoryType, priceRange, sortBy]);
+  }, [selectedCategory, selectedCategoryType, collectionType, priceRange, sortBy]);
   const fetchProducts = async () => {
     try {
       setLoading(true);
@@ -321,6 +381,10 @@ const ProductGrid = () => {
       });
     }
 
+    if (collectionType === "deals") {
+      filtered = filtered.filter((product) => getProductPricing(product).hasDiscount);
+    }
+
     // Filter by price range
     filtered = filtered.filter((product) => {
       if (String(product?.priceType || "single") === "tba") return true;
@@ -339,8 +403,19 @@ const ProductGrid = () => {
       case "name":
         filtered.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
         break;
+      case "newest":
+        filtered.sort(
+          (a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime(),
+        );
+        break;
       case "featured":
       default:
+        if (collectionType === "new-arrivals") {
+          filtered.sort(
+            (a, b) =>
+              new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime(),
+          );
+        }
         break;
     }
 
@@ -501,13 +576,13 @@ const ProductGrid = () => {
       setAllProductsVisible(true);
       setDisplayLimit(filteredProducts.length);
     } else {
-      // Show only 5 products
+      // Reset to initial shelf size
       setAllProductsVisible(false);
-      setDisplayLimit(5);
+      setDisplayLimit(INITIAL_DISPLAY_LIMIT);
     }
   };
   const LoadingSkeleton = () => (
-    <section className=" bg-white py-4 md:py-8 lg:py-12">
+    <section className="bg-[#f5f5f5] py-4 md:py-8 lg:py-12">
       <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {/* Desktop Filters Skeleton */}
@@ -524,7 +599,7 @@ const ProductGrid = () => {
 
           {/* Products Grid Skeleton */}
           <div className="lg:col-span-3">
-            <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
               {[...Array(6)].map((_, i) => (
                 <div
                   key={i}
@@ -540,20 +615,98 @@ const ProductGrid = () => {
 
   if (loading) return <LoadingSkeleton />;
 
+  const publicStockSummaryEnabled = Boolean(
+    settings?.publicStockSummaryEnabled ?? settings?.marketplace?.publicStockSummaryEnabled,
+  );
+  const catalogProductCount = products.length;
+  const catalogDealCount = products.filter((product) => getProductPricing(product).hasDiscount)
+    .length;
+  const catalogStockUnits = products.reduce((total, product) => {
+    if (String(product?.priceType || "single").toLowerCase() === "tba") {
+      return total;
+    }
+
+    const stock = Number(product?.stock || 0);
+    return stock > 0 ? total + stock : total;
+  }, 0);
+  const totalCategoryCount = visibleCategories.length;
+  const tbaProductCount = filteredProducts.filter(
+    (product) => String(product?.priceType || "single").toLowerCase() === "tba",
+  ).length;
+  const storeName = getSafeStoreName(branding.storeName);
+  const tagline = String(branding.tagline || "").trim();
+  const catalogTitle =
+    applyTemplate(storefront?.catalogTitle, { storeName }) ||
+    applyTemplate(DEFAULT_STOREFRONT.catalogTitle, { storeName });
+  const catalogDescription =
+    String(storefront?.catalogDescription || DEFAULT_STOREFRONT.catalogDescription).trim() ||
+    DEFAULT_STOREFRONT.catalogDescription;
+
   return (
-    <section className="min-h-screen bg-white">
-      {/* Hero Section */}
-      <div className="bg-linear-to-br from-gray-50 to-white">
-        <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 lg:px-8 py-4 md:py-6 lg:py-7">
-          <div className="text-center mb-2 md:mb-3">
-            <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-bold text-black mb-1.5 tracking-tight">
-              <span className="bg-linear-to-r from-black to-gray-800 bg-clip-text text-transparent">
-                Luxe Marketplace
-              </span>
-            </h1>
-            <p className="text-gray-600 text-sm xs:text-base sm:text-lg max-w-2xl mx-auto px-2">
-              Discover curated products from trusted marketplace vendors
-            </p>
+    <section className="min-h-screen bg-[#f5f5f5]">
+      <div className="border-b border-gray-200 bg-[#f5f5f5]">
+        <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 lg:px-8 py-4 md:py-5">
+          <div className="overflow-hidden rounded-[32px] border border-gray-200 bg-white shadow-sm">
+            <div className="grid gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center lg:px-8 lg:py-7">
+              <div>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex rounded-full bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
+                    {storeName}
+                  </span>
+                  {searchTerm ? (
+                    <span className="inline-flex rounded-full bg-yellow-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-yellow-900">
+                      Search: {searchTerm}
+                    </span>
+                  ) : null}
+                </div>
+                <h1 className="text-2xl font-black tracking-tight text-black sm:text-3xl lg:text-4xl">
+                  {catalogTitle}
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600 sm:text-base">
+                  {tagline || catalogDescription}
+                </p>
+                <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                  Showing {filteredProducts.length} matched products in the current view
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {visibleCategories.slice(0, 8).map((category) => (
+                    <button
+                      key={category._id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(category._id);
+                        navigate(`/shop?category=${category._id}`);
+                      }}
+                      className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                        selectedCategory === category._id
+                          ? "border-black bg-black text-white"
+                          : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-white"
+                      }`}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xs:grid-cols-3 gap-3">
+                {[
+                  { label: "Products", value: catalogProductCount },
+                  { label: "Deals", value: catalogDealCount },
+                  publicStockSummaryEnabled
+                    ? { label: "Stock units", value: catalogStockUnits }
+                    : { label: "Categories", value: totalCategoryCount },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl bg-gray-50 px-3 py-4 text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                      {item.label}
+                    </p>
+                    <p className="mt-1 text-xl font-black text-black">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -563,7 +716,7 @@ const ProductGrid = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {/* Desktop Filters */}
           <div className="lg:col-span-1 hidden lg:block">
-            <div className="bg-white rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-sm sticky top-6">
+            <div className="bg-white rounded-[28px] p-4 sm:p-6 border border-gray-200 shadow-sm sticky top-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-bold text-black">Filters</h3>
                 {(selectedCategory !== "all" ||
@@ -580,6 +733,19 @@ const ProductGrid = () => {
                     Reset All
                   </button>
                 )}
+              </div>
+
+              <div className="mb-6 rounded-2xl bg-black px-4 py-4 text-white">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                  Inventory note
+                </p>
+                <p className="mt-2 text-sm leading-6 text-white/80">
+                  Exact product quantities still depend on each product's public stock toggle. The catalog summary above is controlled separately from Website Setup.
+                </p>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <span className="text-white/70">TBA products</span>
+                  <span className="font-bold text-white">{tbaProductCount}</span>
+                </div>
               </div>
 
               {/* Categories */}
@@ -695,7 +861,7 @@ const ProductGrid = () => {
 
                 {expandedFilters.price && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between text-sm text-gray-600">
+                    <div className="hidden items-center justify-between text-sm text-gray-600">
                       <span>৳{priceRange[0].toFixed(2)}</span>
                       <span>৳{priceRange[1].toFixed(2)}</span>
                     </div>
@@ -713,6 +879,10 @@ const ProductGrid = () => {
                       }
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                     />
+                    <div className="flex items-center justify-between text-sm text-gray-600">
+                      <span>{priceRange[0].toFixed(2)} TK</span>
+                      <span>{priceRange[1].toFixed(2)} TK</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -778,6 +948,7 @@ const ProductGrid = () => {
                       className="appearance-none px-3 py-2.5 text-sm border border-gray-300 rounded-full bg-white text-gray-700 focus:outline-none focus:border-black pr-8"
                     >
                       <option value="featured">Featured</option>
+                      <option value="newest">Newest First</option>
                       <option value="price-low">Price: Low to High</option>
                       <option value="price-high">Price: High to Low</option>
                       <option value="name">Name: A to Z</option>
@@ -794,12 +965,15 @@ const ProductGrid = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
               <div className="mb-4 sm:mb-0">
                 <h2 className="text-xl xs:text-2xl font-bold text-black">
-                  {selectedCategory !== "all" && categoryName
+                  {collectionLabel
+                    ? collectionLabel
+                    : selectedCategory !== "all" && categoryName
                     ? `${categoryName} Products`
                     : "All Products"}
                 </h2>
                 <p className="text-gray-600 mt-1 text-sm">
                   {filteredProducts.length} products found
+                  {collectionLabel && ` in ${collectionLabel.toLowerCase()}`}
                   {selectedCategoryType !== "all" &&
                     ` in ${selectedCategoryType}`}
                 </p>
@@ -844,6 +1018,7 @@ const ProductGrid = () => {
                   className="px-4 py-2 border border-gray-300 rounded-full bg-white text-gray-700 focus:outline-none focus:border-black"
                 >
                   <option value="featured">Featured</option>
+                  <option value="newest">Newest First</option>
                   <option value="price-low">Price: Low to High</option>
                   <option value="price-high">Price: High to Low</option>
                   <option value="name">Name: A to Z</option>
@@ -871,7 +1046,7 @@ const ProductGrid = () => {
             ) : viewMode === "grid" ? (
               /* Grid View */
               <>
-                <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
                   {filteredProducts.slice(0, displayLimit).map((product) => {
                     const categoryType = getCategoryTypeForProduct(product);
                     const categoryName = getCategoryNameForProduct(product);
@@ -886,9 +1061,7 @@ const ProductGrid = () => {
                       product.marketplaceType
                         ? `Type: ${product.marketplaceType}`
                         : null,
-                      product.showStockToPublic === true
-                        ? `Stock: ${Number(product.stock || 0)}`
-                        : null,
+                      getPublicStockBadgeText(product),
                     ]
                       .filter(Boolean)
                       .join(" | ");
@@ -901,11 +1074,11 @@ const ProductGrid = () => {
                     return (
                       <div
                         key={product._id}
-                        className="group relative flex flex-col h-[300px] sm:h-[330px] md:h-[350px] rounded-2xl border border-gray-200/80 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(15,23,42,0.12)]"
+                        className="group relative flex flex-col h-[316px] sm:h-[334px] md:h-[348px] rounded-[24px] border border-gray-200/80 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(15,23,42,0.12)]"
                       >
                         {/* Product Image */}
                         <div
-                          className="relative overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2 sm:p-3 cursor-pointer"
+                          className="relative overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2.5 sm:p-3 cursor-pointer"
                           onClick={() => {
                             navigate(`/product/${product._id}`);
                             window.scrollTo(0, 0);
@@ -927,6 +1100,13 @@ const ProductGrid = () => {
                               </span>
                             </div>
                           )}
+                          {pricing.hasDiscount ? (
+                            <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
+                              <span className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold text-black shadow-sm">
+                                Sale
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
 
                         {/* Product Info */}
@@ -977,6 +1157,18 @@ const ProductGrid = () => {
                                 ) : null}
                               </div>
                             ) : null}
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              {isPublicStockVisible(product) ? (
+                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  {getPublicStockBadgeText(product)}
+                                </span>
+                              ) : null}
+                              {pricing.isTba ? (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                  TBA
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
 
                           {/* Price & Action */}
@@ -1018,7 +1210,7 @@ const ProductGrid = () => {
                     );
                   })}
                 </div>
-                {filteredProducts.length > 5 && (
+                {filteredProducts.length > INITIAL_DISPLAY_LIMIT && (
                   <div className="text-center mt-8">
                     <button
                       onClick={handleViewMore}
@@ -1031,7 +1223,7 @@ const ProductGrid = () => {
                         </>
                       ) : (
                         <>
-                          View More Products ({filteredProducts.length - 5}{" "}
+                          View More Products ({filteredProducts.length - INITIAL_DISPLAY_LIMIT}{" "}
                           more)
                           <FiChevronDown className="inline ml-2" />
                         </>
@@ -1155,9 +1347,9 @@ const ProductGrid = () => {
                                             {product.marketplaceType}
                                           </span>
                                         )}
-                                        {product.showStockToPublic === true && (
+                                        {isPublicStockVisible(product) && (
                                           <span className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">
-                                            Stock: {Number(product.stock || 0)}
+                                            {getPublicStockBadgeText(product)}
                                           </span>
                                         )}
 
@@ -1262,7 +1454,7 @@ const ProductGrid = () => {
                       );
                     })}
                 </div>
-                {filteredProducts.length > 5 && (
+                {filteredProducts.length > INITIAL_DISPLAY_LIMIT && (
                   <div className="text-center mt-8">
                     <button
                       onClick={handleViewMore}
@@ -1275,7 +1467,7 @@ const ProductGrid = () => {
                         </>
                       ) : (
                         <>
-                          View More Products ({filteredProducts.length - 5}{" "}
+                          View More Products ({filteredProducts.length - INITIAL_DISPLAY_LIMIT}{" "}
                           more)
                           <FiChevronDown className="inline ml-2" />
                         </>

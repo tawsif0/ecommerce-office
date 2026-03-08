@@ -15,6 +15,10 @@ import {
 import { FaFacebookF, FaTwitter, FaWhatsapp, FaPaperPlane } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth";
 import { getProductPricingDisplay } from "../utils/productPricing";
+import {
+  getPublicStockBadgeText,
+  isPublicStockVisible,
+} from "../utils/publicProduct";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -62,6 +66,8 @@ const renderStars = (rating = 0) =>
       }`}
     />
   ));
+
+const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} TK`;
 
 const VendorStore = () => {
   const { slug } = useParams();
@@ -301,19 +307,26 @@ const VendorStore = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-12 h-12 border-2 border-gray-200 border-t-black rounded-full animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4 py-12">
+        <div className="rounded-[28px] border border-black/5 bg-white p-10 shadow-sm">
+          <div className="h-12 w-12 rounded-full border-2 border-gray-200 border-t-black animate-spin" />
+        </div>
       </div>
     );
   }
 
   if (!vendor) {
     return (
-      <section className="min-h-screen flex items-center justify-center px-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center max-w-lg">
-          <h1 className="text-2xl font-semibold text-black mb-2">Store not found</h1>
-          <p className="text-gray-600 mb-5">This vendor store may be unavailable.</p>
-          <Link to="/shop" className="px-4 py-2 bg-black text-white rounded-lg text-sm">
+      <section className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4 py-12">
+        <div className="max-w-lg rounded-[28px] border border-black/5 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-semibold text-black">Store not found</h1>
+          <p className="mt-2 text-sm leading-6 text-gray-600">
+            This vendor store may be unavailable or not published yet.
+          </p>
+          <Link
+            to="/shop"
+            className="mt-6 inline-flex items-center rounded-full bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
+          >
             Browse Shop
           </Link>
         </div>
@@ -322,141 +335,194 @@ const VendorStore = () => {
   }
 
   return (
-    <section className="min-h-screen bg-white pb-12">
-      <div className="h-56 md:h-72 relative overflow-hidden">
+    <section className="min-h-screen bg-[#f5f5f5] pb-16">
+      <div className="relative h-64 overflow-hidden md:h-80 lg:h-96">
         <img
           src={getFullVendorMediaUrl(vendor.banner) || fallbackBanner}
           alt={vendor.storeName}
-          className="w-full h-full object-cover"
+          className="h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.2)_0%,rgba(0,0,0,0.75)_100%)]" />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 relative z-10 space-y-8">
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 md:p-7 shadow-lg">
-          <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
-            <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border border-gray-200 shrink-0">
-              {vendor.logo ? (
-                <img
-                  src={getFullVendorMediaUrl(vendor.logo)}
-                  alt={vendor.storeName}
-                  className="w-full h-full object-cover"
-                />
-              ) : null}
+      <div className="relative z-10 mx-auto -mt-16 max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <Link
+            to="/shop"
+            className="inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm backdrop-blur transition hover:text-black"
+          >
+            Back to marketplace
+          </Link>
+        </div>
+
+        <div className="overflow-hidden rounded-[30px] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+          <div className="grid gap-0 xl:grid-cols-[1.25fr,0.75fr]">
+            <div className="p-6 md:p-8 lg:p-10">
+              <div className="flex flex-col gap-6 md:flex-row md:items-start">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[28px] border border-gray-200 bg-gray-100 text-xl font-bold text-gray-500">
+                  {vendor.logo ? (
+                    <img
+                      src={getFullVendorMediaUrl(vendor.logo)}
+                      alt={vendor.storeName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span>{String(vendor.storeName || "ST").slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white">
+                    Vendor Store
+                  </span>
+                  <h1 className="mt-4 text-3xl font-bold tracking-tight text-black md:text-4xl">
+                    {vendor.storeName}
+                  </h1>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600 md:text-base">
+                    {vendor.description || "Marketplace vendor with curated catalog, direct messaging, and customer reviews."}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-[#fafafa] px-3 py-1.5">
+                      <div className="flex items-center gap-1">{renderStars(vendor.ratingAverage || 0)}</div>
+                      <span>
+                        {Number(vendor.ratingAverage || 0).toFixed(1)} rating
+                      </span>
+                    </div>
+                    <span className="rounded-full bg-[#fafafa] px-3 py-1.5">
+                      {vendor.ratingCount || 0} reviews
+                    </span>
+                    <span className="rounded-full bg-[#fafafa] px-3 py-1.5">
+                      {products.length} products
+                    </span>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={goToVendorMessages}
+                      className="inline-flex items-center gap-2 rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-900"
+                    >
+                      <FaPaperPlane className="h-3.5 w-3.5" />
+                      Message Vendor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={shareStore}
+                      className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-black hover:text-black"
+                    >
+                      <FiShare2 className="h-4 w-4" />
+                      Share Store
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copyStoreLink}
+                      className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-black hover:text-black"
+                    >
+                      <FiCopy className="h-4 w-4" />
+                      Copy Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareStoreTo("facebook")}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-black hover:text-black"
+                      aria-label="Share on Facebook"
+                    >
+                      <FaFacebookF className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareStoreTo("twitter")}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-black hover:text-black"
+                      aria-label="Share on X/Twitter"
+                    >
+                      <FaTwitter className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareStoreTo("whatsapp")}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-black hover:text-black"
+                      aria-label="Share on WhatsApp"
+                    >
+                      <FaWhatsapp className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex-1">
-              <h1 className="text-2xl md:text-3xl font-bold text-black">{vendor.storeName}</h1>
-              <p className="text-gray-600 mt-1">{vendor.description || "Marketplace vendor"}</p>
 
-              <div className="flex items-center gap-2 mt-3">
-                <div className="flex items-center gap-1">{renderStars(vendor.ratingAverage || 0)}</div>
-                <span className="text-sm text-gray-600">
-                  {Number(vendor.ratingAverage || 0).toFixed(1)} ({vendor.ratingCount || 0} reviews)
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={goToVendorMessages}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50"
-                >
-                  <FaPaperPlane className="w-3.5 h-3.5" />
-                  Message Vendor
-                </button>
-                <button
-                  type="button"
-                  onClick={shareStore}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50"
-                >
-                  <FiShare2 className="w-3.5 h-3.5" />
-                  Share
-                </button>
-                <button
-                  type="button"
-                  onClick={copyStoreLink}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50"
-                >
-                  <FiCopy className="w-3.5 h-3.5" />
-                  Copy Link
-                </button>
-                <button
-                  type="button"
-                  onClick={() => shareStoreTo("facebook")}
-                  className="inline-flex items-center justify-center h-7 w-7 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                  aria-label="Share on Facebook"
-                >
-                  <FaFacebookF className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => shareStoreTo("twitter")}
-                  className="inline-flex items-center justify-center h-7 w-7 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                  aria-label="Share on X/Twitter"
-                >
-                  <FaTwitter className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => shareStoreTo("whatsapp")}
-                  className="inline-flex items-center justify-center h-7 w-7 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                  aria-label="Share on WhatsApp"
-                >
-                  <FaWhatsapp className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-600">
-                {vendor.city && (
-                  <span className="inline-flex items-center gap-1">
-                    <FiMapPin className="w-4 h-4" />
-                    {vendor.city}
-                  </span>
-                )}
-                {vendor.openingHours && (
-                  <span className="inline-flex items-center gap-1">
-                    <FiClock className="w-4 h-4" />
-                    {vendor.openingHours}
-                  </span>
-                )}
-                {vendor.phone && (
-                  <span className="inline-flex items-center gap-1">
-                    <FiPhone className="w-4 h-4" />
-                    {vendor.phone}
-                  </span>
-                )}
-                {vendor.email && (
-                  <span className="inline-flex items-center gap-1">
-                    <FiMail className="w-4 h-4" />
-                    {vendor.email}
-                  </span>
-                )}
-                <span className="inline-flex items-center gap-1">
-                  <FiPackage className="w-4 h-4" />
-                  {products.length} products
-                </span>
+            <div className="border-t border-gray-100 bg-[radial-gradient(circle_at_top_left,_rgba(0,0,0,0.08),_transparent_60%),linear-gradient(135deg,_#111111_0%,_#2a2a2a_100%)] p-6 text-white md:p-8 xl:border-l xl:border-t-0 xl:p-10">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
+                Store Overview
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/60">Location</p>
+                  <p className="mt-2 text-lg font-semibold">{vendor.city || "Bangladesh"}</p>
+                  <p className="mt-1 text-xs text-white/70">Marketplace seller region</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/60">Availability</p>
+                  <p className="mt-2 text-lg font-semibold">{vendor.openingHours || "Always open"}</p>
+                  <p className="mt-1 text-xs text-white/70">Store operating hours</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/60">Direct Contact</p>
+                  <div className="mt-2 space-y-2 text-sm text-white/80">
+                    {vendor.phone ? (
+                      <p className="inline-flex items-center gap-2">
+                        <FiPhone className="h-4 w-4" />
+                        {vendor.phone}
+                      </p>
+                    ) : null}
+                    {vendor.email ? (
+                      <p className="inline-flex items-center gap-2">
+                        <FiMail className="h-4 w-4" />
+                        {vendor.email}
+                      </p>
+                    ) : (
+                      <p>No direct email published</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {vendor.vacationMode && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900">
+        {vendor.vacationMode ? (
+          <div className="mt-6 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-amber-900 shadow-sm">
             <p className="font-semibold">This store is currently on vacation mode.</p>
-            <p className="text-sm mt-1">
-              Products can be viewed, but checkout may be temporarily unavailable.
+            <p className="mt-1 text-sm">
+              Products remain visible, but checkout or delivery may be temporarily limited.
             </p>
           </div>
-        )}
+        ) : null}
 
-        <div>
-          <h2 className="text-xl font-semibold text-black mb-4">Store Products</h2>
+        <div className="mt-6 rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                Store Products
+              </p>
+              <h2 className="mt-1 text-2xl font-semibold text-black">
+                Browse the full vendor catalog
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Compact marketplace cards with pricing, colors, and direct product access.
+              </p>
+            </div>
+            <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">
+              {products.length} live listing{products.length === 1 ? "" : "s"}
+            </span>
+          </div>
+
           {products.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-              <p className="text-gray-600">No products available in this store.</p>
+            <div className="mt-5 rounded-[24px] border border-dashed border-gray-300 bg-[#fafafa] p-10 text-center">
+              <p className="text-sm text-gray-600">No products are available in this store yet.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
               {products.map((product) => {
                 const previewColors = Array.isArray(product.colors)
                   ? product.colors.slice(0, 4)
@@ -469,54 +535,69 @@ const VendorStore = () => {
                   <Link
                     key={product._id}
                     to={`/product/${product._id}`}
-                    className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-all flex flex-col h-[300px] sm:h-[330px]"
+                    className="group flex h-[332px] flex-col overflow-hidden rounded-[24px] border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
                   >
-                    <div className="aspect-square bg-gray-100">
+                    <div className="relative aspect-square bg-gray-100">
                       {product.images?.[0] ? (
                         <img
                           src={getFullImageUrl(product.images[0]?.data || product.images[0])}
                           alt={product.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                         />
                       ) : null}
+                      {isPublicStockVisible(product) ? (
+                        <span className="absolute left-3 top-3 rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white">
+                          {getPublicStockBadgeText(product)}
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="p-3 flex flex-col flex-1">
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-medium text-gray-900 line-clamp-2 leading-tight">
+
+                    <div className="flex flex-1 flex-col p-3">
+                      <div>
+                        <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-gray-900">
                           {product.title}
                         </h3>
                         {previewColors.length > 0 ? (
-                          <div className="flex items-center gap-1">
+                          <div className="mt-3 flex items-center gap-1.5">
                             {previewColors.map((color, idx) => (
                               <div
                                 key={idx}
-                                className="w-3 h-3 rounded-full border border-gray-300"
+                                className="h-3.5 w-3.5 rounded-full border border-gray-300"
                                 style={{ backgroundColor: color }}
                                 title={color}
                               />
                             ))}
                             {hasMoreColors ? (
-                              <span className="inline-flex items-center justify-center min-w-[1.05rem] h-[1.05rem] rounded-full bg-linear-to-br from-black to-gray-700 text-white text-[8px] font-bold shadow-sm">
+                              <span className="inline-flex h-[1.2rem] min-w-[1.2rem] items-center justify-center rounded-full bg-gradient-to-br from-black to-gray-700 px-1 text-[8px] font-bold text-white shadow-sm">
                                 4+
                               </span>
                             ) : null}
                           </div>
                         ) : null}
                       </div>
-                      {pricing.isTba ? (
-                        <p className="text-sm font-semibold text-black mt-auto">TBA</p>
-                      ) : pricing.hasDiscount ? (
-                        <p className="text-sm font-semibold text-black mt-auto flex items-baseline gap-2">
-                          <span className="text-xs text-gray-400 line-through font-medium">
-                            {Number(pricing.previousPrice || 0).toFixed(2)} TK
-                          </span>
-                          <span>{Number(pricing.currentPrice || 0).toFixed(2)} TK</span>
-                        </p>
-                      ) : (
-                        <p className="text-sm font-semibold text-black mt-auto">
-                          {Number(pricing.currentPrice || 0).toFixed(2)} TK
-                        </p>
-                      )}
+
+                      <div className="mt-auto pt-4">
+                        {pricing.isTba ? (
+                          <p className="text-base font-bold text-black">TBA</p>
+                        ) : pricing.hasDiscount ? (
+                          <div className="flex items-end gap-2">
+                            <span className="text-xs font-medium text-gray-400 line-through">
+                              {formatCurrency(pricing.previousPrice)}
+                            </span>
+                            <span className="text-lg font-bold text-black">
+                              {formatCurrency(pricing.currentPrice)}
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="text-lg font-bold text-black">
+                            {formatCurrency(pricing.currentPrice)}
+                          </p>
+                        )}
+
+                        <div className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white transition group-hover:bg-gray-900">
+                          View Product
+                        </div>
+                      </div>
                     </div>
                   </Link>
                 );
@@ -525,37 +606,52 @@ const VendorStore = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-            <h2 className="text-lg font-semibold text-black mb-4">Store Reviews</h2>
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+            <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                  Store Reviews
+                </p>
+                <h2 className="mt-1 text-xl font-semibold text-black">
+                  What customers say about this vendor
+                </h2>
+              </div>
+              <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">
+                {reviews.length} review{reviews.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
             {reviewLoading ? (
-              <p className="text-gray-600">Loading reviews...</p>
+              <p className="mt-5 text-sm text-gray-600">Loading reviews...</p>
             ) : reviews.length === 0 ? (
-              <p className="text-gray-600">No reviews yet.</p>
+              <div className="mt-5 rounded-[24px] border border-dashed border-gray-300 bg-[#fafafa] p-8 text-center text-sm text-gray-600">
+                No reviews yet.
+              </div>
             ) : (
-              <div className="space-y-3 max-h-80 overflow-auto pr-1">
+              <div className="mt-5 space-y-3 max-h-96 overflow-auto pr-1">
                 {reviews.map((review) => (
-                  <div key={review._id} className="border border-gray-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
+                  <div key={review._id} className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium text-gray-900">
                           {review.user?.name || review.reviewerName || "Customer"}
                         </p>
-                        <div className="flex items-center gap-1 mt-1">
+                        <div className="mt-1 flex items-center gap-1">
                           {renderStars(review.rating || 0)}
                         </div>
                       </div>
-                      {review.verifiedPurchase && (
-                        <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">
+                      {review.verifiedPurchase ? (
+                        <span className="rounded-full bg-green-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-green-700">
                           Verified Purchase
                         </span>
-                      )}
+                      ) : null}
                     </div>
-                    {review.title && (
-                      <p className="text-sm font-semibold text-gray-900 mt-2">{review.title}</p>
-                    )}
-                    <p className="text-sm text-gray-600 mt-1">{review.comment}</p>
-                    <p className="text-xs text-gray-500 mt-2">
+                    {review.title ? (
+                      <p className="mt-3 text-sm font-semibold text-gray-900">{review.title}</p>
+                    ) : null}
+                    <p className="mt-1 text-sm leading-6 text-gray-600">{review.comment}</p>
+                    <p className="mt-2 text-xs text-gray-500">
                       {new Date(review.createdAt).toLocaleDateString()}
                     </p>
                   </div>
@@ -563,15 +659,15 @@ const VendorStore = () => {
               </div>
             )}
 
-            <form onSubmit={submitReview} className="mt-4 border-t border-gray-200 pt-4 space-y-3">
+            <form onSubmit={submitReview} className="mt-5 border-t border-gray-100 pt-5 space-y-3">
               <h3 className="text-sm font-semibold text-black">Write a review</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <select
                   value={reviewForm.rating}
                   onChange={(event) =>
                     setReviewForm((prev) => ({ ...prev, rating: Number(event.target.value) }))
                   }
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  className="rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
                 >
                   <option value={5}>5 - Excellent</option>
                   <option value={4}>4 - Good</option>
@@ -585,22 +681,22 @@ const VendorStore = () => {
                     setReviewForm((prev) => ({ ...prev, title: event.target.value }))
                   }
                   placeholder="Review title (optional)"
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  className="rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
                 />
               </div>
               <textarea
-                rows={3}
+                rows={4}
                 value={reviewForm.comment}
                 onChange={(event) =>
                   setReviewForm((prev) => ({ ...prev, comment: event.target.value }))
                 }
                 placeholder="Share your experience with this store"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
               />
               <button
                 type="submit"
                 disabled={submittingReview}
-                className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-60"
+                className="inline-flex items-center rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submittingReview ? "Submitting..." : "Submit Review"}
               </button>
@@ -608,20 +704,22 @@ const VendorStore = () => {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-              <h2 className="text-lg font-semibold text-black mb-4">Contact Vendor</h2>
+            <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+              <h2 className="text-lg font-semibold text-black">Contact Vendor</h2>
               {vendor.contactFormEnabled === false ? (
-                <p className="text-gray-600 text-sm">This vendor has disabled contact form.</p>
+                <p className="mt-3 text-sm text-gray-600">
+                  This vendor has disabled the contact form.
+                </p>
               ) : (
-                <form onSubmit={submitContact} className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <form onSubmit={submitContact} className="mt-4 space-y-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <input
                       value={contactForm.name}
                       onChange={(event) =>
                         setContactForm((prev) => ({ ...prev, name: event.target.value }))
                       }
                       placeholder="Your name"
-                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                      className="rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
                     />
                     <input
                       value={contactForm.email}
@@ -629,7 +727,7 @@ const VendorStore = () => {
                         setContactForm((prev) => ({ ...prev, email: event.target.value }))
                       }
                       placeholder="Your email"
-                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                      className="rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
                     />
                   </div>
                   <input
@@ -638,7 +736,7 @@ const VendorStore = () => {
                       setContactForm((prev) => ({ ...prev, phone: event.target.value }))
                     }
                     placeholder="Phone (optional)"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
                   />
                   <input
                     value={contactForm.subject}
@@ -646,7 +744,7 @@ const VendorStore = () => {
                       setContactForm((prev) => ({ ...prev, subject: event.target.value }))
                     }
                     placeholder="Subject"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
                   />
                   <textarea
                     rows={4}
@@ -655,12 +753,12 @@ const VendorStore = () => {
                       setContactForm((prev) => ({ ...prev, message: event.target.value }))
                     }
                     placeholder="Write your message"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
                   />
                   <button
                     type="submit"
                     disabled={sendingMessage}
-                    className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-60"
+                    className="inline-flex items-center rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {sendingMessage ? "Sending..." : "Send Message"}
                   </button>
@@ -668,60 +766,60 @@ const VendorStore = () => {
               )}
             </div>
 
-            {hasPolicies && (
-              <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-                <h2 className="text-lg font-semibold text-black mb-4">Store Policies</h2>
-                <div className="space-y-3 text-sm">
-                  {vendor.storePolicies?.shippingPolicy && (
+            {hasPolicies ? (
+              <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+                <h2 className="text-lg font-semibold text-black">Store Policies</h2>
+                <div className="mt-4 space-y-4 text-sm">
+                  {vendor.storePolicies?.shippingPolicy ? (
                     <div>
                       <h3 className="font-semibold text-gray-900">Shipping Policy</h3>
-                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">
+                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
                         {vendor.storePolicies.shippingPolicy}
                       </p>
                     </div>
-                  )}
-                  {vendor.storePolicies?.refundPolicy && (
+                  ) : null}
+                  {vendor.storePolicies?.refundPolicy ? (
                     <div>
                       <h3 className="font-semibold text-gray-900">Refund Policy</h3>
-                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">
+                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
                         {vendor.storePolicies.refundPolicy}
                       </p>
                     </div>
-                  )}
-                  {vendor.storePolicies?.privacyPolicy && (
+                  ) : null}
+                  {vendor.storePolicies?.privacyPolicy ? (
                     <div>
                       <h3 className="font-semibold text-gray-900">Privacy Policy</h3>
-                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">
+                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
                         {vendor.storePolicies.privacyPolicy}
                       </p>
                     </div>
-                  )}
-                  {vendor.storePolicies?.termsConditions && (
+                  ) : null}
+                  {vendor.storePolicies?.termsConditions ? (
                     <div>
-                      <h3 className="font-semibold text-gray-900">Terms & Conditions</h3>
-                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">
+                      <h3 className="font-semibold text-gray-900">Terms and Conditions</h3>
+                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
                         {vendor.storePolicies.termsConditions}
                       </p>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
-            )}
+            ) : null}
 
-            {vendor.locationMapUrl && (
-              <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
-                <h2 className="text-lg font-semibold text-black mb-3">Store Location</h2>
+            {vendor.locationMapUrl ? (
+              <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
+                <h2 className="text-lg font-semibold text-black">Store Location</h2>
                 <a
                   href={vendor.locationMapUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-blue-700 hover:underline"
+                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-black hover:text-black"
                 >
-                  <FiMapPin className="w-4 h-4" />
+                  <FiMapPin className="h-4 w-4" />
                   Open store map
                 </a>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -730,3 +828,4 @@ const VendorStore = () => {
 };
 
 export default VendorStore;
+

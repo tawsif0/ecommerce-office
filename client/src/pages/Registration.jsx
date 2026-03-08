@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
+import { useDispatch } from "react-redux";
 import {
   ArrowRightIcon,
   EyeIcon,
@@ -16,14 +17,13 @@ import {
   PhoneIcon,
   HomeIcon,
 } from "@heroicons/react/24/outline";
-import {
-  fetchPublicSettings,
-  invalidatePublicSettingsCache,
-} from "../utils/publicSettings";
+import usePublicSettings from "../hooks/usePublicSettings";
+import { loadPublicSettings } from "../store/publicSettingsSlice";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
 const Register = () => {
+  const dispatch = useDispatch();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -35,6 +35,7 @@ const Register = () => {
     facebook: false,
   });
   const navigate = useNavigate();
+  const { settings } = usePublicSettings();
 
   const {
     register,
@@ -46,36 +47,23 @@ const Register = () => {
   const password = watch("password");
 
   useEffect(() => {
-    let cancelled = false;
+    const marketplaceMode = String(settings?.marketplaceMode || "multi")
+      .trim()
+      .toLowerCase();
+    const vendorEnabled = Boolean(settings?.vendorRegistrationEnabled);
+    const allowVendor = marketplaceMode !== "single" && vendorEnabled;
+    const initialSetupMode = Boolean(settings?.isInitialSetup);
 
-    const loadPublicSettings = async () => {
-      const settings = await fetchPublicSettings({ force: true });
-      if (cancelled) return;
-
-      const marketplaceMode = String(settings?.marketplaceMode || "multi")
-        .trim()
-        .toLowerCase();
-      const vendorEnabled = Boolean(settings?.vendorRegistrationEnabled);
-      const allowVendor = marketplaceMode !== "single" && vendorEnabled;
-      const initialSetupMode = Boolean(settings?.isInitialSetup);
-
-      setAllowVendorSignup(allowVendor);
-      setIsInitialSetup(initialSetupMode);
-      setSocialProviders({
-        google: Boolean(settings?.integrations?.enableGoogleLogin),
-        facebook: Boolean(settings?.integrations?.enableFacebookLogin),
-      });
-      if (!allowVendor || initialSetupMode) {
-        setAccountType("user");
-      }
-    };
-
-    loadPublicSettings();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setAllowVendorSignup(allowVendor);
+    setIsInitialSetup(initialSetupMode);
+    setSocialProviders({
+      google: Boolean(settings?.integrations?.enableGoogleLogin),
+      facebook: Boolean(settings?.integrations?.enableFacebookLogin),
+    });
+    if (!allowVendor || initialSetupMode) {
+      setAccountType("user");
+    }
+  }, [settings]);
 
   const onSubmit = async (data) => {
     setIsLoading(true);
@@ -106,7 +94,7 @@ const Register = () => {
       } else {
         toast.success("Account created successfully.");
       }
-      invalidatePublicSettingsCache();
+      dispatch(loadPublicSettings({ force: true }));
       navigate("/login", { replace: true });
     } catch (error) {
       toast.error(

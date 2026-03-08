@@ -6,8 +6,9 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useCart } from "../../context/CartContext";
+import usePublicSettings from "../../hooks/usePublicSettings";
 import { FiPackage } from "react-icons/fi";
-import { fetchPublicSettings } from "../../utils/publicSettings";
+import { toPublicAssetUrl } from "../../utils/publicSettings";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -27,6 +28,13 @@ const normalizeThemeColor = (value) => {
   return "#000000";
 };
 
+const normalizeLogoMode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "text"
+    ? "text"
+    : "image";
+
 const getReadableTextColor = (backgroundHex) => {
   const normalized = normalizeThemeColor(backgroundHex);
   const r = Number.parseInt(normalized.slice(1, 3), 16);
@@ -36,23 +44,34 @@ const getReadableTextColor = (backgroundHex) => {
   return luminance > 0.62 ? "#111827" : "#ffffff";
 };
 
-const toPublicAssetUrl = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-
-  if (
-    raw.startsWith("http://") ||
-    raw.startsWith("https://") ||
-    raw.startsWith("data:")
-  ) {
-    return raw;
+const normalizeNavQuickLinks = (value) => {
+  if (!Array.isArray(value)) {
+    return [
+      { label: "Daily Deals", path: "/shop?collection=deals" },
+      { label: "Top Categories", path: "/#top-categories" },
+      { label: "New Arrivals", path: "/shop?collection=new-arrivals" },
+      { label: "Buyer Protection", path: "/faqs#buyer-protection" },
+      { label: "Track Order", path: "/track-order" },
+    ];
   }
 
-  if (raw.startsWith("/")) {
-    return baseUrl ? `${baseUrl}${raw}` : raw;
-  }
+  const uniqueValues = new Map();
+  value.forEach((entry) => {
+    const label = String(entry?.label || "").trim();
+    const path = String(entry?.path || "").trim() || "/";
+    if (!label) return;
+    uniqueValues.set(`${label}|${path}`, { label, path });
+  });
 
-  return baseUrl ? `${baseUrl}/${raw.replace(/^\/+/, "")}` : raw;
+  return uniqueValues.size > 0
+    ? Array.from(uniqueValues.values())
+    : [
+        { label: "Daily Deals", path: "/shop?collection=deals" },
+        { label: "Top Categories", path: "/#top-categories" },
+        { label: "New Arrivals", path: "/shop?collection=new-arrivals" },
+        { label: "Buyer Protection", path: "/faqs#buyer-protection" },
+        { label: "Track Order", path: "/track-order" },
+      ];
 };
 
 const Navbar = () => {
@@ -100,7 +119,7 @@ const Navbar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState("user");
-  const [publicSettings, setPublicSettings] = useState(null);
+  const { settings: publicSettings } = usePublicSettings();
   const { cartCount } = useCart();
   const categoryIdSet = useMemo(
     () => new Set(categoryProductIds),
@@ -117,13 +136,25 @@ const Navbar = () => {
 
   const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
   const contact = useMemo(() => publicSettings?.contact || {}, [publicSettings]);
+  const storefront = useMemo(() => publicSettings?.storefront || {}, [publicSettings]);
   const brandName = useMemo(() => {
     const resolved = String(website?.storeName || "E-Commerce").trim();
     return resolved || "E-Commerce";
   }, [website?.storeName]);
+  const brandLogoMode = useMemo(
+    () => normalizeLogoMode(website?.logoMode),
+    [website?.logoMode],
+  );
+  const brandLogoText = useMemo(() => {
+    const resolved = String(website?.logoText || "").trim();
+    return resolved || brandName;
+  }, [website?.logoText, brandName]);
   const brandLogoUrl = useMemo(
-    () => toPublicAssetUrl(website?.logoUrl || ""),
-    [website?.logoUrl],
+    () =>
+      brandLogoMode === "text"
+        ? ""
+        : toPublicAssetUrl(website?.logoUrl || ""),
+    [brandLogoMode, website?.logoUrl],
   );
   const themeColor = useMemo(
     () => normalizeThemeColor(website?.themeColor),
@@ -141,7 +172,6 @@ const Navbar = () => {
     const resolved = String(contact?.email || "").trim();
     return resolved || "support@demo.com";
   }, [contact?.email]);
-
   // Helper function to detect if query looks like an order number
   const isOrderNumberQuery = (query) => {
     const trimmed = query?.toString().trim() || "";
@@ -168,29 +198,6 @@ const Navbar = () => {
         setUserRole("user");
       }
     }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadPublicSettings = async (force = false) => {
-      const settings = await fetchPublicSettings({ force });
-      if (!cancelled) {
-        setPublicSettings(settings);
-      }
-    };
-
-    loadPublicSettings(false);
-
-    const handleSettingsUpdated = () => {
-      loadPublicSettings(true);
-    };
-
-    window.addEventListener("publicSettingsUpdated", handleSettingsUpdated);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("publicSettingsUpdated", handleSettingsUpdated);
-    };
   }, []);
 
   useEffect(() => {
@@ -661,6 +668,27 @@ const Navbar = () => {
       { label: "Support Tickets", tab: "module-support" },
     ];
   }, [userRole]);
+  const marketplaceNavLinks = useMemo(
+    () => normalizeNavQuickLinks(storefront?.navQuickLinks),
+    [storefront?.navQuickLinks],
+  );
+  const navigateStorefrontLink = (path) => {
+    const target = String(path || "/").trim() || "/";
+    navigate(target);
+    setIsMobileMenuOpen(false);
+
+    const hash = target.includes("#") ? target.split("#")[1] : "";
+    if (hash) {
+      window.setTimeout(() => {
+        document.getElementById(hash)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 180);
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
   // Mobile search toggle
   const toggleMobileSearch = () => {
@@ -747,14 +775,28 @@ const Navbar = () => {
             {/* Logo */}
             <div className="flex items-center lg:hidden">
               <Link to="/" className="flex items-center gap-2 text-2xl font-bold text-black">
-                {brandLogoUrl ? (
-                  <img
-                    src={brandLogoUrl}
-                    alt={brandName}
-                    className="h-8 w-8 rounded-lg object-cover border border-gray-200"
-                  />
-                ) : null}
-                <span>{brandName}</span>
+                {brandLogoMode === "text" ? (
+                  <span
+                    className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-black tracking-[0.08em]"
+                    style={{
+                      backgroundColor: `${themeColor}18`,
+                      color: themeColor,
+                    }}
+                  >
+                    {brandLogoText}
+                  </span>
+                ) : (
+                  <>
+                    {brandLogoUrl ? (
+                      <img
+                        src={brandLogoUrl}
+                        alt={brandName}
+                        className="h-8 w-8 rounded-lg object-cover border border-gray-200"
+                      />
+                    ) : null}
+                    <span>{brandName}</span>
+                  </>
+                )}
               </Link>
             </div>
 
@@ -1181,12 +1223,20 @@ const Navbar = () => {
                   </div>
                 </div>
               ) : (
-                <Link
-                  to="/login"
-                  className="px-4 py-2 text-sm font-medium text-gray-800 hover:text-black transition-colors duration-200"
-                >
-                  Login
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link
+                    to="/login"
+                    className="px-4 py-2 text-sm font-medium text-gray-800 hover:text-black transition-colors duration-200"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-black transition hover:border-black"
+                  >
+                    Register
+                  </Link>
+                </div>
               )}
 
               {/* Cart */}
@@ -1652,6 +1702,24 @@ const Navbar = () => {
                 );
               })}
 
+              <div className="pt-4 border-t border-gray-200">
+                <p className="px-4 pb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                  Marketplace Links
+                </p>
+                <div className="space-y-1">
+                  {marketplaceNavLinks.map((entry) => (
+                    <button
+                      key={`mobile-${entry.label}-${entry.path}`}
+                      type="button"
+                      onClick={() => navigateStorefrontLink(entry.path)}
+                      className="w-full text-left rounded-lg px-4 py-3 text-base font-medium text-gray-800 transition-colors duration-150 hover:bg-gray-100 hover:text-black"
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* ============================================================ */}
 
               {/* Auth Links (mobile) */}
@@ -1719,6 +1787,23 @@ const Navbar = () => {
         )}
       </nav>
 
+      <div className="hidden lg:block border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2 overflow-x-auto py-3">
+            {marketplaceNavLinks.map((entry) => (
+              <button
+                key={`${entry.label}-${entry.path}`}
+                type="button"
+                onClick={() => navigateStorefrontLink(entry.path)}
+                className="shrink-0 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-black hover:bg-gray-50 hover:text-black"
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Bottom Navigation Bar (Desktop only) */}
       <div
         className="hidden lg:block"
@@ -1730,14 +1815,22 @@ const Navbar = () => {
             <div className="flex items-center">
               <Link to="/" className="shrink-0 flex items-center py-4">
                 <div className="flex items-center gap-2">
-                  {brandLogoUrl ? (
-                    <img
-                      src={brandLogoUrl}
-                      alt={brandName}
-                      className="h-9 w-9 rounded-lg object-cover border border-white/30"
-                    />
-                  ) : null}
-                  <div className="text-2xl font-bold">{brandName}</div>
+                  {brandLogoMode === "text" ? (
+                    <div className="text-2xl font-black tracking-[0.08em]">
+                      {brandLogoText}
+                    </div>
+                  ) : (
+                    <>
+                      {brandLogoUrl ? (
+                        <img
+                          src={brandLogoUrl}
+                          alt={brandName}
+                          className="h-9 w-9 rounded-lg object-cover border border-white/30"
+                        />
+                      ) : null}
+                      <div className="text-2xl font-bold">{brandName}</div>
+                    </>
+                  )}
                 </div>
               </Link>
             </div>

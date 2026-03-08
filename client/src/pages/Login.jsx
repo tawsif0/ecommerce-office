@@ -15,7 +15,7 @@ import {
   HomeIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "../hooks/useAuth";
-import { fetchPublicSettings } from "../utils/publicSettings";
+import usePublicSettings from "../hooks/usePublicSettings";
 const baseUrl = import.meta.env.VITE_API_URL;
 const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -27,6 +27,7 @@ const Login = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
+  const { settings } = usePublicSettings();
 
   const {
     register,
@@ -48,23 +49,11 @@ const Login = () => {
   }, [setValue]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadSocialSettings = async () => {
-      const settings = await fetchPublicSettings();
-      if (cancelled) return;
-
-      setSocialProviders({
-        google: Boolean(settings?.integrations?.enableGoogleLogin),
-        facebook: Boolean(settings?.integrations?.enableFacebookLogin),
-      });
-    };
-
-    loadSocialSettings();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setSocialProviders({
+      google: Boolean(settings?.integrations?.enableGoogleLogin),
+      facebook: Boolean(settings?.integrations?.enableFacebookLogin),
+    });
+  }, [settings]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);

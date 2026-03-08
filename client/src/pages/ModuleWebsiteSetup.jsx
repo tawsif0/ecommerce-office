@@ -1,17 +1,32 @@
-import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import React, { useEffect, useMemo, useRef } from "react";
 import { toast } from "react-hot-toast";
-import { FiGlobe, FiSave, FiSettings } from "react-icons/fi";
+import { useDispatch, useSelector } from "react-redux";
+import { FiGlobe, FiSave, FiSettings, FiUpload } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
 import {
-  fetchPublicSettings,
   getDefaultPublicSettings,
-  invalidatePublicSettingsCache,
+  toPublicAssetUrl,
 } from "../utils/publicSettings";
-
-const baseUrl = import.meta.env.VITE_API_URL;
+import {
+  loadAdminSettings,
+  saveAdminSettings,
+  selectAdminSettingsDraft,
+  selectPublicSettingsState,
+  setMarketplaceMode,
+  setPublicStockSummaryEnabled,
+  setVendorRegistrationEnabled,
+  updateAdminNestedField,
+  uploadAdminLogo,
+} from "../store/publicSettingsSlice";
 
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
+
+const normalizeLogoMode = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "text"
+    ? "text"
+    : "image";
 
 const parseListInput = (value) =>
   Array.from(
@@ -23,11 +38,105 @@ const parseListInput = (value) =>
     ),
   );
 
+const normalizeNavLinks = (value, fallback = []) => {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const uniqueValues = new Map();
+  value.forEach((entry) => {
+    const label = String(entry?.label || "").trim();
+    const path = String(entry?.path || "").trim() || "/";
+    if (!label) return;
+    uniqueValues.set(`${label}|${path}`, { label, path });
+  });
+
+  return uniqueValues.size > 0 ? Array.from(uniqueValues.values()) : [...fallback];
+};
+
+const parseNavLinkInput = (value, fallback = []) => {
+  const links = String(value || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [labelPart, pathPart] = line.split("|");
+      const label = String(labelPart || "").trim();
+      const path = String(pathPart || "").trim() || "/";
+      if (!label) return null;
+      return { label, path };
+    })
+    .filter(Boolean);
+
+  return normalizeNavLinks(links, fallback);
+};
+
+const formatNavLinkInput = (links = []) =>
+  Array.isArray(links)
+    ? links
+        .map((entry) => {
+          const label = String(entry?.label || "").trim();
+          const path = String(entry?.path || "").trim() || "/";
+          return label ? `${label} | ${path}` : "";
+        })
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
+const DashboardToggle = ({ checked, disabled = false, title, description, onChange }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    disabled={disabled}
+    onClick={() => {
+      if (!disabled) {
+        onChange(!checked);
+      }
+    }}
+    className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition ${
+      disabled
+        ? "cursor-not-allowed border-gray-200 bg-gray-50 opacity-70"
+        : checked
+          ? "border-black bg-black text-white"
+          : "border-gray-200 bg-white text-black hover:border-gray-300"
+    }`}
+  >
+    <span
+      className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 rounded-full transition ${
+        checked ? "bg-white/25" : "bg-gray-200"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 h-5 w-5 rounded-full transition ${
+          checked
+            ? "left-[1.25rem] bg-white"
+            : "left-0.5 bg-black"
+        }`}
+      />
+    </span>
+    <span className="space-y-1">
+      <span className="block text-sm font-semibold">{title}</span>
+      <span
+        className={`block text-xs leading-5 ${
+          checked ? "text-white/75" : "text-gray-500"
+        }`}
+      >
+        {description}
+      </span>
+    </span>
+  </button>
+);
+
 const ModuleWebsiteSetup = () => {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState(() => getDefaultPublicSettings());
+  const dispatch = useDispatch();
+  const settings = useSelector(selectAdminSettingsDraft);
+  const { adminStatus, saveStatus, logoUploadStatus } = useSelector(selectPublicSettingsState);
+  const loading = adminStatus === "idle" || adminStatus === "loading";
+  const saving = saveStatus === "loading";
+  const logoUploading = logoUploadStatus === "loading";
+  const logoInputRef = useRef(null);
 
   const isAdmin = useMemo(
     () => String(user?.userType || "").toLowerCase() === "admin",
@@ -35,121 +144,46 @@ const ModuleWebsiteSetup = () => {
   );
   const isSingleVendorMode =
     String(settings.marketplaceMode || "multi").trim().toLowerCase() === "single";
+  const publicStockSummaryEnabled = Boolean(settings.publicStockSummaryEnabled);
+  const logoMode = normalizeLogoMode(settings?.website?.logoMode);
+  const logoPreviewUrl = useMemo(
+    () => toPublicAssetUrl(settings?.website?.logoUrl || ""),
+    [settings?.website?.logoUrl],
+  );
 
   useEffect(() => {
     if (!isAdmin) return;
 
-    let cancelled = false;
-
-    const loadSettings = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get(`${baseUrl}/auth/admin/settings`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
-
-        if (cancelled) return;
-
-        const defaults = getDefaultPublicSettings();
-        const payload = response.data || {};
-        const normalizedMarketplaceMode =
-          String(
-            payload?.marketplace?.marketplaceMode ||
-              payload?.marketplaceMode ||
-              defaults.marketplaceMode,
-          )
-            .trim()
-            .toLowerCase() === "single"
-            ? "single"
-            : "multi";
-        const vendorRegistrationSource =
-          payload?.marketplace?.vendorRegistrationEnabled === undefined
-            ? payload?.vendorRegistrationEnabled
-            : payload.marketplace.vendorRegistrationEnabled;
-        const vendorRegistrationEnabled =
-          normalizedMarketplaceMode === "single"
-            ? false
-            : vendorRegistrationSource === undefined
-              ? defaults.vendorRegistrationEnabled
-              : Boolean(vendorRegistrationSource);
-
-        const normalized = {
-          ...defaults,
-          marketplaceMode: normalizedMarketplaceMode,
-          vendorRegistrationEnabled,
-          website: {
-            ...defaults.website,
-            ...(payload.website || {}),
-          },
-          contact: {
-            ...defaults.contact,
-            ...(payload.contact || {}),
-          },
-          social: {
-            ...defaults.social,
-            ...(payload.social || {}),
-          },
-          policies: {
-            ...defaults.policies,
-            ...(payload.policies || {}),
-          },
-          integrations: {
-            ...defaults.integrations,
-            ...(payload.integrations || {}),
-          },
-          invoice: {
-            ...defaults.invoice,
-            ...(payload.invoice || {}),
-          },
-          courier: {
-            ...defaults.courier,
-            ...(payload.courier || {}),
-          },
-          locations: {
-            ...defaults.locations,
-            ...(payload.locations || {}),
-            cityOptions: Array.isArray(payload?.locations?.cityOptions)
-              ? payload.locations.cityOptions
-              : defaults.locations.cityOptions,
-            subCityOptions: Array.isArray(payload?.locations?.subCityOptions)
-              ? payload.locations.subCityOptions
-              : defaults.locations.subCityOptions,
-          },
-        };
-
-        setSettings(normalized);
-      } catch (error) {
-        toast.error(error.response?.data?.error || "Failed to load website settings");
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadSettings();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isAdmin]);
+    dispatch(loadAdminSettings())
+      .unwrap()
+      .catch((message) => {
+        toast.error(message || "Failed to load website settings");
+      });
+  }, [dispatch, isAdmin]);
 
   const updateNested = (section, key, value) => {
-    setSettings((prev) => ({
-      ...prev,
-      [section]: {
-        ...(prev[section] || {}),
-        [key]: value,
-      },
-    }));
+    dispatch(updateAdminNestedField({ section, key, value }));
+  };
+
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await dispatch(uploadAdminLogo(file)).unwrap();
+      toast.success(result?.message || "Logo uploaded");
+    } catch (error) {
+      toast.error(error || "Failed to upload logo");
+    } finally {
+      if (logoInputRef.current) {
+        logoInputRef.current.value = "";
+      }
+    }
   };
 
   const saveSettings = async (event) => {
     event.preventDefault();
 
-    setSaving(true);
     try {
       const normalizedMarketplaceMode =
         String(settings.marketplaceMode || "multi").toLowerCase() === "single"
@@ -159,14 +193,19 @@ const ModuleWebsiteSetup = () => {
         normalizedMarketplaceMode === "single"
           ? false
           : Boolean(settings.vendorRegistrationEnabled);
+      const normalizedPublicStockSummaryEnabled = Boolean(
+        settings.publicStockSummaryEnabled,
+      );
 
       const payload = {
         marketplace: {
           marketplaceMode: normalizedMarketplaceMode,
           vendorRegistrationEnabled: normalizedVendorRegistrationEnabled,
+          publicStockSummaryEnabled: normalizedPublicStockSummaryEnabled,
         },
         marketplaceMode: normalizedMarketplaceMode,
         vendorRegistrationEnabled: normalizedVendorRegistrationEnabled,
+        publicStockSummaryEnabled: normalizedPublicStockSummaryEnabled,
         website: deepClone(settings.website || {}),
         contact: deepClone(settings.contact || {}),
         social: deepClone(settings.social || {}),
@@ -175,52 +214,13 @@ const ModuleWebsiteSetup = () => {
         invoice: deepClone(settings.invoice || {}),
         courier: deepClone(settings.courier || {}),
         locations: deepClone(settings.locations || {}),
+        storefront: deepClone(settings.storefront || {}),
       };
 
-      const response = await axios.put(`${baseUrl}/auth/admin/settings`, payload, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-
-      const responseSettings = response?.data?.settings || {};
-      const responseMarketplaceMode =
-        String(
-          responseSettings?.marketplace?.marketplaceMode ||
-            responseSettings?.marketplaceMode ||
-            normalizedMarketplaceMode,
-        )
-          .trim()
-          .toLowerCase() === "single"
-          ? "single"
-          : "multi";
-      const responseVendorSource =
-        responseSettings?.marketplace?.vendorRegistrationEnabled === undefined
-          ? responseSettings?.vendorRegistrationEnabled
-          : responseSettings.marketplace.vendorRegistrationEnabled;
-      const responseVendorRegistrationEnabled =
-        responseMarketplaceMode === "single"
-          ? false
-          : responseVendorSource === undefined
-            ? normalizedVendorRegistrationEnabled
-            : Boolean(responseVendorSource);
-
-      setSettings((prev) => ({
-        ...prev,
-        marketplaceMode: responseMarketplaceMode,
-        vendorRegistrationEnabled: responseVendorRegistrationEnabled,
-      }));
-
-      invalidatePublicSettingsCache();
-      await fetchPublicSettings({ force: true });
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("publicSettingsUpdated"));
-      }
-      toast.success(response.data?.message || "Settings saved");
+      const result = await dispatch(saveAdminSettings(payload)).unwrap();
+      toast.success(result?.message || "Settings saved");
     } catch (error) {
-      toast.error(error.response?.data?.error || "Failed to save settings");
-    } finally {
-      setSaving(false);
+      toast.error(error || "Failed to save settings");
     }
   };
 
@@ -269,12 +269,86 @@ const ModuleWebsiteSetup = () => {
                 placeholder="Store tagline"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
               />
-              <input
-                value={settings.website.logoUrl}
-                onChange={(event) => updateNested("website", "logoUrl", event.target.value)}
-                placeholder="Logo URL"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-              />
+              <div className="rounded-xl border border-gray-200 p-4 space-y-3 bg-gray-50">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-black">Navbar Logo</p>
+                    <p className="text-xs text-gray-500">
+                      Use text branding or an uploaded image. Changes are reflected in the public navbar.
+                    </p>
+                  </div>
+                  <select
+                    value={logoMode}
+                    onChange={(event) =>
+                      updateNested(
+                        "website",
+                        "logoMode",
+                        normalizeLogoMode(event.target.value),
+                      )
+                    }
+                    className="w-full md:w-44 px-3 py-2.5 border border-gray-200 rounded-lg bg-white"
+                  >
+                    <option value="image">Image Logo</option>
+                    <option value="text">Text Logo</option>
+                  </select>
+                </div>
+
+                {logoMode === "text" ? (
+                  <input
+                    value={settings.website.logoText || ""}
+                    onChange={(event) => updateNested("website", "logoText", event.target.value)}
+                    placeholder="Text logo for navbar"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white"
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <input
+                      value={settings.website.logoUrl}
+                      onChange={(event) => updateNested("website", "logoUrl", event.target.value)}
+                      placeholder="Logo URL or upload a file below"
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white"
+                    />
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={logoUploading}
+                        className="inline-flex h-11 items-center justify-center gap-2 px-4 border border-gray-300 rounded-lg bg-white text-black font-medium disabled:opacity-60"
+                      >
+                        <FiUpload className="w-4 h-4" />
+                        {logoUploading ? "Uploading..." : "Upload Logo"}
+                      </button>
+                      <p className="text-xs text-gray-500">
+                        PNG, JPG, WEBP, or GIF. Upload sets the navbar logo immediately.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-3">Logo Preview</p>
+                  {logoMode === "text" ? (
+                    <div className="inline-flex min-h-11 items-center rounded-xl border border-black/10 bg-black px-4 text-base font-black tracking-[0.08em] text-white">
+                      {String(settings?.website?.logoText || settings?.website?.storeName || "LOGO").trim() || "LOGO"}
+                    </div>
+                  ) : logoPreviewUrl ? (
+                    <img
+                      src={logoPreviewUrl}
+                      alt={String(settings?.website?.storeName || "Logo")}
+                      className="h-14 w-auto max-w-[220px] rounded-xl border border-gray-200 object-contain bg-white p-2"
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-500">No logo uploaded yet.</p>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <input
                   value={settings.website.themeColor}
@@ -295,19 +369,7 @@ const ModuleWebsiteSetup = () => {
                   Marketplace Mode
                   <select
                     value={settings.marketplaceMode}
-                    onChange={(event) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        marketplaceMode:
-                          String(event.target.value || "").toLowerCase() === "single"
-                            ? "single"
-                            : "multi",
-                        vendorRegistrationEnabled:
-                          String(event.target.value || "").toLowerCase() === "single"
-                            ? false
-                            : prev.vendorRegistrationEnabled,
-                      }))
-                    }
+                    onChange={(event) => dispatch(setMarketplaceMode(event.target.value))}
                     className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
                   >
                     <option value="multi">Multi Vendor</option>
@@ -315,22 +377,31 @@ const ModuleWebsiteSetup = () => {
                   </select>
                 </label>
 
-                <label className="flex items-center gap-2 mt-6 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
+                <div className="space-y-3 md:pt-6">
+                  <DashboardToggle
                     checked={Boolean(settings.vendorRegistrationEnabled)}
                     disabled={isSingleVendorMode}
-                    onChange={(event) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        vendorRegistrationEnabled: event.target.checked,
-                      }))
+                    onChange={(enabled) => dispatch(setVendorRegistrationEnabled(enabled))}
+                    title={
+                      isSingleVendorMode
+                        ? "Vendor registration locked"
+                        : "Allow vendor registration"
+                    }
+                    description={
+                      isSingleVendorMode
+                        ? "Single vendor mode keeps vendor signup disabled automatically."
+                        : "Control whether vendors can register from the public auth flow."
                     }
                   />
-                  {isSingleVendorMode
-                    ? "Vendor registration is disabled in single vendor mode"
-                    : "Allow vendor registration"}
-                </label>
+                  <DashboardToggle
+                    checked={publicStockSummaryEnabled}
+                    onChange={(enabled) =>
+                      dispatch(setPublicStockSummaryEnabled(enabled))
+                    }
+                    title="Show ecommerce stock summary publicly"
+                    description="When enabled, landing and shop headers can show overall product and stock totals for the full catalog."
+                  />
+                </div>
               </div>
             </section>
 
@@ -396,6 +467,524 @@ const ModuleWebsiteSetup = () => {
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
                 />
               </div>
+            </section>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+              <h2 className="text-lg font-semibold text-black">Landing & Navigation</h2>
+
+              <label className="block text-sm text-gray-700">
+                Market Label
+                <input
+                  value={settings.storefront.marketLabel}
+                  onChange={(event) =>
+                    updateNested("storefront", "marketLabel", event.target.value)
+                  }
+                  placeholder="Bangladesh marketplace"
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Category Eyebrow
+                  <input
+                    value={settings.storefront.categoryRailEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "categoryRailEyebrow", event.target.value)
+                    }
+                    placeholder="Shop by Category"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Category Title
+                  <input
+                    value={settings.storefront.categoryRailTitle}
+                    onChange={(event) =>
+                      updateNested("storefront", "categoryRailTitle", event.target.value)
+                    }
+                    placeholder="All Departments"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Category Button
+                <input
+                  value={settings.storefront.categoryRailButtonLabel}
+                  onChange={(event) =>
+                    updateNested("storefront", "categoryRailButtonLabel", event.target.value)
+                  }
+                  placeholder="Explore marketplace"
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <label className="block text-sm text-gray-700">
+                Hero Title Fallback
+                <input
+                  value={settings.storefront.heroFallbackTitle}
+                  onChange={(event) =>
+                    updateNested("storefront", "heroFallbackTitle", event.target.value)
+                  }
+                  placeholder="{storeName} deals built for Bangladesh shoppers"
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <label className="block text-sm text-gray-700">
+                Hero Description Fallback
+                <textarea
+                  value={settings.storefront.heroFallbackDescription}
+                  onChange={(event) =>
+                    updateNested("storefront", "heroFallbackDescription", event.target.value)
+                  }
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Hero Primary Button
+                  <input
+                    value={settings.storefront.heroPrimaryLabel}
+                    onChange={(event) =>
+                      updateNested("storefront", "heroPrimaryLabel", event.target.value)
+                    }
+                    placeholder="Shop campaign"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Hero Secondary Button
+                  <input
+                    value={settings.storefront.heroSecondaryLabel}
+                    onChange={(event) =>
+                      updateNested("storefront", "heroSecondaryLabel", event.target.value)
+                    }
+                    placeholder="Browse all products"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Navbar Quick Links
+                <textarea
+                  value={formatNavLinkInput(settings?.storefront?.navQuickLinks)}
+                  onChange={(event) =>
+                    updateNested(
+                      "storefront",
+                      "navQuickLinks",
+                      parseNavLinkInput(
+                        event.target.value,
+                        getDefaultPublicSettings().storefront.navQuickLinks,
+                      ),
+                    )
+                  }
+                  rows={5}
+                  placeholder={
+                    "Daily Deals | /shop?collection=deals\nTop Categories | /#top-categories\nNew Arrivals | /shop?collection=new-arrivals\nBuyer Protection | /faqs#buyer-protection\nTrack Order | /track-order"
+                  }
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  One link per line using <code>Label | /path</code>.
+                </p>
+              </label>
+
+              <label className="block text-sm text-gray-700">
+                Footer Caption
+                <input
+                  value={settings.storefront.footerCaption}
+                  onChange={(event) =>
+                    updateNested("storefront", "footerCaption", event.target.value)
+                  }
+                  placeholder="Built for Bangladesh marketplace operations"
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+            </section>
+
+            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+              <h2 className="text-lg font-semibold text-black">Storefront Sections</h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Highlights Eyebrow
+                  <input
+                    value={settings.storefront.highlightsEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "highlightsEyebrow", event.target.value)
+                    }
+                    placeholder="Marketplace Highlights"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Highlights Title
+                  <input
+                    value={settings.storefront.highlightsTitle}
+                    onChange={(event) =>
+                      updateNested("storefront", "highlightsTitle", event.target.value)
+                    }
+                    placeholder="{storeName} shopping channels built for fast browsing"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Highlights Description
+                <textarea
+                  value={settings.storefront.highlightsDescription}
+                  onChange={(event) =>
+                    updateNested("storefront", "highlightsDescription", event.target.value)
+                  }
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Flash Eyebrow
+                  <input
+                    value={settings.storefront.flashEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "flashEyebrow", event.target.value)
+                    }
+                    placeholder="Flash Picks"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Flash Title
+                  <input
+                    value={settings.storefront.flashTitle}
+                    onChange={(event) =>
+                      updateNested("storefront", "flashTitle", event.target.value)
+                    }
+                    placeholder="Deal-driven shelves inspired by global marketplaces"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Flash Description
+                <textarea
+                  value={settings.storefront.flashDescription}
+                  onChange={(event) =>
+                    updateNested("storefront", "flashDescription", event.target.value)
+                  }
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Flash Primary Button
+                  <input
+                    value={settings.storefront.flashPrimaryLabel}
+                    onChange={(event) =>
+                      updateNested("storefront", "flashPrimaryLabel", event.target.value)
+                    }
+                    placeholder="Open shop"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Flash Secondary Button
+                  <input
+                    value={settings.storefront.flashSecondaryLabel}
+                    onChange={(event) =>
+                      updateNested("storefront", "flashSecondaryLabel", event.target.value)
+                    }
+                    placeholder="Open dashboard"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Sidebar Eyebrow
+                  <input
+                    value={settings.storefront.sidebarControlEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "sidebarControlEyebrow", event.target.value)
+                    }
+                    placeholder="Marketplace control"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Sidebar Title
+                  <input
+                    value={settings.storefront.sidebarControlTitle}
+                    onChange={(event) =>
+                      updateNested("storefront", "sidebarControlTitle", event.target.value)
+                    }
+                    placeholder="Shop by stock, not guesswork"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Sidebar Description
+                <textarea
+                  value={settings.storefront.sidebarControlDescription}
+                  onChange={(event) =>
+                    updateNested(
+                      "storefront",
+                      "sidebarControlDescription",
+                      event.target.value,
+                    )
+                  }
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Sidebar Button
+                  <input
+                    value={settings.storefront.sidebarControlButtonLabel}
+                    onChange={(event) =>
+                      updateNested(
+                        "storefront",
+                        "sidebarControlButtonLabel",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="Open storefront"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Discovery Eyebrow
+                  <input
+                    value={settings.storefront.discoveryEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "discoveryEyebrow", event.target.value)
+                    }
+                    placeholder="Top discovery lanes"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Trust Eyebrow
+                  <input
+                    value={settings.storefront.trustEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "trustEyebrow", event.target.value)
+                    }
+                    placeholder="Buyer trust"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Top Categories Eyebrow
+                  <input
+                    value={settings.storefront.topCategoriesEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "topCategoriesEyebrow", event.target.value)
+                    }
+                    placeholder="Top categories"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Trust Bullets
+                <textarea
+                  value={Array.isArray(settings?.storefront?.trustBullets)
+                    ? settings.storefront.trustBullets.join("\n")
+                    : ""}
+                  onChange={(event) =>
+                    updateNested("storefront", "trustBullets", parseListInput(event.target.value))
+                  }
+                  rows={4}
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Deals Eyebrow
+                  <input
+                    value={settings.storefront.dealsEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "dealsEyebrow", event.target.value)
+                    }
+                    placeholder="Limited-price shelves"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Deals Title
+                  <input
+                    value={settings.storefront.dealsTitle}
+                    onChange={(event) =>
+                      updateNested("storefront", "dealsTitle", event.target.value)
+                    }
+                    placeholder="Flash deal picks"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Deals Button
+                  <input
+                    value={settings.storefront.dealsButtonLabel}
+                    onChange={(event) =>
+                      updateNested("storefront", "dealsButtonLabel", event.target.value)
+                    }
+                    placeholder="See all"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Category Floor Eyebrow
+                  <input
+                    value={settings.storefront.categoryFloorEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "categoryFloorEyebrow", event.target.value)
+                    }
+                    placeholder="Category channel"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Category Floor Description
+                <textarea
+                  value={settings.storefront.categoryFloorDescription}
+                  onChange={(event) =>
+                    updateNested(
+                      "storefront",
+                      "categoryFloorDescription",
+                      event.target.value,
+                    )
+                  }
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Category CTA Button
+                  <input
+                    value={settings.storefront.categoryFloorButtonLabel}
+                    onChange={(event) =>
+                      updateNested(
+                        "storefront",
+                        "categoryFloorButtonLabel",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="Browse category"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Category Panel Button
+                  <input
+                    value={settings.storefront.categoryFloorPanelButtonLabel}
+                    onChange={(event) =>
+                      updateNested(
+                        "storefront",
+                        "categoryFloorPanelButtonLabel",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="Shop now"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Recommended Eyebrow
+                  <input
+                    value={settings.storefront.recommendedEyebrow}
+                    onChange={(event) =>
+                      updateNested("storefront", "recommendedEyebrow", event.target.value)
+                    }
+                    placeholder="Recommended shelf"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Recommended Title
+                  <input
+                    value={settings.storefront.recommendedTitle}
+                    onChange={(event) =>
+                      updateNested("storefront", "recommendedTitle", event.target.value)
+                    }
+                    placeholder="New arrivals for the marketplace"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block text-sm text-gray-700">
+                  Recommended Button
+                  <input
+                    value={settings.storefront.recommendedButtonLabel}
+                    onChange={(event) =>
+                      updateNested(
+                        "storefront",
+                        "recommendedButtonLabel",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="View catalog"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+                <label className="block text-sm text-gray-700">
+                  Catalog Title
+                  <input
+                    value={settings.storefront.catalogTitle}
+                    onChange={(event) =>
+                      updateNested("storefront", "catalogTitle", event.target.value)
+                    }
+                    placeholder="{storeName} catalog with stock-aware shopping"
+                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-gray-700">
+                Catalog Description
+                <textarea
+                  value={settings.storefront.catalogDescription}
+                  onChange={(event) =>
+                    updateNested("storefront", "catalogDescription", event.target.value)
+                  }
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                />
+              </label>
             </section>
           </div>
 

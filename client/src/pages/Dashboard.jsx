@@ -54,6 +54,7 @@ const ModuleGeolocation = React.lazy(() => import("./ModuleGeolocation"));
 const ModuleAbandonedOrders = React.lazy(() => import("./ModuleAbandonedOrders"));
 const ModuleSuppliers = React.lazy(() => import("./ModuleSuppliers"));
 const ModulePurchases = React.lazy(() => import("./ModulePurchases"));
+const ModuleInventoryCenter = React.lazy(() => import("./ModuleInventoryCenter"));
 const ModuleAccounts = React.lazy(() => import("./ModuleAccounts"));
 const ModuleBrands = React.lazy(() => import("./ModuleBrands"));
 const ModuleVendorPayouts = React.lazy(() => import("./ModuleVendorPayouts"));
@@ -211,6 +212,10 @@ const TabContent = React.memo(({
     case "module-purchases":
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModulePurchases />
+      ) : null;
+    case "module-inventory":
+      return user?.userType === "admin" || user?.userType === "vendor" ? (
+        <ModuleInventoryCenter />
       ) : null;
     case "module-accounts":
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (

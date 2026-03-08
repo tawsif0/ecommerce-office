@@ -105,6 +105,39 @@ const FAQ = () => {
           ))}
         </div>
 
+        <div
+          id="buyer-protection"
+          className="rounded-3xl border border-gray-200 bg-linear-to-br from-gray-50 to-white p-6 md:p-8 mb-8 md:mb-12"
+        >
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+              Buyer Protection
+            </p>
+            <h2 className="mt-3 text-2xl md:text-3xl font-bold text-black">
+              Safer orders from checkout to delivery
+            </h2>
+            <p className="mt-3 text-gray-600 leading-7">
+              We keep checkout clear, support Cash on Delivery, surface order tracking,
+              and maintain return and delivery policies so buyers can verify what to
+              expect before they place an order.
+            </p>
+          </div>
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              "Track every order with a dedicated tracking page",
+              "Return and delivery policies are available before checkout",
+              "Support is reachable by phone and email for order issues",
+            ].map((item) => (
+              <div
+                key={item}
+                className="rounded-2xl border border-gray-200 bg-white px-4 py-4 text-sm font-medium text-black"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Category Filter */}
         <div className="mb-8 md:mb-12">
           <div className="flex flex-wrap gap-2 md:gap-3 justify-center">

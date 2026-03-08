@@ -118,6 +118,43 @@ const GlobalVoiceAssistant = () => {
     [dispatch, speakFeedback],
   );
 
+  const requestPlanner = useCallback(
+    async (command) => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.post(
+          `${baseUrl}/auth/admin/voice-plan`,
+          {
+            command,
+            currentPath: `${location.pathname || ""}${location.search || ""}`,
+            dashboardTab: localStorage.getItem("dashboardActiveTab") || "",
+          },
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+        );
+
+        return response.data?.planner || null;
+      } catch (error) {
+        const message = error.response?.data?.error || "";
+        const details = error.response?.data?.details || "";
+        const fallbackMessage =
+          message ||
+          (details
+            ? `Voice planner failed: ${details}`
+            : "Voice planner failed. Check the backend planner setup.");
+        dispatch(setVoiceError(fallbackMessage));
+        if (message) {
+          setAction(message);
+        } else if (details) {
+          setAction(details);
+        }
+        return null;
+      }
+    },
+    [baseUrl, dispatch, location.pathname, location.search, setAction],
+  );
+
   const openDashboardTab = useCallback(
     (tab) => {
       if (typeof window !== "undefined") {
@@ -165,6 +202,72 @@ const GlobalVoiceAssistant = () => {
     [dispatch],
   );
 
+  const executeDeterministicSegment = useCallback(
+    async (segment) => {
+      dispatch(setHeardText(segment));
+
+      const navResult = executeVoiceCommand({
+        rawText: segment,
+        user,
+        marketplaceMode,
+        navigateToPath: (path) => navigate(path),
+        openDashboardTab,
+        setAction,
+        logout,
+        voiceDataset: voiceDatasetRef.current,
+      });
+
+      if (navResult?.stopListening) {
+        if (alwaysListeningRef.current) {
+          dispatch(setAlwaysListening(false));
+        }
+        stopListening({ silent: true });
+        return { handled: true, stopListening: true };
+      }
+
+      if (navResult?.navigated) {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 1000);
+        });
+      }
+
+      const shouldTryDom = isLikelyDomCommand(segment) || !navResult?.handled;
+      if (shouldTryDom) {
+        const maxAttempts = isLikelyDomCommand(segment) ? 5 : 1;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          const domResult = executeVoiceDomCommand({
+            rawText: segment,
+            setAction,
+            voiceDataset: voiceDatasetRef.current,
+          });
+
+          if (domResult?.handled) {
+            return { handled: true };
+          }
+
+          if (attempt < maxAttempts - 1) {
+            await new Promise((resolve) => {
+              window.setTimeout(resolve, 320);
+            });
+          }
+        }
+      }
+
+      return { handled: Boolean(navResult?.handled) };
+    },
+    [
+      dispatch,
+      logout,
+      marketplaceMode,
+      navigate,
+      openDashboardTab,
+      setAction,
+      stopListening,
+      user,
+    ],
+  );
+
   const runCommandSequence = useCallback(
     async (rawText) => {
       if (!isAssistantVisible) {
@@ -179,65 +282,37 @@ const GlobalVoiceAssistant = () => {
 
       for (let index = 0; index < segments.length; index += 1) {
         const segment = segments[index];
-        dispatch(setHeardText(segment));
+        const result = await executeDeterministicSegment(segment);
 
-        const navResult = executeVoiceCommand({
-          rawText: segment,
-          user,
-          marketplaceMode,
-          navigateToPath: (path) => navigate(path),
-          openDashboardTab,
-          setAction,
-          logout,
-          voiceDataset: voiceDatasetRef.current,
-        });
-
-        if (navResult?.handled) {
-          handledAny = true;
-        }
-
-        if (navResult?.stopListening) {
-          if (alwaysListeningRef.current) {
-            dispatch(setAlwaysListening(false));
-          }
-          stopListening({ silent: true });
+        if (result?.stopListening) {
           return { handled: true, stopListening: true };
         }
 
-        if (navResult?.navigated) {
-          await new Promise((resolve) => {
-            window.setTimeout(resolve, 1000);
-          });
+        if (result?.handled) {
+          handledAny = true;
+          continue;
         }
 
-        const shouldTryDom = isLikelyDomCommand(segment) || !navResult?.handled;
-        if (shouldTryDom) {
-          const maxAttempts = isLikelyDomCommand(segment) ? 5 : 1;
-          let domHandled = false;
-
-          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            const domResult = executeVoiceDomCommand({
-              rawText: segment,
-              setAction,
-              voiceDataset: voiceDatasetRef.current,
-            });
-
-            if (domResult?.handled) {
-              handledAny = true;
-              domHandled = true;
-              break;
-            }
-
-            if (attempt < maxAttempts - 1) {
-              await new Promise((resolve) => {
-                window.setTimeout(resolve, 320);
-              });
-            }
+        const planner = await requestPlanner(segment);
+        if (Array.isArray(planner?.segments) && planner.segments.length > 0) {
+          handledAny = true;
+          if (planner.summary) {
+            setAction(planner.summary);
           }
 
-          if (!domHandled && !navResult?.handled && index === segments.length - 1) {
-            setAction("Command not mapped. Try again with a shorter clear command.");
+          for (const plannedSegment of planner.segments) {
+            const plannedResult = await executeDeterministicSegment(plannedSegment);
+            if (plannedResult?.stopListening) {
+              return { handled: true, stopListening: true };
+            }
           }
+          continue;
+        }
+
+        if (planner?.clarification) {
+          setAction(planner.clarification);
+        } else if (index === segments.length - 1) {
+          setAction("Command not mapped. Try again with a shorter clear command.");
         }
       }
 
@@ -249,14 +324,10 @@ const GlobalVoiceAssistant = () => {
     },
     [
       dispatch,
+      executeDeterministicSegment,
       isAssistantVisible,
-      logout,
-      marketplaceMode,
-      navigate,
-      openDashboardTab,
+      requestPlanner,
       setAction,
-      stopListening,
-      user,
     ],
   );
 

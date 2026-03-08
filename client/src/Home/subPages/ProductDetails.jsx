@@ -28,6 +28,10 @@ import {
   getDataLayerCurrency,
   pushDataLayerEvent,
 } from "../../utils/marketingDataLayer";
+import {
+  getPublicStockBadgeText,
+  isPublicStockVisible,
+} from "../../utils/publicProduct";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -312,7 +316,7 @@ const ProductDetails = () => {
   const priceType = String(product?.priceType || "single");
   const isTbaPrice = priceType === "tba";
   const isRecurringProduct = Boolean(product?.isRecurring);
-  const showPublicStock = Boolean(product?.showStockToPublic);
+  const showPublicStock = isPublicStockVisible(product);
   const selectedVariation =
     marketplaceType === "variable"
       ? (product?.variations || []).find(
@@ -675,6 +679,40 @@ const ProductDetails = () => {
     !isTbaPrice &&
     Number.isFinite(regularPriceForDisplay) &&
     regularPriceForDisplay > Number(currentPrice || 0);
+  const detailFacts = [
+    {
+      label: "Availability",
+      value: isTbaPrice
+        ? "Price pending"
+        : product?.allowBackorder
+          ? "Backorder enabled"
+          : isInStock()
+            ? "Ready to ship"
+            : "Currently unavailable",
+    },
+    {
+      label: "Buyer view",
+      value: showPublicStock ? "Exact stock shown" : "Stock kept private",
+    },
+    {
+      label: "Delivery",
+      value:
+        Number(product?.deliveryMaxDays || 0) > 0
+          ? Number(product?.deliveryMinDays || 0) > 0
+            ? `${product.deliveryMinDays}-${product.deliveryMaxDays} days`
+            : `${product.deliveryMaxDays} days`
+          : "Shown at checkout",
+    },
+    {
+      label: "Pricing mode",
+      value:
+        priceType === "best"
+          ? "Offer pricing"
+          : priceType === "tba"
+            ? "TBA"
+            : "Standard price",
+    },
+  ];
 
   // Loading state
   if (productLoading) {
@@ -729,7 +767,7 @@ const ProductDetails = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#f5f5f5]">
       {/* Image Modal */}
       <AnimatePresence>
         {showImageModal && (
@@ -785,9 +823,9 @@ const ProductDetails = () => {
       </AnimatePresence>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-6 lg:py-8">
         {/* Breadcrumb */}
-        <nav className="mb-8">
+        <nav className="mb-6 rounded-[24px] border border-gray-200 bg-white px-4 py-4 shadow-sm">
           <ol className="flex items-center space-x-2 text-sm">
             <li>
               <button
@@ -812,9 +850,9 @@ const ProductDetails = () => {
         </nav>
 
         {/* Product Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 mb-16">
+        <div className="mb-10 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_560px]">
           {/* Images Section */}
-          <div>
+          <div className="overflow-hidden rounded-[32px] border border-gray-200 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-5">
             {/* Main Image */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -829,11 +867,15 @@ const ProductDetails = () => {
                   setCurrentImageIndex(selectedImage);
                 }}
               >
-                <div className="relative overflow-hidden rounded-3xl">
-                  <ProductImage
-                    src={product.images && product.images[selectedImage]}
-                    alt={product.title}
-                    className="w-full object-contain transition-transform duration-700"
+                  <div className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_top,#ffffff_0%,#f7f7f7_58%,#ececec_100%)] p-3 sm:p-4">
+                    <div className="mb-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                      <span>Tap image to zoom</span>
+                      <span>{product.images.length} images</span>
+                    </div>
+                    <ProductImage
+                      src={product.images && product.images[selectedImage]}
+                      alt={product.title}
+                    className="h-[360px] w-full object-contain transition-transform duration-700 sm:h-[420px]"
                     isCurrent={true}
                   />
                 </div>
@@ -852,7 +894,7 @@ const ProductDetails = () => {
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}
-                    className={`shrink-0 w-20 h-20 rounded-xl overflow-hidden border-2 transition-all duration-200 ${
+                    className={`shrink-0 w-20 h-20 rounded-2xl overflow-hidden border-2 bg-[#f7f7f7] transition-all duration-200 ${
                       selectedImage === index
                         ? "border-black shadow-lg transform"
                         : "border-gray-200 hover:border-gray-300"
@@ -874,10 +916,9 @@ const ProductDetails = () => {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
-            className="space-y-2"
+            className="space-y-4 lg:sticky lg:top-6 lg:self-start"
           >
-            {/* Header */}
-            <div>
+            <div className="rounded-[32px] border border-gray-200 bg-white p-5 shadow-sm lg:p-6">
               <div className="flex flex-wrap gap-2 mb-4">
                 {product.category && (
                   <span className="px-3 py-1 bg-gray-100 text-gray-900 rounded-full text-xs font-medium">
@@ -931,12 +972,15 @@ const ProductDetails = () => {
               )}
 
               {product.vendor && (
-                <div className="mt-4 p-4 border border-gray-200 rounded-xl bg-gray-50">
-                  <p className="text-sm font-semibold text-black">
-                    Marketplace Vendor
+                <div className="mt-4 rounded-[24px] border border-gray-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7f7f7_100%)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                    Seller profile
                   </p>
-                  <p className="text-sm text-gray-700 mt-1">
+                  <p className="mt-2 text-sm font-semibold text-black">
                     {product.vendor.storeName || "Vendor Store"}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Marketplace Vendor
                   </p>
                   {(product.vendor.city || product.vendor.country) && (
                     <p className="text-xs text-gray-500 mt-1">
@@ -964,13 +1008,27 @@ const ProductDetails = () => {
                   <button
                     type="button"
                     onClick={handleMessageVendor}
-                    className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-xs hover:bg-white"
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-700 transition hover:bg-white"
                   >
                     <FaPaperPlane className="w-3.5 h-3.5" />
                     Message Vendor
                   </button>
                 </div>
               )}
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {detailFacts.map((fact) => (
+                  <div
+                    key={fact.label}
+                    className="rounded-[20px] border border-gray-200 bg-gray-50 px-4 py-3"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                      {fact.label}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-black">{fact.value}</p>
+                  </div>
+                ))}
+              </div>
 
               <div className="mt-4 flex items-center gap-2">
                 <button
@@ -1045,18 +1103,20 @@ const ProductDetails = () => {
               </div>
             </div>
 
-                        {/* Price Section */}
-            <div className="pb-6 border-b border-gray-200">
+            <div className="overflow-hidden rounded-[32px] bg-black px-5 py-5 text-white shadow-sm lg:px-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                Offer summary
+              </p>
               <div className="flex items-baseline gap-4 mb-2">
                 {isTbaPrice ? (
-                  <span className="text-4xl lg:text-5xl font-bold text-gray-900">TBA</span>
+                  <span className="text-4xl lg:text-5xl font-bold text-white">TBA</span>
                 ) : (
                   <>
-                    <span className="text-4xl lg:text-5xl font-bold text-gray-900">
+                    <span className="text-4xl lg:text-5xl font-bold text-white">
                       {`${currentPrice.toFixed(2)} TK`}
                     </span>
                     {hasDiscountPrice && (
-                      <span className="text-xl text-gray-400 line-through">
+                      <span className="text-xl text-white/45 line-through">
                         {`${regularPriceForDisplay.toFixed(2)} TK`}
                       </span>
                     )}
@@ -1065,7 +1125,7 @@ const ProductDetails = () => {
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 {isRecurringProduct && (
-                  <span className="inline-flex items-center rounded-full px-3 py-1 font-medium bg-blue-50 text-blue-700">
+                  <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 font-medium text-white">
                     Subscription: every {recurringIntervalCount} {recurringInterval}
                   </span>
                 )}
@@ -1073,8 +1133,8 @@ const ProductDetails = () => {
                   <span
                     className={`inline-flex items-center rounded-full px-3 py-1 font-medium ${
                       isInStock()
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
+                        ? "bg-emerald-400/15 text-emerald-200"
+                        : "bg-red-400/15 text-red-200"
                     }`}
                   >
                     {isInStock()
@@ -1085,7 +1145,7 @@ const ProductDetails = () => {
                   </span>
                 )}
                 {Number(product?.deliveryMaxDays || 0) > 0 && (
-                  <span className="text-gray-600">
+                  <span className="text-white/70">
                     Estimated delivery:{" "}
                     {Number(product.deliveryMinDays || 0) > 0
                       ? `${product.deliveryMinDays}-${product.deliveryMaxDays} days`
@@ -1093,22 +1153,23 @@ const ProductDetails = () => {
                   </span>
                 )}
                 {isRecurringProduct && recurringTrialDays > 0 && (
-                  <span className="text-gray-600">
+                  <span className="text-white/70">
                     Trial: {recurringTrialDays} day{recurringTrialDays > 1 ? "s" : ""}
                   </span>
                 )}
                 {isRecurringProduct && recurringTotalCycles > 0 && (
-                  <span className="text-gray-600">
+                  <span className="text-white/70">
                     Billing cycles: {recurringTotalCycles}
                   </span>
                 )}
               </div>
             </div>
 
-            {marketplaceType === "variable" &&
-              Array.isArray(product.variations) &&
-              product.variations.length > 0 && (
-                <div className="space-y-3 pt-4">
+            <div className="rounded-[32px] border border-gray-200 bg-white p-5 shadow-sm lg:p-6">
+              {marketplaceType === "variable" &&
+                Array.isArray(product.variations) &&
+                product.variations.length > 0 && (
+                <div className="space-y-3">
                   <h3 className="text-base font-semibold text-gray-800">Variation</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {product.variations
@@ -1130,9 +1191,9 @@ const ProductDetails = () => {
                               setSelectedVariationId(variationId);
                               setQuantity(1);
                             }}
-                            className={`border rounded-lg p-3 text-left transition-colors ${
+                            className={`rounded-[22px] border p-3 text-left transition-colors ${
                               isSelected
-                                ? "border-black bg-gray-50"
+                                ? "border-black bg-gray-50 shadow-sm"
                                 : "border-gray-200 hover:border-gray-400"
                             }`}
                           >
@@ -1146,7 +1207,7 @@ const ProductDetails = () => {
                             </p>
                             <p className="text-xs text-gray-500">
                               {showPublicStock
-                                ? `Stock: ${Number(variation.stock || 0)}`
+                                ? getPublicStockBadgeText(product, variation)
                                 : "Variation available"}
                             </p>
                           </button>
@@ -1156,8 +1217,8 @@ const ProductDetails = () => {
                 </div>
               )}
 
-            {/* Color Selection */}
-            {product.colors && product.colors.length > 0 && (
+              {/* Color Selection */}
+              {product.colors && product.colors.length > 0 && (
               <div className="space-y-3">
                 <h3 className="text-base font-semibold text-gray-800">Color</h3>
 
@@ -1219,13 +1280,13 @@ const ProductDetails = () => {
                   })}
                 </div>
               </div>
-            )}
+              )}
 
-            {/* Quantity & Actions */}
-            <div className="space-y-6">
+              {/* Quantity & Actions */}
+              <div className="space-y-6">
               {marketplaceType !== "grouped" && !isTbaPrice && (
                 <div className="flex items-center gap-6">
-                  <div className="flex items-center border border-gray-300 rounded-xl overflow-hidden">
+                  <div className="flex items-center overflow-hidden rounded-2xl border border-gray-300 bg-white">
                     <button
                       onClick={decreaseQuantity}
                       className="px-5 py-3 text-gray-700 hover:text-black hover:bg-gray-100 transition-colors"
@@ -1291,12 +1352,42 @@ const ProductDetails = () => {
                   </button>
                 </div>
               )}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[20px] border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-start gap-3">
+                  <FaTruck className="mt-0.5 h-4 w-4 text-black" />
+                  <div>
+                    <p className="text-sm font-semibold text-black">Shipping support</p>
+                    <p className="mt-1 text-xs leading-5 text-gray-600">
+                      {Number(product?.deliveryMaxDays || 0) > 0
+                        ? Number(product?.deliveryMinDays || 0) > 0
+                          ? `${product.deliveryMinDays}-${product.deliveryMaxDays} day delivery window`
+                          : `${product.deliveryMaxDays} day delivery window`
+                        : "Delivery estimate appears when shipping settings are available."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-[20px] border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-start gap-3">
+                  <FaUndo className="mt-0.5 h-4 w-4 text-black" />
+                  <div>
+                    <p className="text-sm font-semibold text-black">Marketplace flow</p>
+                    <p className="mt-1 text-xs leading-5 text-gray-600">
+                      Wishlist, vendor message, and checkout actions stay connected from this page.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         </div>
         {/* Description */}
         {product.description && (
-          <div className="pt-6 border-t border-gray-200">
+          <div className="rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">
               Description
             </h3>
@@ -1308,7 +1399,7 @@ const ProductDetails = () => {
 
         {/* Features */}
         {product.features && product.features.length > 0 && (
-          <div className="pt-6 pb-6">
+          <div className="mt-6 rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">
               Key Features
             </h3>
@@ -1328,7 +1419,7 @@ const ProductDetails = () => {
         {marketplaceType === "grouped" &&
           Array.isArray(product.groupedProducts) &&
           product.groupedProducts.length > 0 && (
-            <div className="pt-6 pb-6">
+            <div className="mt-6 rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
               <h3 className="text-xl font-semibold text-gray-900 mb-4">
                 Grouped Products
               </h3>
@@ -1382,12 +1473,12 @@ const ProductDetails = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-16"
+            className="mt-6"
           >
             <h2 className="text-2xl font-bold text-gray-900 mb-8">
               Specifications
             </h2>
-            <div className="bg-gray-50 rounded-2xl p-6">
+            <div className="rounded-[30px] border border-gray-200 bg-white p-6 shadow-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {product.specifications &&
                   product.specifications.map((spec, index) => (
@@ -1424,7 +1515,7 @@ const ProductDetails = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-16"
+          className="mt-6"
         >
           <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Product Reviews</h2>

@@ -245,6 +245,11 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
             icon: FiTag,
             tab: "module-brands",
           },
+          {
+            name: "Inventory Center",
+            icon: FiPackage,
+            tab: "module-inventory",
+          },
           ...(!isSingleMode
             ? [
                 {
@@ -475,6 +480,11 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
             name: "Brands",
             icon: FiTag,
             tab: "module-brands",
+          },
+          {
+            name: "Inventory Center",
+            icon: FiPackage,
+            tab: "module-inventory",
           },
         ],
       },

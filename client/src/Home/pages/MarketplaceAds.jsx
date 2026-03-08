@@ -54,11 +54,11 @@ const MarketplaceAds = ({ placement = "home_sidebar", limit = 3 }) => {
   };
 
   if (loading || visibleAds.length === 0) {
-    return null;
+    return <div className="h-0 mt-4 md:mt-6" aria-hidden="true" />;
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-3 md:px-6 mt-4 md:mt-6">
+    <section className="mx-auto mt-4 w-full max-w-7xl px-3 md:mt-6 md:px-6">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm md:text-base font-semibold text-black">Sponsored</h2>
         <p className="text-xs text-gray-500">Promoted vendor campaigns</p>
@@ -99,4 +99,3 @@ const MarketplaceAds = ({ placement = "home_sidebar", limit = 3 }) => {
 };
 
 export default MarketplaceAds;
-

@@ -48,7 +48,7 @@ const Register = lazy(() => import("./pages/Registration"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Banner = lazy(() => import("./Home/pages/Banner"));
-const Demo03Landing = lazy(() => import("./Home/pages/Demo03Landing"));
+const Demo03Home = lazy(() => import("./Home/pages/Demo03Home"));
 const MarketplaceAds = lazy(() => import("./Home/pages/MarketplaceAds"));
 const MarketplaceHomeFloors = lazy(() => import("./Home/pages/MarketplaceHomeFloors"));
 const FAQ = lazy(() => import("./Home/pages/FAQ"));
@@ -67,7 +67,7 @@ const CompareProducts = lazy(() => import("./pages/CompareProducts"));
 
 function HomePage() {
   return (
-    <Demo03Landing />
+    <Demo03Home />
   );
 }
 
@@ -99,6 +99,16 @@ function HashScrollHandler() {
   return null;
 }
 
+function DashboardTabRedirect({ tab }) {
+  try {
+    if (tab) localStorage.setItem("dashboardActiveTab", tab);
+  } catch {
+    // ignore storage errors
+  }
+
+  return <Navigate to="/dashboard" replace />;
+}
+
 // Layout component for public pages (with Navbar and Footer)
 function PublicLayout() {
   const location = useLocation();
@@ -128,6 +138,7 @@ function PublicLayout() {
             {/* About Us */}
             <Route path="/about" element={<AboutUs />} />
             <Route path="/about-us" element={<Navigate to="/about" replace />} />
+            <Route path="/blog" element={<AboutUs />} />
 
             {/* Static pages */}
             <Route path="/contact" element={<Contact />} />
@@ -141,6 +152,10 @@ function PublicLayout() {
             <Route path="/store/:slug" element={<VendorStore />} />
             <Route path="/lp/:slug" element={<LandingPageView />} />
             <Route path="/policy/:policyType" element={<PolicyPage />} />
+            <Route
+              path="/wishlist"
+              element={<DashboardTabRedirect tab="wishlist" />}
+            />
 
             {/* Cart / checkout */}
             <Route path="/cart" element={<AddToCart />} />

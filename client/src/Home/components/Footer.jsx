@@ -143,6 +143,10 @@ const Footer = () => {
         : toPublicAssetUrl(website?.logoUrl || ""),
     [brandLogoMode, website?.logoUrl],
   );
+  const hasBrandLogoImage = useMemo(
+    () => brandLogoMode === "image" && Boolean(brandLogo),
+    [brandLogoMode, brandLogo],
+  );
   const footerCaption = useMemo(() => {
     const resolved = String(storefront?.footerCaption || "").trim();
     return resolved || "Built for Bangladesh marketplace operations";
@@ -217,7 +221,7 @@ const Footer = () => {
                   className="inline-block cursor-pointer"
                 >
                   <h2 className="text-3xl font-bold mb-4 hover:opacity-90 transition-opacity flex items-center gap-3">
-                    {brandLogoMode === "text" ? (
+                    {!hasBrandLogoImage ? (
                       <span
                         className="inline-flex min-h-11 items-center rounded-xl px-4 text-lg font-black tracking-[0.08em] text-white"
                         style={{ backgroundColor: brandColor }}
@@ -226,14 +230,14 @@ const Footer = () => {
                       </span>
                     ) : (
                       <>
-                        {brandLogo ? (
+                        <span className="inline-flex items-cente px-3 py-2">
                           <img
                             src={brandLogo}
                             alt={String(website.storeName || "Store")}
-                            className="h-10 w-10 rounded-xl object-cover border border-white/30"
+                            className="block h-10 w-auto max-w-[220px] object-contain"
                           />
-                        ) : null}
-                        <span style={{ color: brandColor }}>
+                        </span>
+                        <span className="sr-only">
                           {String(website.storeName || "E-Commerce")}
                         </span>
                       </>

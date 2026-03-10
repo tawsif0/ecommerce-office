@@ -7,7 +7,6 @@ const {
   deleteProduct,
   getActiveProducts,
   getProductsByType,
-  bulkCreateProducts,
   toggleProductActive,
   duplicateProduct,
   updateProductApprovalStatus,
@@ -45,7 +44,6 @@ router.post(
   handleMulterError,
   createProduct
 );
-router.post("/bulk-upload", auth, bulkCreateProducts);
 router.get("/", auth, getProducts);
 router.get("/:id", auth, getProduct);
 router.put(

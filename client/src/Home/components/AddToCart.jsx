@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaTrash, FaArrowLeft, FaShoppingBag } from "react-icons/fa";
 import { FiMinus, FiPlus, FiShield, FiTag, FiTruck } from "react-icons/fi";
@@ -121,14 +121,14 @@ const AddToCart = () => {
   );
   const total = Math.max(subtotal - discount, 0);
 
-  const clearAppliedCoupon = (showToast = false) => {
+  const clearAppliedCoupon = useCallback((showToast = false) => {
     setAppliedCoupon(null);
     localStorage.removeItem(COUPON_STORAGE_KEY);
 
     if (showToast) {
       toast.success("Coupon removed");
     }
-  };
+  }, []);
 
   useEffect(() => {
     const savedCoupon = localStorage.getItem(COUPON_STORAGE_KEY);
@@ -149,7 +149,7 @@ const AddToCart = () => {
     if (cartItems.length === 0 && appliedCoupon) {
       clearAppliedCoupon(false);
     }
-  }, [cartItems.length, appliedCoupon]);
+  }, [appliedCoupon, cartItems.length, clearAppliedCoupon]);
 
   const handleUpdateCartItem = async (
     productId,
@@ -198,7 +198,7 @@ const AddToCart = () => {
     }
   };
 
-  const applyCoupon = async (inputCode = couponCode, silent = false) => {
+  const applyCoupon = useCallback(async (inputCode = couponCode, silent = false) => {
     const normalizedCode = String(inputCode || "").trim().toUpperCase();
 
     if (!normalizedCode) {
@@ -270,7 +270,7 @@ const AddToCart = () => {
     } finally {
       setIsApplyingCoupon(false);
     }
-  };
+  }, [cartItems, couponCode, subtotal]);
 
   useEffect(() => {
     if (!appliedCoupon?.code || subtotal <= 0) return;
@@ -289,7 +289,7 @@ const AddToCart = () => {
     return () => {
       isCancelled = true;
     };
-  }, [subtotal]);
+  }, [appliedCoupon?.code, applyCoupon, clearAppliedCoupon, subtotal]);
 
   const handleCheckout = () => {
     if (cartItems.length === 0) {

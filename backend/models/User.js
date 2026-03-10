@@ -28,6 +28,83 @@ const validateBangladeshiPhone = (phone) => {
   return /^01[3-9]\d{8}$/.test(normalized);
 };
 
+const addressBookEntrySchema = new mongoose.Schema(
+  {
+    label: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+      default: "Home",
+    },
+    recipientName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    alternativePhone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    address: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 500,
+    },
+    city: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
+    subCity: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    district: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
+    postalCode: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 20,
+    },
+    country: {
+      type: String,
+      trim: true,
+      default: "Bangladesh",
+      maxlength: 120,
+    },
+    deliveryNotes: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 500,
+    },
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    _id: true,
+    timestamps: true,
+  },
+);
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -90,6 +167,10 @@ const userSchema = new mongoose.Schema({
   adminSettings: {
     type: mongoose.Schema.Types.Mixed,
     default: {},
+  },
+  addressBook: {
+    type: [addressBookEntrySchema],
+    default: [],
   },
   passwordResetToken: String,
   passwordResetExpires: Date,

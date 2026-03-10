@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import {
@@ -9,6 +10,7 @@ import {
   FiEye,
   FiGrid,
   FiList,
+  FiShuffle,
   FiChevronDown,
   FiChevronUp,
 } from "react-icons/fi";
@@ -20,6 +22,8 @@ import {
   getPublicStockBadgeText,
   isPublicStockVisible,
 } from "../../utils/publicProduct";
+import { toggleCompareItem } from "../../store/compareSlice";
+import { createProductSnapshot } from "../../utils/productSnapshot";
 const INITIAL_DISPLAY_LIMIT = 20;
 
 const DEFAULT_STOREFRONT = getDefaultPublicSettings().storefront;
@@ -40,6 +44,8 @@ const getSafeStoreName = (value) => {
 const ProductGrid = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
+  const compareItems = useSelector((state) => state.compare.items || []);
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -179,6 +185,21 @@ const ProductGrid = () => {
     });
     return types;
   }, [visibleCategories]);
+
+  const isProductCompared = React.useCallback(
+    (productId) =>
+      compareItems.some((item) => String(item?._id || "") === String(productId || "")),
+    [compareItems],
+  );
+
+  const handleToggleCompare = React.useCallback(
+    (product) => {
+      const snapshot = createProductSnapshot(product);
+      if (!snapshot) return;
+      dispatch(toggleCompareItem(snapshot));
+    },
+    [dispatch],
+  );
 
   const handleSetViewMode = (mode) => {
     setViewMode(mode);
@@ -583,7 +604,7 @@ const ProductGrid = () => {
   };
   const LoadingSkeleton = () => (
     <section className="bg-[#f5f5f5] py-4 md:py-8 lg:py-12">
-      <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 lg:px-8">
+      <div className="site-shell">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {/* Desktop Filters Skeleton */}
           <div className="lg:col-span-1 hidden lg:block">
@@ -643,10 +664,10 @@ const ProductGrid = () => {
     DEFAULT_STOREFRONT.catalogDescription;
 
   return (
-    <section className="min-h-screen bg-[#f5f5f5]">
-      <div className="border-b border-gray-200 bg-[#f5f5f5]">
-        <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 lg:px-8 py-4 md:py-5">
-          <div className="overflow-hidden rounded-[32px] border border-gray-200 bg-white shadow-sm">
+    <section className="min-h-screen bg-[radial-gradient(circle_at_top,#ffffff_0%,#f6f8fb_40%,#edf2f7_100%)]">
+      <div className="border-b border-gray-200/70 bg-transparent">
+        <div className="site-shell py-4 md:py-5">
+          <div className="site-card overflow-hidden">
             <div className="grid gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center lg:px-8 lg:py-7">
               <div>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -659,10 +680,10 @@ const ProductGrid = () => {
                     </span>
                   ) : null}
                 </div>
-                <h1 className="text-2xl font-black tracking-tight text-black sm:text-3xl lg:text-4xl">
+                <h1 className="site-title text-2xl sm:text-3xl lg:text-4xl">
                   {catalogTitle}
                 </h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600 sm:text-base">
+                <p className="site-copy mt-2 max-w-3xl text-sm sm:text-base">
                   {tagline || catalogDescription}
                 </p>
                 <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
@@ -698,7 +719,7 @@ const ProductGrid = () => {
                     ? { label: "Stock units", value: catalogStockUnits }
                     : { label: "Categories", value: totalCategoryCount },
                 ].map((item) => (
-                  <div key={item.label} className="rounded-2xl bg-gray-50 px-3 py-4 text-center">
+                  <div key={item.label} className="site-metric px-3 py-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
                       {item.label}
                     </p>
@@ -712,11 +733,11 @@ const ProductGrid = () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 pb-6 md:pb-8 lg:pb-12">
+      <div className="site-shell pb-6 md:pb-8 lg:pb-12">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {/* Desktop Filters */}
           <div className="lg:col-span-1 hidden lg:block">
-            <div className="bg-white rounded-[28px] p-4 sm:p-6 border border-gray-200 shadow-sm sticky top-6">
+            <div className="site-card sticky top-6 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-bold text-black">Filters</h3>
                 {(selectedCategory !== "all" ||
@@ -735,7 +756,7 @@ const ProductGrid = () => {
                 )}
               </div>
 
-              <div className="mb-6 rounded-2xl bg-black px-4 py-4 text-white">
+              <div className="site-card-dark mb-6 px-4 py-4 text-white">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
                   Inventory note
                 </p>
@@ -904,12 +925,12 @@ const ProductGrid = () => {
               <div className="flex items-center justify-between gap-4">
                 <button
                   onClick={() => setShowMobileFilters(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-black text-white rounded-full text-sm"
+                  className="app-btn-primary px-4 py-2.5 text-sm"
                 >
                   <FiFilter /> Filters
                   {(selectedCategory !== "all" ||
                     selectedCategoryType !== "all") && (
-                    <span className="ml-1 bg-white text-black text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs text-black">
                       !
                     </span>
                   )}
@@ -1070,6 +1091,7 @@ const ProductGrid = () => {
                       : [];
                     const hasMoreColors =
                       Array.isArray(product.colors) && product.colors.length > 4;
+                    const compared = isProductCompared(product._id);
 
                     return (
                       <div
@@ -1172,7 +1194,7 @@ const ProductGrid = () => {
                           </div>
 
                           {/* Price & Action */}
-                          <div className="mt-auto pt-2 border-t border-gray-100 flex flex-col xs:flex-row xs:items-center xs:justify-between gap-2">
+                          <div className="mt-auto pt-2 border-t border-gray-100 flex flex-col gap-2">
                             <div>
                               {pricing.isTba ? (
                                 <div className="text-sm sm:text-base font-bold text-black leading-none">
@@ -1191,19 +1213,33 @@ const ProductGrid = () => {
                                 </div>
                               )}
                             </div>
-                            <button
-                              onClick={() => {
-                                navigate(`/product/${product._id}`);
-                                window.scrollTo(0, 0);
-                              }}
-                              className="cursor-pointer w-full xs:w-auto h-8 px-3 sm:px-3.5 bg-black text-white rounded-full text-[11px] sm:text-xs font-semibold hover:bg-gray-900 transition-colors flex items-center justify-center gap-1 sm:gap-2"
-                            >
-                              <FiEye className="text-xs sm:text-sm" />
-                              <span className="hidden xs:inline">
-                                View Details
-                              </span>
-                              <span className="xs:hidden">View</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCompare(product)}
+                                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors ${
+                                  compared
+                                    ? "border-black bg-black text-white"
+                                    : "border-gray-300 text-gray-600 hover:border-black hover:text-black"
+                                }`}
+                                title={compared ? "Remove from compare" : "Add to compare"}
+                              >
+                                <FiShuffle className="text-xs sm:text-sm" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigate(`/product/${product._id}`);
+                                  window.scrollTo(0, 0);
+                                }}
+                                className="cursor-pointer flex-1 h-8 px-3 sm:px-3.5 bg-black text-white rounded-full text-[11px] sm:text-xs font-semibold hover:bg-gray-900 transition-colors flex items-center justify-center gap-1 sm:gap-2"
+                              >
+                                <FiEye className="text-xs sm:text-sm" />
+                                <span className="hidden xs:inline">
+                                  View Details
+                                </span>
+                                <span className="xs:hidden">View</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1242,6 +1278,7 @@ const ProductGrid = () => {
                       const categoryType = getCategoryTypeForProduct(product);
                       const vendor = getVendorForProduct(product);
                       const pricing = getProductPricing(product);
+                      const compared = isProductCompared(product._id);
                       const productTypeLabel = String(product.productType || "")
                         .trim();
                       const categoryTypeLabel = String(categoryType || "")
@@ -1433,17 +1470,32 @@ const ProductGrid = () => {
                                           </div>
                                         </div>
                                       )}
-                                      {/* View Details Button - Under Price */}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation(); // Prevent card click
-                                          navigate(`/product/${product._id}`);
-                                          window.scrollTo(0, 0);
-                                        }}
-                                        className="w-full lg:w-auto bg-gray-600 text-white py-2 px-6 rounded-xl font-semibold text-sm shadow-lg hover:shadow-xl hover:bg-gray-800 transition-all duration-300 whitespace-nowrap"
-                                      >
-                                        View Details →
-                                      </button>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleCompare(product);
+                                          }}
+                                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+                                            compared
+                                              ? "border-black bg-black text-white"
+                                              : "border-gray-300 text-gray-600 hover:border-black hover:text-black"
+                                          }`}
+                                        >
+                                          <FiShuffle className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(`/product/${product._id}`);
+                                            window.scrollTo(0, 0);
+                                          }}
+                                          className="w-full lg:w-auto bg-gray-600 text-white py-2 px-6 rounded-xl font-semibold text-sm shadow-lg hover:shadow-xl hover:bg-gray-800 transition-all duration-300 whitespace-nowrap"
+                                        >
+                                          View Details
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>

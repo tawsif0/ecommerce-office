@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiEye, FiEyeOff, FiRefreshCw, FiTrash2 } from "react-icons/fi";
@@ -16,6 +16,23 @@ const permissionKeys = [
   "manageSettings",
 ];
 
+const staffRoleOptions = [
+  { value: "Store Manager", label: "Store Manager" },
+  { value: "Operations Executive", label: "Operations Executive" },
+  { value: "Catalog Manager", label: "Catalog Manager" },
+  { value: "Order Manager", label: "Order Manager" },
+  { value: "Support Agent", label: "Support Agent" },
+  { value: "Marketing Executive", label: "Marketing Executive" },
+  { value: "Accounts Assistant", label: "Accounts Assistant" },
+  { value: "Warehouse Coordinator", label: "Warehouse Coordinator" },
+];
+
+const formatRoleNameLabel = (value) =>
+  String(value || "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .trim() || "Staff";
+
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -26,7 +43,7 @@ const initialForm = {
   email: "",
   phone: "",
   password: "",
-  roleName: "staff",
+  roleName: "",
   status: "active",
   notes: "",
   permissions: {
@@ -53,7 +70,7 @@ const ModuleStaff = () => {
   const isAdmin = user?.userType === "admin";
   const canManage = isAdmin || user?.userType === "vendor" || user?.userType === "staff";
 
-  const fetchVendors = async () => {
+  const fetchVendors = useCallback(async () => {
     if (!isAdmin) {
       setVendors([]);
       return;
@@ -71,9 +88,9 @@ const ModuleStaff = () => {
     } catch {
       setVendors([]);
     }
-  };
+  }, [isAdmin, selectedVendorId]);
 
-  const fetchStaff = async () => {
+  const fetchStaff = useCallback(async () => {
     if (!canManage) return;
 
     if (isAdmin && !selectedVendorId) {
@@ -93,17 +110,17 @@ const ModuleStaff = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canManage, isAdmin, selectedVendorId]);
 
   useEffect(() => {
     if (!user) return;
     fetchVendors();
-  }, [user]);
+  }, [user, fetchVendors]);
 
   useEffect(() => {
     if (!user || (isAdmin && !selectedVendorId)) return;
     fetchStaff();
-  }, [user, selectedVendorId]);
+  }, [user, isAdmin, selectedVendorId, fetchStaff]);
 
   const handleInput = (event) => {
     const { name, value } = event.target;
@@ -133,6 +150,11 @@ const ModuleStaff = () => {
 
     if (!form.password || form.password.length < 8) {
       toast.error("Password must be at least 8 characters");
+      return;
+    }
+
+    if (!form.roleName) {
+      toast.error("Select a staff role");
       return;
     }
 
@@ -279,13 +301,19 @@ const ModuleStaff = () => {
               )}
             </button>
           </div>
-          <input
+          <select
             name="roleName"
             value={form.roleName}
             onChange={handleInput}
-            placeholder="Role name"
             className="px-3 py-2.5 border border-gray-200 rounded-lg"
-          />
+          >
+            <option value="">Select staff role</option>
+            {staffRoleOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <select
             name="status"
             value={form.status}
@@ -358,7 +386,9 @@ const ModuleStaff = () => {
                 <div className="xl:col-span-4">
                   <p className="font-semibold text-black">{item.user?.name || "Staff"}</p>
                   <p className="text-sm text-gray-600">{item.user?.email}</p>
-                  <p className="text-xs text-gray-500 mt-1">Role: {item.roleName}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Role: {formatRoleNameLabel(item.roleName)}
+                  </p>
                 </div>
 
                 <div className="xl:col-span-4 flex flex-wrap gap-2">

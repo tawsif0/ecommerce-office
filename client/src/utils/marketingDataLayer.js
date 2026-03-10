@@ -15,7 +15,7 @@ const isDataLayerEnabledFromSettings = () => {
       return DATALAYER_DEFAULT_ENABLED;
     }
     return Boolean(fromSettings);
-  } catch (_error) {
+  } catch {
     return DATALAYER_DEFAULT_ENABLED;
   }
 };

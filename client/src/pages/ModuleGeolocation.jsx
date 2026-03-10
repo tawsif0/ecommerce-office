@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiRefreshCw } from "react-icons/fi";
@@ -23,7 +23,7 @@ const ModuleGeolocation = () => {
   const isAdmin = user?.userType === "admin";
   const isVendorSide = user?.userType === "vendor" || user?.userType === "staff";
 
-  const fetchVendorProfile = async () => {
+  const fetchVendorProfile = useCallback(async () => {
     if (!isVendorSide) {
       setVendorProfile(null);
       return;
@@ -43,9 +43,9 @@ const ModuleGeolocation = () => {
         lng: profile.geoLocation.lng ?? prev.lng,
       }));
     }
-  };
+  }, [isVendorSide]);
 
-  const fetchAdminVendors = async () => {
+  const fetchAdminVendors = useCallback(async () => {
     if (!isAdmin) {
       setVendors([]);
       return;
@@ -56,9 +56,9 @@ const ModuleGeolocation = () => {
     });
 
     setVendors(response.data?.vendors || []);
-  };
+  }, [isAdmin]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       setLoading(true);
       await Promise.all([fetchVendorProfile(), fetchAdminVendors()]);
@@ -67,12 +67,12 @@ const ModuleGeolocation = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchAdminVendors, fetchVendorProfile]);
 
   useEffect(() => {
     if (!user) return;
     refresh();
-  }, [user]);
+  }, [user, refresh]);
 
   const updateVendorLocation = async () => {
     if (!vendorProfile) return;

@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiCheckCircle,
@@ -142,6 +142,26 @@ const inputClassName =
 const sectionCardClass =
   "rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6";
 
+const splitRecipientName = (value) => {
+  const parts = String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { firstName: "", lastName: "" };
+  }
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+};
+
 const CheckOut = () => {
   const navigate = useNavigate();
   const { cartItems, clearCart, getCartSubtotal } = useCart();
@@ -185,11 +205,16 @@ const CheckOut = () => {
     notes: "",
     agreeTerms: false,
   });
+  const [selectedAddressId, setSelectedAddressId] = useState("");
 
   const subtotal = getCartSubtotal();
   const totalUnits = useMemo(
     () => cartItems.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
     [cartItems],
+  );
+  const savedAddresses = useMemo(
+    () => (Array.isArray(user?.addressBook) ? user.addressBook : []),
+    [user?.addressBook],
   );
   const selectedPaymentMethod = useMemo(
     () =>
@@ -240,7 +265,7 @@ const CheckOut = () => {
     };
   };
 
-  const getDataLayerItems = () =>
+  const getDataLayerItems = useCallback(() =>
     cartItems
       .map((item) => {
         const itemData = getItemData(item);
@@ -253,9 +278,9 @@ const CheckOut = () => {
           variationLabel: itemData.variationLabel,
         });
       })
-      .filter(Boolean);
+      .filter(Boolean), [cartItems]);
 
-  const buildAbandonedPayload = () => {
+  const buildAbandonedPayload = useCallback(() => {
     const snapshot = checkoutSnapshotRef.current || {};
     const snapshotCartItems = Array.isArray(snapshot.cartItems) ? snapshot.cartItems : [];
     const snapshotFormData = snapshot.formData || {};
@@ -294,9 +319,9 @@ const CheckOut = () => {
       subtotal: snapshotSubtotal,
       total: snapshotTotal,
     };
-  };
+  }, []);
 
-  const captureAbandonedCheckout = async ({ useBeacon = false } = {}) => {
+  const captureAbandonedCheckout = useCallback(async ({ useBeacon = false } = {}) => {
     if (hasPlacedOrderRef.current || hasCapturedAbandonedRef.current) return;
     if (!Array.isArray(checkoutSnapshotRef.current?.cartItems) || !checkoutSnapshotRef.current.cartItems.length) return;
 
@@ -327,9 +352,9 @@ const CheckOut = () => {
     } catch (_error) {
       hasCapturedAbandonedRef.current = false;
     }
-  };
+  }, [buildAbandonedPayload]);
 
-  const getShippingItemsPayload = () =>
+  const getShippingItemsPayload = useCallback(() =>
     cartItems
       .map((item) => {
         const product = typeof item.product === "object" ? item.product : null;
@@ -353,18 +378,18 @@ const CheckOut = () => {
             null,
         };
       })
-      .filter(Boolean);
+      .filter(Boolean), [cartItems]);
 
-  const clearAppliedCoupon = (showToast = false) => {
+  const clearAppliedCoupon = useCallback((showToast = false) => {
     setAppliedCoupon(null);
     localStorage.removeItem(COUPON_STORAGE_KEY);
 
     if (showToast) {
       toast.success("Coupon removed");
     }
-  };
+  }, []);
 
-  const applyCoupon = async (inputCode = couponCode, silent = false) => {
+  const applyCoupon = useCallback(async (inputCode = couponCode, silent = false) => {
     const normalizedCode = String(inputCode || "").trim().toUpperCase();
 
     if (!normalizedCode) {
@@ -436,9 +461,9 @@ const CheckOut = () => {
     } finally {
       setIsApplyingCoupon(false);
     }
-  };
+  }, [cartItems, couponCode, subtotal]);
 
-  const estimateShipping = async (addressData = formData, silent = true) => {
+  const estimateShipping = useCallback(async (addressData = formData, silent = true) => {
     if (cartItems.length === 0) {
       setShippingFee(0);
       setShippingEstimate(null);
@@ -484,7 +509,7 @@ const CheckOut = () => {
     } finally {
       setIsEstimatingShipping(false);
     }
-  };
+  }, [cartItems.length, formData, getShippingItemsPayload]);
 
   useEffect(() => {
     fetchPaymentMethods();
@@ -544,6 +569,49 @@ const CheckOut = () => {
     };
   }, [cartItems, formData, subtotal, total]);
 
+  const applySavedAddress = useCallback((address) => {
+    if (!address) return;
+    const nameParts = splitRecipientName(address.recipientName);
+
+    setSelectedAddressId(String(address._id || ""));
+    setFormData((current) => ({
+      ...current,
+      firstName: nameParts.firstName || current.firstName,
+      lastName: nameParts.lastName,
+      phone: String(address.phone || current.phone || ""),
+      alternativePhone: String(address.alternativePhone || ""),
+      address: String(address.address || ""),
+      city: String(address.city || ""),
+      subCity: String(address.subCity || ""),
+      district: String(address.district || ""),
+      postalCode: String(address.postalCode || ""),
+      country: String(address.country || "Bangladesh"),
+      notes: String(address.deliveryNotes || current.notes || ""),
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn || !savedAddresses.length) return;
+    if (selectedAddressId) return;
+    if (formData.address || formData.city || formData.district || formData.postalCode) return;
+
+    const defaultAddress =
+      savedAddresses.find((address) => address?.isDefault) || savedAddresses[0];
+
+    if (defaultAddress) {
+      applySavedAddress(defaultAddress);
+    }
+  }, [
+    applySavedAddress,
+    formData.address,
+    formData.city,
+    formData.district,
+    formData.postalCode,
+    isLoggedIn,
+    savedAddresses,
+    selectedAddressId,
+  ]);
+
   useEffect(() => {
     const savedCoupon = localStorage.getItem(COUPON_STORAGE_KEY);
     if (!savedCoupon) return;
@@ -576,13 +644,13 @@ const CheckOut = () => {
     return () => {
       isCancelled = true;
     };
-  }, [subtotal]);
+  }, [appliedCoupon?.code, applyCoupon, clearAppliedCoupon, subtotal]);
 
   useEffect(() => {
     if (cartItems.length === 0 && appliedCoupon) {
       clearAppliedCoupon(false);
     }
-  }, [cartItems.length, appliedCoupon]);
+  }, [appliedCoupon, cartItems.length, clearAppliedCoupon]);
 
   useEffect(() => {
     if (cartItems.length === 0) {
@@ -598,7 +666,7 @@ const CheckOut = () => {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [cartItems, formData.city, formData.district, formData.country]);
+  }, [cartItems, estimateShipping, formData]);
 
   useEffect(() => {
     if (cartItems.length === 0) {
@@ -621,7 +689,7 @@ const CheckOut = () => {
     });
 
     initiateCheckoutTrackedRef.current = true;
-  }, [cartItems.length]);
+  }, [appliedCoupon?.code, cartItems.length, getDataLayerItems, total]);
 
   useEffect(() => {
     const beforeUnloadHandler = () => {
@@ -632,13 +700,13 @@ const CheckOut = () => {
     return () => {
       window.removeEventListener("beforeunload", beforeUnloadHandler);
     };
-  }, []);
+  }, [captureAbandonedCheckout]);
 
   useEffect(
     () => () => {
       captureAbandonedCheckout();
     },
-    [],
+    [captureAbandonedCheckout],
   );
 
   const fetchPaymentMethods = async () => {
@@ -1032,6 +1100,69 @@ const CheckOut = () => {
                   </p>
                 </div>
               </div>
+
+              {isLoggedIn && savedAddresses.length > 0 ? (
+                <div className="mb-5 rounded-[24px] border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex flex-col gap-2 border-b border-gray-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-black">Saved address book</p>
+                      <p className="text-xs text-gray-500">
+                        Pick a saved address to fill this checkout instantly.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem("dashboardActiveTab", "my-addresses");
+                        navigate("/dashboard");
+                      }}
+                      className="inline-flex rounded-full border border-gray-300 px-4 py-2 text-xs font-semibold text-black transition hover:border-black"
+                    >
+                      Manage Addresses
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {savedAddresses.map((address) => {
+                      const isSelected =
+                        String(selectedAddressId || "") === String(address?._id || "");
+
+                      return (
+                        <button
+                          key={address._id}
+                          type="button"
+                          onClick={() => applySavedAddress(address)}
+                          className={`rounded-[22px] border p-4 text-left transition ${
+                            isSelected
+                              ? "border-black bg-white shadow-sm"
+                              : "border-gray-200 bg-white hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
+                              {address.label || "Address"}
+                            </span>
+                            {address.isDefault ? (
+                              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                                Default
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-3 text-sm font-semibold text-black">
+                            {address.recipientName}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-600">{address.phone}</p>
+                          <p className="mt-2 text-xs leading-5 text-gray-500">
+                            {[address.address, address.subCity, address.city, address.district]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               <input
                 name="address"

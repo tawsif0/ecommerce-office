@@ -10,6 +10,7 @@ import {
   ShoppingBagIcon,
   HeartIcon,
   ChatBubbleLeftRightIcon,
+  MapPinIcon,
   TicketIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
@@ -67,6 +68,10 @@ const DashboardHome = ({ user, onTabChange }) => {
 
   const isAdmin = user?.userType === "admin";
   const isSingleMode = normalizeMarketplaceMode(marketplaceMode) === "single";
+  const statCardClass = "app-stat-card";
+  const panelClass = "app-panel p-5";
+  const actionButtonClass =
+    "app-btn-secondary h-11 w-full justify-between px-4 text-sm font-semibold";
 
   const quickActions =
     user?.userType === "vendor"
@@ -79,6 +84,7 @@ const DashboardHome = ({ user, onTabChange }) => {
         ]
       : [
           { label: "My Orders", tab: "my-orders", icon: ShoppingBagIcon },
+          { label: "Saved Addresses", tab: "my-addresses", icon: MapPinIcon },
           { label: "Wishlist", tab: "wishlist", icon: HeartIcon },
           { label: "Vendor Messages", tab: "vendor-messages", icon: ChatBubbleLeftRightIcon },
           { label: "Support Tickets", tab: "module-support", icon: TicketIcon },
@@ -135,13 +141,18 @@ const DashboardHome = ({ user, onTabChange }) => {
   if (isAdmin) {
     return (
       <div className="space-y-6">
-        <div className="bg-linear-to-r from-purple-900 to-black rounded-xl p-6 md:p-8">
-          <h2 className="text-2xl font-bold text-white">Admin Dashboard</h2>
-          <p className="text-gray-300 mt-1">System overview and user activity</p>
+        <div className="app-hero p-6 md:p-8">
+          <p className="app-kicker !text-white/65">Operations overview</p>
+          <h2 className="mt-3 text-2xl font-black text-white md:text-3xl">
+            Admin Dashboard
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-white/72 md:text-base">
+            Track revenue, inventory health, orders, and customer signals from one organized workspace.
+          </p>
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center py-12">
+          <div className="app-panel-soft flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black" />
           </div>
         ) : (
@@ -150,7 +161,7 @@ const DashboardHome = ({ user, onTabChange }) => {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+                className={statCardClass}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-emerald-100 rounded-lg">
@@ -169,7 +180,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+                className={statCardClass}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-green-100 rounded-lg">
@@ -188,7 +199,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+                className={statCardClass}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-slate-100 rounded-lg">
@@ -207,7 +218,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+                className={statCardClass}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-yellow-100 rounded-lg">
@@ -229,7 +240,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+                className={statCardClass}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-green-100 rounded-lg">
@@ -248,7 +259,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
-                className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+                className={statCardClass}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-red-100 rounded-lg">
@@ -265,7 +276,7 @@ const DashboardHome = ({ user, onTabChange }) => {
               </motion.div>
             </div>
 
-            <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+            <div className={`${panelClass} space-y-4`}>
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">Commerce Control</p>
@@ -286,7 +297,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                     key={action.tab}
                     type="button"
                     onClick={() => onTabChange?.(action.tab)}
-                    className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-black transition hover:border-black hover:bg-white"
+                    className={actionButtonClass}
                   >
                     {action.label}
                   </button>
@@ -295,7 +306,7 @@ const DashboardHome = ({ user, onTabChange }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+              <div className={panelClass}>
                 <p className="text-sm font-semibold text-gray-900 mb-3">Financials</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
@@ -325,7 +336,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+              <div className={panelClass}>
                 <p className="text-sm font-semibold text-gray-900 mb-3">Inventory</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
@@ -355,7 +366,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+              <div className={panelClass}>
                 <p className="text-sm font-semibold text-gray-900 mb-3">Customer Insights</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
@@ -380,7 +391,7 @@ const DashboardHome = ({ user, onTabChange }) => {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+            <div className={panelClass}>
               <p className="text-sm font-semibold text-gray-900 mb-3">Recent Orders</p>
               {(systemStats?.customerInsights?.recentOrders || []).length === 0 ? (
                 <p className="text-sm text-gray-500">No recent orders found.</p>
@@ -409,7 +420,7 @@ const DashboardHome = ({ user, onTabChange }) => {
               )}
             </div>
 
-            <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+            <div className={panelClass}>
               <p className="text-sm font-semibold text-gray-900 mb-3">Quick Access</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {[
@@ -450,7 +461,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                       key={action.tab}
                       type="button"
                       onClick={() => onTabChange?.(action.tab)}
-                      className="inline-flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                      className={actionButtonClass}
                     >
                       <span className="inline-flex items-center gap-2">
                         <Icon className="w-4 h-4" />
@@ -474,16 +485,21 @@ const DashboardHome = ({ user, onTabChange }) => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-linear-to-r from-blue-900 to-black rounded-xl p-6 md:p-8">
-        <h2 className="text-2xl font-bold text-white">Welcome, {user?.name}</h2>
-        <p className="text-gray-300 mt-1">Manage your account and orders</p>
+      <div className="app-hero p-6 md:p-8">
+        <p className="app-kicker !text-white/65">Account workspace</p>
+        <h2 className="mt-3 text-2xl font-black text-white md:text-3xl">
+          Welcome, {user?.name}
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-white/72 md:text-base">
+          Keep your orders, saved details, and marketplace activity in one organized view.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+          className={statCardClass}
         >
           <p className="text-sm text-gray-500">Email</p>
           <p className="text-lg font-bold text-gray-900 break-all">{user?.email || "-"}</p>
@@ -493,19 +509,19 @@ const DashboardHome = ({ user, onTabChange }) => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm"
+          className={statCardClass}
         >
           <p className="text-sm text-gray-500">Account Status</p>
           <p className="text-2xl font-bold text-emerald-600">{user?.status || "active"}</p>
         </motion.div>
       </div>
 
-      <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+      <div className={panelClass}>
         <p className="text-sm text-gray-500">Joined On</p>
         <p className="text-lg font-semibold text-gray-900 mt-1">{createdAt}</p>
       </div>
 
-      <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+      <div className={panelClass}>
         <p className="text-sm font-semibold text-gray-900 mb-3">Quick Access</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {quickActions
@@ -523,7 +539,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 key={action.tab}
                 type="button"
                 onClick={() => onTabChange?.(action.tab)}
-                className="inline-flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                className={actionButtonClass}
               >
                 <span className="inline-flex items-center gap-2">
                   <Icon className="w-4 h-4" />

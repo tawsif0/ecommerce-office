@@ -15,6 +15,7 @@ import { GLOBAL_TOAST_OPTIONS } from "./utils/globalToast";
 // Home components
 import Navbar from "./Home/components/Navbar";
 import Footer from "./Home/components/Footer";
+import RecentlyViewedShelf from "./components/RecentlyViewedShelf";
 import { pushDataLayerEvent } from "./utils/marketingDataLayer";
 import GlobalVoiceAssistant from "./components/GlobalVoiceAssistant";
 import { loadPublicSettings } from "./store/publicSettingsSlice";
@@ -61,6 +62,7 @@ const OrderTracking = lazy(() => import("./pages/OrderTracking"));
 const VendorStore = lazy(() => import("./pages/VendorStore"));
 const LandingPageView = lazy(() => import("./Home/pages/LandingPageView"));
 const PolicyPage = lazy(() => import("./Home/pages/PolicyPage"));
+const CompareProducts = lazy(() => import("./pages/CompareProducts"));
 
 function HomePage() {
   return (
@@ -68,6 +70,9 @@ function HomePage() {
       <Banner />
       <MarketplaceAds placement="home_sidebar" limit={3} />
       <MarketplaceHomeFloors />
+      <div className="site-shell pb-12">
+        <RecentlyViewedShelf />
+      </div>
     </>
   );
 }
@@ -118,6 +123,7 @@ function PublicLayout() {
             {/* Shop / product listing */}
             <Route path="/shop" element={<ProductGrid />} />
             <Route path="/products" element={<Navigate to="/shop" replace />} />
+            <Route path="/compare" element={<CompareProducts />} />
 
             {/* Single product */}
             <Route path="/product/:id" element={<ProductDetails />} />

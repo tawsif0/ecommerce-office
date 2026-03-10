@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiRefreshCw, FiTrash2 } from "react-icons/fi";
@@ -51,16 +51,16 @@ const ModuleSubscriptions = () => {
     [publicPlans, selectedPlanId],
   );
 
-  const fetchPublicPlans = async () => {
+  const fetchPublicPlans = useCallback(async () => {
     try {
       const response = await axios.get(`${baseUrl}/subscriptions/public/plans`);
       setPublicPlans(response.data?.plans || []);
     } catch {
       setPublicPlans([]);
     }
-  };
+  }, []);
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = useCallback(async () => {
     const [planRes, subRes, recurringRes] = await Promise.all([
       axios.get(`${baseUrl}/subscriptions/plans`, { headers: getAuthHeaders() }),
       axios.get(`${baseUrl}/subscriptions/admin/subscriptions`, {
@@ -74,9 +74,9 @@ const ModuleSubscriptions = () => {
     setPlans(planRes.data?.plans || []);
     setSubscriptions(subRes.data?.subscriptions || []);
     setRecurringSubscriptions(recurringRes.data?.subscriptions || []);
-  };
+  }, []);
 
-  const fetchMyData = async () => {
+  const fetchMyData = useCallback(async () => {
     const [response, recurringRes] = await Promise.allSettled([
       axios.get(`${baseUrl}/subscriptions/me`, {
         headers: getAuthHeaders(),
@@ -101,9 +101,9 @@ const ModuleSubscriptions = () => {
     } else {
       setRecurringSubscriptions([]);
     }
-  };
+  }, []);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       setLoading(true);
       await fetchPublicPlans();
@@ -118,12 +118,12 @@ const ModuleSubscriptions = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canSubscribe, fetchAdminData, fetchMyData, fetchPublicPlans, isAdmin]);
 
   useEffect(() => {
     if (!user) return;
     refresh();
-  }, [user]);
+  }, [user, refresh]);
 
   const resetPlanForm = () => {
     setPlanForm(initialPlanForm);

@@ -61,7 +61,7 @@ const ProductMiniCard = ({ product, onClick }) => {
     <button
       type="button"
       onClick={onClick}
-      className="group flex h-full flex-col rounded-[22px] border border-gray-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className="site-card-soft group flex h-full flex-col p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="relative overflow-hidden rounded-[18px] bg-gray-50">
         {imageUrl ? (
@@ -107,7 +107,7 @@ const ProductMiniCard = ({ product, onClick }) => {
               ) : null}
             </div>
           )}
-          <div className="mt-3 inline-flex rounded-full border border-gray-200 px-3 py-2 text-xs font-semibold text-black transition group-hover:border-black">
+          <div className="app-btn-secondary mt-3 px-3 py-2 text-xs group-hover:border-black">
             View product
           </div>
         </div>
@@ -156,7 +156,7 @@ const MarketplaceHomeFloors = () => {
         setCategories(
           Array.isArray(categoryResponse.data?.categories) ? categoryResponse.data.categories : [],
         );
-      } catch (_error) {
+      } catch {
         if (!mounted) return;
         setProducts([]);
         setCategories([]);
@@ -328,11 +328,11 @@ const MarketplaceHomeFloors = () => {
   if (loading) {
     return (
       <section className="bg-[#f5f5f5] py-6">
-        <div className="mx-auto grid max-w-7xl gap-6 px-3 sm:px-4 lg:px-6">
-          <div className="h-36 animate-pulse rounded-[28px] bg-white" />
+        <div className="site-shell grid gap-6">
+          <div className="h-36 animate-pulse rounded-[32px] bg-white" />
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-80 animate-pulse rounded-[28px] bg-white" />
+              <div key={index} className="h-80 animate-pulse rounded-[32px] bg-white" />
             ))}
           </div>
         </div>
@@ -341,18 +341,18 @@ const MarketplaceHomeFloors = () => {
   }
 
   return (
-    <section className="bg-[radial-gradient(circle_at_top,#ffffff_0%,#f5f5f5_46%,#ececec_100%)] pb-12">
-      <div className="mx-auto grid max-w-7xl gap-6 px-3 sm:px-4 lg:px-6">
-        <div className="overflow-hidden rounded-[32px] border border-gray-200 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+    <section className="bg-[radial-gradient(circle_at_top,#ffffff_0%,#f6f8fb_42%,#edf2f7_100%)] pb-14">
+      <div className="site-shell grid gap-6">
+        <div className="site-card overflow-hidden">
           <div className="grid gap-6 px-4 py-5 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-7">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">
+              <p className="site-kicker">
                 {highlightsEyebrow}
               </p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-black sm:text-3xl">
+              <h2 className="mt-3 text-2xl font-black tracking-tight text-black sm:text-3xl lg:text-4xl">
                 {highlightsTitle}
               </h2>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600 sm:text-base">
+              <p className="site-copy mt-3 max-w-3xl text-sm sm:text-base">
                 {branding.tagline || highlightsDescription}
               </p>
 
@@ -362,7 +362,7 @@ const MarketplaceHomeFloors = () => {
                     key={category._id}
                     type="button"
                     onClick={() => navigate(`/shop?category=${category._id}`)}
-                    className="rounded-full border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-black hover:bg-white hover:text-black"
+                    className="app-btn-secondary px-3 py-2 text-xs"
                   >
                     {category.name}
                   </button>
@@ -376,7 +376,7 @@ const MarketplaceHomeFloors = () => {
                 { label: "Deal listings", value: dealProductCount },
                 { label: "TBA items", value: tbaProductCount },
               ].map((item) => (
-                <div key={item.label} className="rounded-[24px] bg-[linear-gradient(180deg,#ffffff_0%,#f7f7f7_100%)] px-4 py-5 text-center">
+                <div key={item.label} className="site-metric">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
                     {item.label}
                   </p>
@@ -388,8 +388,8 @@ const MarketplaceHomeFloors = () => {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="rounded-[32px] bg-[linear-gradient(135deg,#020202_0%,#111111_52%,#202020_100%)] p-6 text-white shadow-[0_22px_55px_rgba(15,23,42,0.16)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
+          <div className="site-card-dark p-6">
+            <p className="site-kicker !text-white/58">
               {flashEyebrow}
             </p>
             <h3 className="mt-3 text-3xl font-black leading-tight">
@@ -402,14 +402,14 @@ const MarketplaceHomeFloors = () => {
               <button
                 type="button"
                 onClick={() => navigate("/shop")}
-                className="rounded-full bg-white px-5 py-3 text-sm font-bold text-black"
+                className="app-btn-secondary border-white bg-white px-5 py-3 text-sm font-bold text-black"
               >
                 {flashPrimaryLabel}
               </button>
               <button
                 type="button"
                 onClick={() => navigate("/dashboard")}
-                className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white"
+                className="app-btn-ghost border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white"
               >
                 {flashSecondaryLabel}
               </button>
@@ -418,16 +418,16 @@ const MarketplaceHomeFloors = () => {
 
           <div
             id="top-categories"
-            className="rounded-[32px] border border-gray-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)]"
+            className="site-card p-5"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+            <p className="site-kicker">
               {trustEyebrow}
             </p>
             <div className="mt-4 space-y-3">
               {trustBullets.map((line) => (
                 <div
                   key={line}
-                  className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-black"
+                  className="site-card-muted px-4 py-3 text-sm font-medium text-black"
                 >
                   {line}
                 </div>
@@ -435,8 +435,8 @@ const MarketplaceHomeFloors = () => {
             </div>
           </div>
 
-          <div className="rounded-[32px] border border-gray-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+          <div className="site-card p-5">
+            <p className="site-kicker">
               {topCategoriesEyebrow}
             </p>
             <div className="mt-4 space-y-2">
@@ -445,7 +445,7 @@ const MarketplaceHomeFloors = () => {
                   key={category._id}
                   type="button"
                   onClick={() => navigate(`/shop?category=${category._id}`)}
-                  className="flex w-full items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 text-left transition hover:bg-gray-100"
+                  className="site-card-muted flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-white"
                 >
                   <div>
                     <p className="text-sm font-semibold text-black">{category.name}</p>
@@ -465,11 +465,11 @@ const MarketplaceHomeFloors = () => {
         {dealProducts.length > 0 ? (
           <div
             id="daily-deals"
-            className="rounded-[32px] border border-gray-200 bg-white p-4 shadow-[0_16px_42px_rgba(15,23,42,0.05)] sm:p-6"
+            className="site-card p-4 sm:p-6"
           >
             <div className="mb-5 flex items-end justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+                <p className="site-kicker">
                   {dealsEyebrow}
                 </p>
                 <h3 className="mt-1 text-2xl font-black text-black">{dealsTitle}</h3>
@@ -477,7 +477,7 @@ const MarketplaceHomeFloors = () => {
               <button
                 type="button"
                 onClick={() => navigate("/shop")}
-                className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-black transition hover:border-black"
+                className="app-btn-secondary px-4 py-2 text-sm"
               >
                 {dealsButtonLabel}
               </button>
@@ -497,11 +497,11 @@ const MarketplaceHomeFloors = () => {
         {categoryFloors.map((floor) => (
           <div
             key={floor._id}
-            className="rounded-[32px] border border-gray-200 bg-white p-4 shadow-[0_16px_42px_rgba(15,23,42,0.05)] sm:p-6"
+            className="site-card p-4 sm:p-6"
           >
             <div className="mb-5 flex items-end justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+                <p className="site-kicker">
                   {categoryFloorEyebrow}
                 </p>
                 <h3 className="mt-1 text-2xl font-black text-black">{floor.name}</h3>
@@ -509,7 +509,7 @@ const MarketplaceHomeFloors = () => {
               <button
                 type="button"
                 onClick={() => navigate(`/shop?category=${floor._id}`)}
-                className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-black transition hover:border-black"
+                className="app-btn-secondary px-4 py-2 text-sm"
               >
                 {categoryFloorButtonLabel}
               </button>
@@ -519,16 +519,16 @@ const MarketplaceHomeFloors = () => {
               <button
                 type="button"
                 onClick={() => navigate(`/shop?category=${floor._id}`)}
-                className="overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#050505_0%,#111111_60%,#1d1d1d_100%)] p-6 text-left text-white shadow-[0_18px_40px_rgba(15,23,42,0.14)]"
+                className="site-card-dark overflow-hidden p-6 text-left"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                <p className="site-kicker !text-white/58">
                   {floor.type || "Category"}
                 </p>
                 <h4 className="mt-3 text-3xl font-black leading-tight">{floor.name}</h4>
                 <p className="mt-3 text-sm leading-6 text-white/75">
                   {categoryFloorDescription}
                 </p>
-                <span className="mt-5 inline-flex rounded-full bg-white px-4 py-2 text-sm font-bold text-black">
+                <span className="app-btn-secondary mt-5 px-4 py-2 text-sm font-bold text-black">
                   {categoryFloorPanelButtonLabel}
                 </span>
               </button>
@@ -548,11 +548,11 @@ const MarketplaceHomeFloors = () => {
 
         <div
           id="new-arrivals"
-          className="rounded-[32px] border border-gray-200 bg-white p-4 shadow-[0_16px_42px_rgba(15,23,42,0.05)] sm:p-6"
+          className="site-card p-4 sm:p-6"
         >
           <div className="mb-5 flex items-end justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+              <p className="site-kicker">
                 {recommendedEyebrow}
               </p>
               <h3 className="mt-1 text-2xl font-black text-black">{recommendedTitle}</h3>
@@ -560,7 +560,7 @@ const MarketplaceHomeFloors = () => {
             <button
               type="button"
               onClick={() => navigate("/shop")}
-              className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-black transition hover:border-black"
+              className="app-btn-secondary px-4 py-2 text-sm"
             >
               {recommendedButtonLabel}
             </button>

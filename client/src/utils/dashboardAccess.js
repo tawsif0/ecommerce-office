@@ -84,7 +84,6 @@ const ADMIN_ALLOWED_TABS = new Set([
   "modify-category",
   "create-product",
   "modify-product",
-  "bulk-product-upload",
   "create-banner",
   "modify-banner",
   "module-brands",
@@ -125,7 +124,6 @@ const VENDOR_ALLOWED_TABS = new Set([
   "vendor-messages",
   "create-product",
   "modify-product",
-  "bulk-product-upload",
   "coupons",
   "module-campaign-offers",
   "module-landing-pages",
@@ -174,6 +172,7 @@ const USER_ALLOWED_TABS = new Set([
   "settings",
   "home",
   "my-orders",
+  "my-addresses",
   "wishlist",
   "vendor-messages",
   "module-bookings",
@@ -188,7 +187,6 @@ const ADMIN_TAB_PERMISSION_MAP = {
   "payment-methods": "manageOrders",
   "create-product": "manageProducts",
   "modify-product": "manageProducts",
-  "bulk-product-upload": "manageProducts",
   "create-category": "manageProducts",
   "modify-category": "manageProducts",
   "module-brands": "manageProducts",
@@ -231,7 +229,7 @@ export const canAccessDashboardTab = ({
   if (role === "admin") {
     if (!ADMIN_ALLOWED_TABS.has(normalizedTab)) return false;
 
-    if (normalizedTab === "module-super-admin") {
+    if (normalizedTab === "module-super-admin" || normalizedTab === "module-admin-users") {
       return isSuperAdminUser(user);
     }
 

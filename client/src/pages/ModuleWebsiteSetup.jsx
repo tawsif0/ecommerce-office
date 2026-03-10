@@ -94,12 +94,12 @@ const DashboardToggle = ({ checked, disabled = false, title, description, onChan
         onChange(!checked);
       }
     }}
-    className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition ${
+    className={`flex w-full items-start gap-3 rounded-[22px] border px-4 py-3 text-left transition ${
       disabled
-        ? "cursor-not-allowed border-gray-200 bg-gray-50 opacity-70"
+        ? "cursor-not-allowed border-black/8 bg-slate-100 opacity-70"
         : checked
           ? "border-black bg-black text-white"
-          : "border-gray-200 bg-white text-black hover:border-gray-300"
+          : "border-black/8 bg-white text-black hover:border-black/20"
     }`}
   >
     <span
@@ -226,8 +226,8 @@ const ModuleWebsiteSetup = () => {
 
   if (!isAdmin) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-        <h2 className="text-xl font-semibold text-black mb-2">Admin Access Required</h2>
+      <div className="app-panel p-8 text-center">
+        <h2 className="mb-2 text-xl font-semibold text-black">Admin Access Required</h2>
         <p className="text-gray-600">Only admin can manage website and system settings.</p>
       </div>
     );
@@ -235,24 +235,25 @@ const ModuleWebsiteSetup = () => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-linear-to-r from-zinc-900 to-black rounded-xl p-6 md:p-8 text-white">
-        <div className="inline-flex items-center justify-center w-12 h-12 bg-white/10 rounded-full mb-4">
+      <div className="app-hero p-6 md:p-8">
+        <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
           <FiSettings className="w-6 h-6" />
         </div>
-        <h1 className="text-2xl md:text-3xl font-bold">Website Setup & Config</h1>
-        <p className="text-zinc-200 mt-2">
+        <p className="app-kicker !text-white/65">Branding and storefront control</p>
+        <h1 className="mt-3 text-2xl font-black md:text-3xl">Website Setup & Config</h1>
+        <p className="mt-2 max-w-2xl text-sm text-zinc-200 md:text-base">
           Control brand details, policies, tracking integrations, courier config, and marketplace mode.
         </p>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="app-panel-soft p-6">
           <p className="text-gray-600">Loading settings...</p>
         </div>
       ) : (
         <form onSubmit={saveSettings} className="space-y-5">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <section className="app-panel p-5 space-y-3">
               <h2 className="text-lg font-semibold text-black flex items-center gap-2">
                 <FiGlobe className="w-5 h-5" /> Website
               </h2>
@@ -269,7 +270,7 @@ const ModuleWebsiteSetup = () => {
                 placeholder="Store tagline"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
               />
-              <div className="rounded-xl border border-gray-200 p-4 space-y-3 bg-gray-50">
+              <div className="app-panel-muted p-4 space-y-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-black">Navbar Logo</p>
@@ -286,7 +287,7 @@ const ModuleWebsiteSetup = () => {
                         normalizeLogoMode(event.target.value),
                       )
                     }
-                    className="w-full md:w-44 px-3 py-2.5 border border-gray-200 rounded-lg bg-white"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 md:w-44"
                   >
                     <option value="image">Image Logo</option>
                     <option value="text">Text Logo</option>
@@ -320,7 +321,7 @@ const ModuleWebsiteSetup = () => {
                         type="button"
                         onClick={() => logoInputRef.current?.click()}
                         disabled={logoUploading}
-                        className="inline-flex h-11 items-center justify-center gap-2 px-4 border border-gray-300 rounded-lg bg-white text-black font-medium disabled:opacity-60"
+                        className="app-btn-secondary h-11 px-4 text-sm font-semibold disabled:opacity-60"
                       >
                         <FiUpload className="w-4 h-4" />
                         {logoUploading ? "Uploading..." : "Upload Logo"}
@@ -332,18 +333,83 @@ const ModuleWebsiteSetup = () => {
                   </div>
                 )}
 
-                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-3">Logo Preview</p>
+                <div className="rounded-[24px] border border-dashed border-black/12 bg-white p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Logo Preview</p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Preview the logo on light, dark, and transparent-style surfaces.
+                      </p>
+                    </div>
+                  </div>
+
                   {logoMode === "text" ? (
-                    <div className="inline-flex min-h-11 items-center rounded-xl border border-black/10 bg-black px-4 text-base font-black tracking-[0.08em] text-white">
-                      {String(settings?.website?.logoText || settings?.website?.storeName || "LOGO").trim() || "LOGO"}
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="app-panel-soft p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Light Surface
+                        </p>
+                        <div className="inline-flex min-h-11 items-center rounded-xl border border-black/10 bg-black px-4 text-base font-black tracking-[0.08em] text-white">
+                          {String(settings?.website?.logoText || settings?.website?.storeName || "LOGO").trim() || "LOGO"}
+                        </div>
+                      </div>
+                      <div className="rounded-[24px] border border-white/10 bg-gray-950 p-4 shadow-sm">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+                          Dark Surface
+                        </p>
+                        <div className="inline-flex min-h-11 items-center rounded-xl border border-white/15 bg-white px-4 text-base font-black tracking-[0.08em] text-black">
+                          {String(settings?.website?.logoText || settings?.website?.storeName || "LOGO").trim() || "LOGO"}
+                        </div>
+                      </div>
                     </div>
                   ) : logoPreviewUrl ? (
-                    <img
-                      src={logoPreviewUrl}
-                      alt={String(settings?.website?.storeName || "Logo")}
-                      className="h-14 w-auto max-w-[220px] rounded-xl border border-gray-200 object-contain bg-white p-2"
-                    />
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="app-panel-soft p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Light Surface
+                        </p>
+                        <div className="flex min-h-[96px] items-center justify-center rounded-[18px] border border-black/8 bg-white px-4 py-3">
+                          <img
+                            src={logoPreviewUrl}
+                            alt={String(settings?.website?.storeName || "Logo")}
+                            className="h-14 w-auto max-w-full object-contain"
+                          />
+                        </div>
+                      </div>
+                      <div className="rounded-[24px] border border-white/10 bg-gray-950 p-4 shadow-sm">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+                          Dark Surface
+                        </p>
+                        <div className="flex min-h-[96px] items-center justify-center rounded-[18px] border border-white/10 bg-gray-950 px-4 py-3">
+                          <img
+                            src={logoPreviewUrl}
+                            alt={String(settings?.website?.storeName || "Logo")}
+                            className="h-14 w-auto max-w-full object-contain"
+                          />
+                        </div>
+                      </div>
+                      <div className="app-panel-soft p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Transparent Surface
+                        </p>
+                        <div
+                          className="flex min-h-[96px] items-center justify-center rounded-[18px] border border-black/8 px-4 py-3"
+                          style={{
+                            backgroundColor: "#f8fafc",
+                            backgroundImage:
+                              "linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)",
+                            backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+                            backgroundSize: "16px 16px",
+                          }}
+                        >
+                          <img
+                            src={logoPreviewUrl}
+                            alt={String(settings?.website?.storeName || "Logo")}
+                            className="h-14 w-auto max-w-full object-contain"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-sm text-gray-500">No logo uploaded yet.</p>
                   )}
@@ -405,7 +471,7 @@ const ModuleWebsiteSetup = () => {
               </div>
             </section>
 
-            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <section className="app-panel p-5 space-y-3">
               <h2 className="text-lg font-semibold text-black">Contact & Social</h2>
 
               <input
@@ -471,7 +537,7 @@ const ModuleWebsiteSetup = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+            <section className="app-panel p-5 space-y-4">
               <h2 className="text-lg font-semibold text-black">Landing & Navigation</h2>
 
               <label className="block text-sm text-gray-700">
@@ -610,7 +676,7 @@ const ModuleWebsiteSetup = () => {
               </label>
             </section>
 
-            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+            <section className="app-panel p-5 space-y-4">
               <h2 className="text-lg font-semibold text-black">Storefront Sections</h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -989,7 +1055,7 @@ const ModuleWebsiteSetup = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <section className="app-panel p-5 space-y-3">
               <h2 className="text-lg font-semibold text-black">Policies</h2>
 
               <label className="block text-sm text-gray-700">
@@ -1043,7 +1109,7 @@ const ModuleWebsiteSetup = () => {
               </label>
             </section>
 
-            <section className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <section className="app-panel p-5 space-y-3">
               <h2 className="text-lg font-semibold text-black">Integrations & Setup</h2>
 
               <input
@@ -1264,11 +1330,11 @@ const ModuleWebsiteSetup = () => {
             </section>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="app-panel flex justify-end p-4">
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex h-11 items-center gap-2 px-5 bg-black text-white rounded-lg font-medium disabled:opacity-60"
+              className="app-btn-primary h-11 px-5 disabled:opacity-60"
             >
               <FiSave className="w-4 h-4" />
               {saving ? "Saving..." : "Save Settings"}

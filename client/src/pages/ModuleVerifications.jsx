@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiRefreshCw } from "react-icons/fi";
@@ -54,7 +54,7 @@ const ModuleVerifications = () => {
       .filter((item) => item.url);
   }, [form.documentsText]);
 
-  const fetchMine = async () => {
+  const fetchMine = useCallback(async () => {
     const response = await axios.get(`${baseUrl}/verifications/me`, {
       headers: getAuthHeaders(),
     });
@@ -79,17 +79,17 @@ const ModuleVerifications = () => {
         website: verification.socialProfiles?.website || "",
       });
     }
-  };
+  }, []);
 
-  const fetchAdmin = async () => {
+  const fetchAdmin = useCallback(async () => {
     const response = await axios.get(`${baseUrl}/verifications/admin`, {
       headers: getAuthHeaders(),
     });
 
     setAdminList(response.data?.verifications || []);
-  };
+  }, []);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       setLoading(true);
       if (isAdmin) {
@@ -102,12 +102,12 @@ const ModuleVerifications = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canSubmit, fetchAdmin, fetchMine, isAdmin]);
 
   useEffect(() => {
     if (!user) return;
     refresh();
-  }, [user]);
+  }, [user, refresh]);
 
   const handleInput = (event) => {
     const { name, value } = event.target;

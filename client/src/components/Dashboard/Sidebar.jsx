@@ -42,17 +42,34 @@ import {
 
 const ROLE_LABELS = {
   admin: "Admin Dashboard",
-  vendor: "Vendor Dashboard",
-  staff: "Staff Dashboard",
-  user: "My Dashboard",
+  vendor: "Vendor Studio",
+  staff: "Operations Desk",
+  user: "Customer Dashboard",
+};
+
+const CONSOLE_TITLES = {
+  admin: "Admin Console",
+  vendor: "Vendor Console",
+  staff: "Staff Console",
+  user: "Customer Console",
 };
 
 const AVATAR_ROLE_CLASSES = {
-  admin: "bg-purple-600 text-white",
+  admin: "bg-black text-white",
   vendor: "bg-green-600 text-white",
   staff: "bg-blue-600 text-white",
-  user: "bg-black text-white",
+  user: "bg-slate-900 text-white",
 };
+
+const getDashboardLabel = (role, isSuperAdmin) =>
+  role === "admin" && isSuperAdmin
+    ? "Super Admin Dashboard"
+    : ROLE_LABELS[role] || ROLE_LABELS.user;
+
+const getConsoleTitle = (role, isSuperAdmin) =>
+  role === "admin" && isSuperAdmin
+    ? "Super Admin Console"
+    : CONSOLE_TITLES[role] || CONSOLE_TITLES.user;
 
 const MODULE_CHILDREN = [
   {
@@ -147,8 +164,8 @@ const MODULE_CHILDREN = [
   },
 ];
 
-const getRoleSections = (role, marketplaceMode = "multi") => {
-  const dashboardLabel = ROLE_LABELS[role] || ROLE_LABELS.user;
+const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) => {
+  const dashboardLabel = getDashboardLabel(role, isSuperAdmin);
   const isSingleMode = normalizeMarketplaceMode(marketplaceMode) === "single";
 
   if (role === "admin") {
@@ -164,7 +181,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Sales & Orders",
+        title: "Commerce",
         items: [
           {
             name: "Order List",
@@ -199,7 +216,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Catalog",
+        title: "Catalog & Inventory",
         items: [
           {
             name: "Products",
@@ -215,11 +232,6 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
                 name: "Modify Product",
                 icon: FiEdit,
                 tab: "modify-product",
-              },
-              {
-                name: "Bulk Upload",
-                icon: FiPlus,
-                tab: "bulk-product-upload",
               },
             ],
           },
@@ -286,7 +298,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
           ]
         : []),
       {
-        title: "Marketing",
+        title: "Growth & Marketing",
         items: [
           {
             name: "Ecommerce Landing",
@@ -310,7 +322,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Analytics",
+        title: "Reports & Insights",
         items: [
           ...(!isSingleMode
             ? [
@@ -339,7 +351,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Finance",
+        title: "Operations",
         items: [
           {
             name: "Suppliers",
@@ -359,7 +371,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Website",
+        title: "Brand & Storefront",
         items: [
           {
             name: "Slider",
@@ -427,7 +439,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Sales & Orders",
+        title: "Commerce",
         items: [
           {
             name: "Orders",
@@ -452,7 +464,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Catalog",
+        title: "Catalog & Inventory",
         items: [
           {
             name: "Products",
@@ -469,11 +481,6 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
                 icon: FiEdit,
                 tab: "modify-product",
               },
-              {
-                name: "Bulk Upload",
-                icon: FiPlus,
-                tab: "bulk-product-upload",
-              },
             ],
           },
           {
@@ -489,7 +496,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Marketing",
+        title: "Growth & Marketing",
         items: [
           {
             name: "Ecommerce Landing",
@@ -509,7 +516,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Reports & Finance",
+        title: "Operations & Reports",
         items: [
           {
             name: "Sales Report",
@@ -534,7 +541,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Store Settings",
+        title: "Storefront",
         items: [
           {
             name: "Store Profile",
@@ -570,7 +577,7 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
         ],
       },
       {
-        title: "Core Workspace",
+        title: "Service Desk",
         items: [
           {
             name: "Support Tickets",
@@ -625,12 +632,17 @@ const getRoleSections = (role, marketplaceMode = "multi") => {
       ],
     },
     {
-      title: "Shopping",
+    title: "Orders & Lists",
       items: [
         {
           name: "My Orders",
           icon: FiPackage,
           tab: "my-orders",
+        },
+        {
+          name: "Saved Addresses",
+          icon: FiMapPin,
+          tab: "my-addresses",
         },
         {
           name: "Wishlist",
@@ -690,11 +702,12 @@ const Sidebar = ({
 
   const role = resolveUserRole(user);
   const isSuperAdmin = isSuperAdminUser(user);
-  const roleSections = useMemo(() => getRoleSections(role, marketplaceMode), [role, marketplaceMode]);
-  const dashboardLabel =
-    role === "admin" && isSuperAdmin
-      ? "Super Admin Dashboard"
-      : ROLE_LABELS[role] || ROLE_LABELS.user;
+  const roleSections = useMemo(
+    () => getRoleSections(role, marketplaceMode, isSuperAdmin),
+    [role, marketplaceMode, isSuperAdmin],
+  );
+  const dashboardLabel = getDashboardLabel(role, isSuperAdmin);
+  const consoleTitle = getConsoleTitle(role, isSuperAdmin);
 
   const accessibleRoleSections = useMemo(() => {
     const filterItem = (item) => {
@@ -766,7 +779,7 @@ const Sidebar = ({
     () => [
       ...accessibleRoleSections,
       {
-        title: "System",
+        title: "Account",
         items: [
           {
             name: "Settings",
@@ -852,14 +865,14 @@ const Sidebar = ({
     const activeChild = isActiveSubmenu(item);
     const Icon = item.icon;
 
-    const itemBaseClass = `group flex w-full items-center rounded-xl transition-colors duration-200 ${
+    const itemBaseClass = `group flex w-full items-center rounded-2xl transition-colors duration-200 ${
       showLabels(isMobileView)
-        ? "justify-start gap-3 px-3.5 py-2.5"
+        ? "justify-start gap-3 px-3.5 py-3"
         : "mx-auto h-11 w-11 justify-center"
     } ${
       isActive || activeChild
-        ? "bg-black text-white shadow-sm"
-        : "text-gray-700 hover:bg-gray-100 hover:text-black"
+        ? "bg-black text-white shadow-[0_12px_22px_rgba(15,23,42,0.16)]"
+        : "text-gray-700 hover:bg-white hover:text-black"
     }`;
 
     if (hasChildren) {
@@ -897,7 +910,7 @@ const Sidebar = ({
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.16 }}
-              className="ml-7 space-y-1 border-l border-gray-200 pl-3"
+              className="ml-7 space-y-1 border-l border-black/8 pl-3"
             >
               {item.children.map((child) => {
                 const childActive = activeTab === child.tab;
@@ -952,9 +965,9 @@ const Sidebar = ({
     if (!section?.items?.length) return null;
 
     return (
-      <div key={section.title} className="mb-5">
+      <div key={section.title} className="mb-7">
         {showLabels(isMobileView) && (
-          <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+          <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">
             {section.title}
           </p>
         )}
@@ -974,11 +987,11 @@ const Sidebar = ({
         animate={{ x: isMobileOpen ? 0 : -320 }}
         exit={{ x: -320 }}
         transition={{ type: "spring", damping: 28, stiffness: 280 }}
-        className="fixed inset-y-0 left-0 z-40 w-72 border-r border-gray-300 bg-white text-black shadow-xl"
+        className="fixed inset-y-0 left-0 z-[60] flex h-[100dvh] max-h-[100dvh] w-72 flex-col overflow-hidden border-r border-black/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.98)_100%)] text-black shadow-[0_20px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl"
       >
-        <div className="flex h-16 items-center justify-between border-b border-gray-300 px-4">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-black/8 px-4">
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold">Marketplace Console</h1>
+            <h1 className="truncate text-base font-semibold">{consoleTitle}</h1>
             <p className="truncate text-xs text-gray-500">{dashboardLabel}</p>
           </div>
           <button
@@ -990,12 +1003,12 @@ const Sidebar = ({
           </button>
         </div>
 
-        <nav className="h-[calc(100%-8rem)] overflow-y-auto px-3 py-4">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
           {navSections.map((section) => renderSection(section, true))}
         </nav>
 
-        <div className="h-16 border-t border-gray-300 px-4">
-          <div className="flex h-full items-center gap-3">
+        <div className="shrink-0 border-t border-black/8 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          <div className="flex items-center gap-3">
             <div
               className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${avatarClass}`}
             >
@@ -1022,16 +1035,16 @@ const Sidebar = ({
   return (
     <motion.aside
       initial={false}
-      animate={{ width: sidebarOpen ? 282 : 86 }}
+      animate={{ width: sidebarOpen ? 296 : 88 }}
       transition={{ type: "spring", damping: 26, stiffness: 280 }}
-      className="relative flex h-full flex-col overflow-hidden border-r border-gray-300 bg-white text-black"
+      className="relative flex h-full flex-col overflow-hidden border-r border-black/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.96)_100%)] text-black backdrop-blur-xl"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="flex h-16 items-center justify-between border-b border-gray-300 px-4">
+      <div className="flex h-16 items-center justify-between border-b border-black/8 px-4">
         {sidebarOpen ? (
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold">Marketplace Console</h1>
+            <h1 className="truncate text-base font-semibold">{consoleTitle}</h1>
             <p className="truncate text-xs text-gray-500">{dashboardLabel}</p>
           </div>
         ) : (
@@ -1058,11 +1071,11 @@ const Sidebar = ({
         </motion.button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 overflow-y-auto px-3 py-5">
         {navSections.map((section) => renderSection(section))}
       </nav>
 
-      <div className="border-t border-gray-300 px-4 py-3">
+      <div className="border-t border-black/8 px-4 py-3">
         <div className="flex items-center gap-3">
           <div
             className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${avatarClass}`}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiRefreshCw } from "react-icons/fi";
@@ -57,7 +57,7 @@ const ModuleAds = () => {
   const isAdmin = user?.userType === "admin";
   const isVendorSide = user?.userType === "vendor" || user?.userType === "staff";
 
-  const fetchAds = async () => {
+  const fetchAds = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -69,13 +69,13 @@ const ModuleAds = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!user) return;
     if (!isAdmin && !isVendorSide) return;
     fetchAds();
-  }, [user, isAdmin, isVendorSide]);
+  }, [user, isAdmin, isVendorSide, fetchAds]);
 
   const handleForm = (event) => {
     const { name, value } = event.target;

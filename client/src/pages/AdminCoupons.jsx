@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiEdit, FiRefreshCw, FiTag, FiTrash2 } from "react-icons/fi";
@@ -48,7 +48,7 @@ const AdminCoupons = () => {
   const isAdmin = user?.userType === "admin";
   const isVendor = user?.userType === "vendor";
 
-  const fetchCoupons = async () => {
+  const fetchCoupons = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/coupons`, {
@@ -60,9 +60,9 @@ const AdminCoupons = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchVendors = async () => {
+  const fetchVendors = useCallback(async () => {
     if (!isAdmin) return;
     try {
       const response = await axios.get(`${baseUrl}/vendors/admin/all`, {
@@ -72,9 +72,9 @@ const AdminCoupons = () => {
     } catch {
       setVendors([]);
     }
-  };
+  }, [isAdmin]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       const response = await axios.get(`${baseUrl}/products`, {
         headers: getAuthHeaders(),
@@ -83,7 +83,7 @@ const AdminCoupons = () => {
     } catch {
       setProducts([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isAdmin || isVendor) {
@@ -91,7 +91,7 @@ const AdminCoupons = () => {
       fetchVendors();
       fetchProducts();
     }
-  }, [isAdmin, isVendor]);
+  }, [isAdmin, isVendor, fetchCoupons, fetchVendors, fetchProducts]);
 
   const resetForm = () => {
     setForm(initialFormState);

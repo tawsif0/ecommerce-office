@@ -1,13 +1,14 @@
 /* eslint-disable no-unused-vars */
 // components/Navbar.jsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useSelector } from "react-redux";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useCart } from "../../context/CartContext";
 import usePublicSettings from "../../hooks/usePublicSettings";
-import { FiPackage } from "react-icons/fi";
+import { FiPackage, FiShuffle } from "react-icons/fi";
 import { toPublicAssetUrl } from "../../utils/publicSettings";
 
 const baseUrl = import.meta.env.VITE_API_URL;
@@ -121,6 +122,7 @@ const Navbar = () => {
   const [userRole, setUserRole] = useState("user");
   const { settings: publicSettings } = usePublicSettings();
   const { cartCount } = useCart();
+  const compareCount = useSelector((state) => state.compare.items?.length || 0);
   const categoryIdSet = useMemo(
     () => new Set(categoryProductIds),
     [categoryProductIds],
@@ -155,6 +157,10 @@ const Navbar = () => {
         ? ""
         : toPublicAssetUrl(website?.logoUrl || ""),
     [brandLogoMode, website?.logoUrl],
+  );
+  const hasBrandLogoImage = useMemo(
+    () => brandLogoMode === "image" && Boolean(brandLogoUrl),
+    [brandLogoMode, brandLogoUrl],
   );
   const themeColor = useMemo(
     () => normalizeThemeColor(website?.themeColor),
@@ -636,6 +642,12 @@ const Navbar = () => {
     setIsMobileMenuOpen(false);
   };
 
+  const handleCompareClick = () => {
+    navigate("/compare");
+    setIsMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const landingQuickLinks = useMemo(() => {
     if (userRole === "admin") {
       return [
@@ -722,10 +734,10 @@ const Navbar = () => {
     <header className="font-sans">
       {/* Top bar - Hidden on mobile */}
       <div
-        className="hidden lg:block py-1.5 px-4"
+        className="hidden lg:block py-1.5"
         style={{ backgroundColor: themeColor, color: `${themeTextColor}CC` }}
       >
-        <div className="max-w-7xl mx-auto flex justify-end items-center text-xs">
+        <div className="site-shell flex justify-end items-center text-xs">
           <div className="flex items-center space-x-6">
             {/* Phone - Clickable */}
             <a
@@ -770,12 +782,12 @@ const Navbar = () => {
 
       {/* Main Navigation */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="site-shell">
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <div className="flex items-center lg:hidden">
               <Link to="/" className="flex items-center gap-2 text-2xl font-bold text-black">
-                {brandLogoMode === "text" ? (
+                {!hasBrandLogoImage ? (
                   <span
                     className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-black tracking-[0.08em]"
                     style={{
@@ -787,14 +799,12 @@ const Navbar = () => {
                   </span>
                 ) : (
                   <>
-                    {brandLogoUrl ? (
-                      <img
-                        src={brandLogoUrl}
-                        alt={brandName}
-                        className="h-8 w-8 rounded-lg object-cover border border-gray-200"
-                      />
-                    ) : null}
-                    <span>{brandName}</span>
+                    <img
+                      src={brandLogoUrl}
+                      alt={brandName}
+                      className="block h-8 w-auto max-w-[180px] object-contain"
+                    />
+                    <span className="sr-only">{brandName}</span>
                   </>
                 )}
               </Link>
@@ -1241,6 +1251,18 @@ const Navbar = () => {
 
               {/* Cart */}
               <button
+                onClick={handleCompareClick}
+                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                aria-label="Open compare products"
+              >
+                <FiShuffle className="w-5 h-5 text-gray-800" />
+                {compareCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
+                    {compareCount > 99 ? "99+" : compareCount}
+                  </span>
+                )}
+              </button>
+              <button
                 onClick={handleCartClick}
                 className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
               >
@@ -1288,6 +1310,18 @@ const Navbar = () => {
               </button>
 
               {/* Mobile Cart */}
+              <button
+                onClick={handleCompareClick}
+                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                aria-label="Open compare products"
+              >
+                <FiShuffle className="w-5 h-5 text-gray-800" />
+                {compareCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
+                    {compareCount > 99 ? "99+" : compareCount}
+                  </span>
+                )}
+              </button>
               <button
                 onClick={handleCartClick}
                 className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
@@ -1788,7 +1822,7 @@ const Navbar = () => {
       </nav>
 
       <div className="hidden lg:block border-b border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="site-shell">
           <div className="flex items-center gap-2 overflow-x-auto py-3">
             {marketplaceNavLinks.map((entry) => (
               <button
@@ -1809,26 +1843,23 @@ const Navbar = () => {
         className="hidden lg:block"
         style={{ backgroundColor: themeColor, color: themeTextColor }}
       >
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between px-8">
-            {/* Logo */}
+        <div className="site-shell">
+          <div className="flex items-center justify-between">
             <div className="flex items-center">
               <Link to="/" className="shrink-0 flex items-center py-4">
                 <div className="flex items-center gap-2">
-                  {brandLogoMode === "text" ? (
+                  {!hasBrandLogoImage ? (
                     <div className="text-2xl font-black tracking-[0.08em]">
                       {brandLogoText}
                     </div>
                   ) : (
                     <>
-                      {brandLogoUrl ? (
-                        <img
-                          src={brandLogoUrl}
-                          alt={brandName}
-                          className="h-9 w-9 rounded-lg object-cover border border-white/30"
-                        />
-                      ) : null}
-                      <div className="text-2xl font-bold">{brandName}</div>
+                      <img
+                        src={brandLogoUrl}
+                        alt={brandName}
+                        className="block h-10 w-auto max-w-[220px] object-contain"
+                      />
+                      <span className="sr-only">{brandName}</span>
                     </>
                   )}
                 </div>

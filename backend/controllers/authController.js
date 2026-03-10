@@ -111,6 +111,81 @@ const normalizeStringList = (value) => {
   return Array.from(uniqueValues);
 };
 
+const MAX_ADDRESS_BOOK_ITEMS = 10;
+
+const normalizeAddressBookEntry = (value = {}) => {
+  const payload =
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const recipientName = String(payload.recipientName || "").trim();
+  const phone = User.normalizePhone(String(payload.phone || "").trim());
+  const alternativePhoneRaw = String(payload.alternativePhone || "").trim();
+  const alternativePhone = alternativePhoneRaw
+    ? User.normalizePhone(alternativePhoneRaw)
+    : "";
+  const address = String(payload.address || "").trim();
+  const city = String(payload.city || "").trim();
+  const subCity = String(payload.subCity || "").trim();
+  const district = String(payload.district || "").trim();
+  const postalCode = String(payload.postalCode || "").trim();
+  const country = String(payload.country || "Bangladesh").trim() || "Bangladesh";
+  const label = String(payload.label || "Home").trim() || "Home";
+  const deliveryNotes = String(payload.deliveryNotes || "").trim();
+
+  if (!recipientName) {
+    throw new Error("Recipient name is required");
+  }
+
+  if (!User.validateBangladeshiPhone(phone)) {
+    throw new Error("Valid Bangladesh phone number is required");
+  }
+
+  if (alternativePhone && !User.validateBangladeshiPhone(alternativePhone)) {
+    throw new Error("Alternative phone must be a valid Bangladesh phone number");
+  }
+
+  if (!address || !city || !district || !postalCode) {
+    throw new Error("Address, city, district, and postal code are required");
+  }
+
+  return {
+    label,
+    recipientName,
+    phone,
+    alternativePhone,
+    address,
+    city,
+    subCity,
+    district,
+    postalCode,
+    country,
+    deliveryNotes,
+    isDefault: Boolean(payload.isDefault),
+  };
+};
+
+const syncDefaultAddressBook = (entries = [], preferredId = "") => {
+  const addressBook = Array.isArray(entries) ? entries : [];
+  if (addressBook.length === 0) return [];
+
+  let defaultTargetId = String(preferredId || "").trim();
+
+  if (!defaultTargetId) {
+    const existingDefault = addressBook.find((entry) => entry?.isDefault);
+    defaultTargetId = String(existingDefault?._id || "");
+  }
+
+  if (!defaultTargetId) {
+    defaultTargetId = String(addressBook[0]?._id || "");
+  }
+
+  addressBook.forEach((entry) => {
+    if (!entry) return;
+    entry.isDefault = String(entry._id || "") === defaultTargetId;
+  });
+
+  return addressBook;
+};
+
 const DEFAULT_NAV_LINK_PATHS = {
   "daily deals": "/shop?collection=deals",
   "top categories": "/#top-categories",
@@ -1163,6 +1238,157 @@ exports.updateUserProfile = async (req, res) => {
   } catch (error) {
     console.error("Update profile error:", error);
     return res.status(400).json({ error: error.message || "Failed to update profile" });
+  }
+};
+
+exports.getUserAddresses = async (req, res) => {
+  const safeUser = toSafeUser(req.user);
+  return res.json({
+    success: true,
+    addressBook: Array.isArray(safeUser?.addressBook) ? safeUser.addressBook : [],
+    user: safeUser,
+  });
+};
+
+exports.createUserAddress = async (req, res) => {
+  try {
+    const user = req.user;
+    user.addressBook = Array.isArray(user.addressBook) ? user.addressBook : [];
+
+    if (user.addressBook.length >= MAX_ADDRESS_BOOK_ITEMS) {
+      return res.status(400).json({
+        error: `You can save up to ${MAX_ADDRESS_BOOK_ITEMS} addresses`,
+      });
+    }
+
+    const nextAddress = normalizeAddressBookEntry(req.body);
+    user.addressBook.push(nextAddress);
+
+    const createdAddress = user.addressBook[user.addressBook.length - 1];
+    const preferredId =
+      nextAddress.isDefault || user.addressBook.length === 1
+        ? String(createdAddress?._id || "")
+        : "";
+
+    syncDefaultAddressBook(user.addressBook, preferredId);
+    await user.save();
+
+    const safeUser = toSafeUser(user);
+    return res.status(201).json({
+      success: true,
+      message: "Address saved",
+      address: safeUser?.addressBook?.find(
+        (entry) => String(entry?._id || "") === String(createdAddress?._id || ""),
+      ),
+      addressBook: safeUser?.addressBook || [],
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("Create user address error:", error);
+    return res.status(400).json({
+      error: error.message || "Failed to save address",
+    });
+  }
+};
+
+exports.updateUserAddress = async (req, res) => {
+  try {
+    const user = req.user;
+    const addressId = String(req.params.addressId || "").trim();
+    user.addressBook = Array.isArray(user.addressBook) ? user.addressBook : [];
+
+    const address = user.addressBook.id(addressId);
+    if (!address) {
+      return res.status(404).json({ error: "Address not found" });
+    }
+
+    const nextAddress = normalizeAddressBookEntry({
+      ...address.toObject(),
+      ...req.body,
+    });
+
+    Object.assign(address, nextAddress);
+    syncDefaultAddressBook(
+      user.addressBook,
+      nextAddress.isDefault ? addressId : "",
+    );
+
+    await user.save();
+
+    const safeUser = toSafeUser(user);
+    return res.json({
+      success: true,
+      message: "Address updated",
+      address: safeUser?.addressBook?.find(
+        (entry) => String(entry?._id || "") === addressId,
+      ),
+      addressBook: safeUser?.addressBook || [],
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("Update user address error:", error);
+    return res.status(400).json({
+      error: error.message || "Failed to update address",
+    });
+  }
+};
+
+exports.setDefaultUserAddress = async (req, res) => {
+  try {
+    const user = req.user;
+    const addressId = String(req.params.addressId || "").trim();
+    user.addressBook = Array.isArray(user.addressBook) ? user.addressBook : [];
+
+    const address = user.addressBook.id(addressId);
+    if (!address) {
+      return res.status(404).json({ error: "Address not found" });
+    }
+
+    syncDefaultAddressBook(user.addressBook, addressId);
+    await user.save();
+
+    const safeUser = toSafeUser(user);
+    return res.json({
+      success: true,
+      message: "Default address updated",
+      addressBook: safeUser?.addressBook || [],
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("Set default user address error:", error);
+    return res.status(400).json({
+      error: error.message || "Failed to update default address",
+    });
+  }
+};
+
+exports.deleteUserAddress = async (req, res) => {
+  try {
+    const user = req.user;
+    const addressId = String(req.params.addressId || "").trim();
+    user.addressBook = Array.isArray(user.addressBook) ? user.addressBook : [];
+
+    const target = user.addressBook.id(addressId);
+    if (!target) {
+      return res.status(404).json({ error: "Address not found" });
+    }
+
+    target.deleteOne();
+    syncDefaultAddressBook(user.addressBook);
+    await user.save();
+
+    const safeUser = toSafeUser(user);
+    return res.json({
+      success: true,
+      message: "Address deleted",
+      addressBook: safeUser?.addressBook || [],
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("Delete user address error:", error);
+    return res.status(400).json({
+      error: error.message || "Failed to delete address",
+    });
   }
 };
 

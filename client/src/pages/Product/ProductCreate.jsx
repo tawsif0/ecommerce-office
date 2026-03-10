@@ -515,7 +515,7 @@ const ProductCreate = () => {
       transition={{ duration: 0.5 }}
       className="w-full"
     >
-      <div className="w-full mx-auto p-2 md:p-4">
+      <div className="w-full">
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
             {/* Left Column - Main Info */}

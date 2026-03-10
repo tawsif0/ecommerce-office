@@ -22,6 +22,15 @@ router.get("/public/settings", responseCache(60000), authController.getPublicSet
 router.get("/profile", auth, authController.getUserProfile);
 router.put("/profile", auth, authController.updateUserProfile);
 router.put("/change-password", auth, authController.changePassword);
+router.get("/addresses", auth, authController.getUserAddresses);
+router.post("/addresses", auth, authController.createUserAddress);
+router.put("/addresses/:addressId", auth, authController.updateUserAddress);
+router.patch(
+  "/addresses/:addressId/default",
+  auth,
+  authController.setDefaultUserAddress
+);
+router.delete("/addresses/:addressId", auth, authController.deleteUserAddress);
 router.get("/admin/settings", auth, authController.getSettings);
 
 // Admin only routes

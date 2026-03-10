@@ -120,15 +120,6 @@ function CreateCategory() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="bg-white rounded-xl shadow-lg p-4 md:p-8 border border-gray-200"
         >
-          <div className="mb-6 md:mb-8 text-center">
-            <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-2">
-              Create New Category
-            </h2>
-            <p className="text-gray-600 text-sm md:text-base">
-              Enter category details to create a new category
-            </p>
-          </div>
-
           <form onSubmit={handleSubmit} noValidate>
             {/* Category Type Dropdown */}
             <div className="mb-4 md:mb-6">

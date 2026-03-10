@@ -300,16 +300,6 @@ const UserOrders = () => {
 
   return (
     <div className="p-2 md:p-2">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-black mb-2">
-          My Orders
-        </h1>
-        <p className="text-gray-600">
-          View and track all your orders in one place.
-        </p>
-      </div>
-
       {/* Orders Grid */}
       {loading ? (
         <div className="flex justify-center items-center h-64">

@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useDispatch, useSelector } from "react-redux";
 import {
   FaShoppingCart,
   FaPlus,
@@ -18,16 +19,21 @@ import {
   FaTruck,
   FaUndo,
 } from "react-icons/fa";
+import { FiShuffle } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../hooks/useAuth";
+import RecentlyViewedShelf from "../../components/RecentlyViewedShelf";
+import { toggleCompareItem } from "../../store/compareSlice";
+import { addRecentlyViewedItem } from "../../store/recentlyViewedSlice";
 import {
   buildDataLayerItem,
   getDataLayerCurrency,
   pushDataLayerEvent,
 } from "../../utils/marketingDataLayer";
+import { createProductSnapshot } from "../../utils/productSnapshot";
 import {
   getPublicStockBadgeText,
   isPublicStockVisible,
@@ -147,12 +153,17 @@ const ProductDetails = () => {
   const [reviewDeleting, setReviewDeleting] = useState(false);
   const { addToCart, isLoading: cartLoading } = useCart();
   const { user } = useAuth();
+  const dispatch = useDispatch();
+  const compareItems = useSelector((state) => state.compare.items || []);
   const navigate = useNavigate();
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareTitle = product?.title || "Product";
   const shareText = product?.description
     ? String(product.description).slice(0, 140)
     : "Check this product";
+  const isCompared = compareItems.some(
+    (item) => String(item?._id || "") === String(product?._id || ""),
+  );
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("token");
@@ -267,6 +278,13 @@ const ProductDetails = () => {
   }, [id]);
 
   useEffect(() => {
+    if (!product?._id) return;
+    const snapshot = createProductSnapshot(product);
+    if (!snapshot) return;
+    dispatch(addRecentlyViewedItem(snapshot));
+  }, [dispatch, product]);
+
+  useEffect(() => {
     if (!id || !isLoggedIn) {
       setIsWishlisted(false);
       return;
@@ -310,7 +328,17 @@ const ProductDetails = () => {
         ],
       },
     });
-  }, [product?._id]);
+  }, [
+    product?._id,
+    product?.brand,
+    product?.category,
+    product?.category?.name,
+    product?.price,
+    product?.productType,
+    product?.salePrice,
+    product?.title,
+    product?.vendor?.storeName,
+  ]);
 
   const marketplaceType = String(product?.marketplaceType || "simple");
   const priceType = String(product?.priceType || "single");
@@ -522,6 +550,17 @@ const ProductDetails = () => {
     } finally {
       setWishlistLoading(false);
     }
+  };
+
+  const handleToggleCompare = () => {
+    if (!product?._id) return;
+    const snapshot = createProductSnapshot(product);
+    if (!snapshot) return;
+    const exists = compareItems.some(
+      (item) => String(item?._id || "") === String(snapshot._id),
+    );
+    dispatch(toggleCompareItem(snapshot));
+    toast.success(exists ? "Removed from compare" : "Added to compare");
   };
 
   const handleShare = async () => {
@@ -1047,6 +1086,18 @@ const ProductDetails = () => {
                     : isWishlisted
                       ? "Wishlisted"
                       : "Add to Wishlist"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleCompare}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                    isCompared
+                      ? "border-black bg-black text-white"
+                      : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <FiShuffle className="w-4 h-4" />
+                  {isCompared ? "Compared" : "Add to Compare"}
                 </button>
 
                 <button
@@ -1674,6 +1725,13 @@ const ProductDetails = () => {
             </div>
           </div>
         </motion.div>
+        <div className="mt-8">
+          <RecentlyViewedShelf
+            excludeProductId={product?._id}
+            title="Continue exploring"
+            subtitle="Recently viewed products stay ready here so shoppers can return without searching again."
+          />
+        </div>
       </div>
     </div>
   );

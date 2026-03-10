@@ -466,31 +466,19 @@ function ModifyBanner() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="w-full"
-      >
-        <div className="w-full mx-auto p-2 md:p-4">
-          {/* Header */}
-          <div className="mb-6 md:mb-8">
-            <div className="flex items-center">
-              <button
-                onClick={cancelForm}
-                className="mr-3 md:mr-4 p-2 rounded-full hover:bg-gray-200 transition-colors"
-              >
-                <FiArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-xl md:text-3xl font-bold text-gray-900">
-                  {editingId ? "Edit Banner" : "Create New Banner"}
-                </h1>
-                <p className="text-gray-600 mt-1 md:mt-2 text-sm md:text-base">
-                  {editingId
-                    ? "Edit the banner details"
-                    : "Add a new banner to your store."}
-                </p>
-              </div>
-            </div>
-          </div>
+      transition={{ duration: 0.5 }}
+      className="w-full"
+    >
+        <div className="w-full">
+        <div className="mb-4">
+          <button
+            onClick={cancelForm}
+            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <FiArrowLeft className="h-4 w-4" />
+            Back to banners
+          </button>
+        </div>
 
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
@@ -690,17 +678,8 @@ function ModifyBanner() {
       transition={{ duration: 0.5 }}
       className="w-full"
     >
-      <div className="w-full mx-auto p-2 md:p-4">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 md:mb-8 gap-4">
-          <div>
-            <h1 className="text-xl md:text-3xl font-bold text-gray-900">
-              Banner Management
-            </h1>
-            <p className="text-gray-600 mt-1 md:mt-2 text-sm md:text-base">
-              Manage your store banners
-            </p>
-          </div>
+      <div className="w-full">
+        <div className="flex items-center justify-end mb-4 gap-2">
           <div className="flex items-center gap-2">
             <button
               onClick={handleRefresh}
@@ -729,15 +708,7 @@ function ModifyBanner() {
           className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
         >
           <div className="py-1 border-b border-gray-100 mb-4 md:mb-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg md:text-2xl font-bold text-gray-900">
-                  Banner List
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  View and manage your banners
-                </p>
-              </div>
+            <div className="flex items-center justify-end gap-2">
               <div className="flex items-center space-x-2">
                 <span className="inline-flex items-center px-2 md:px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                   {banners.length} banners

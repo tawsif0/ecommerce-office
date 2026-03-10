@@ -8,6 +8,7 @@ import {
   RoundedBox,
 } from "@react-three/drei";
 import { FiTruck, FiShield, FiRefreshCw, FiPackage } from "react-icons/fi";
+import usePublicSettings from "../../hooks/usePublicSettings";
 
 const Wheel = ({ position }) => (
   <group position={position} rotation={[Math.PI / 2, 0, 0]}>
@@ -405,6 +406,9 @@ const DeliveryScene = () => {
 };
 
 const AboutUs = () => {
+  const { settings } = usePublicSettings();
+  const storeName = String(settings?.website?.storeName || "E-Commerce").trim() || "E-Commerce";
+  const tagline = String(settings?.website?.tagline || "").trim();
   const features = [
     {
       icon: <FiTruck className="text-2xl" />,
@@ -439,45 +443,79 @@ const AboutUs = () => {
     },
   ];
 
+  const commerceStats = [
+    { label: "Marketplace ready", value: "Multi-flow" },
+    { label: "Checkout support", value: "Guest + User" },
+    { label: "Bangladesh focus", value: "Local ops" },
+  ];
+
   return (
-    <section className="min-h-screen bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-20">
-          <div>
-            <h2 className="text-3xl md:text-4xl font-bold text-black mb-6">
-              Our Story
-            </h2>
+    <section className="min-h-screen bg-[radial-gradient(circle_at_top,#ffffff_0%,#f6f8fb_42%,#edf2f7_100%)] py-14 md:py-18">
+      <div className="site-shell space-y-8">
+        <div className="site-card overflow-hidden p-6 md:p-8">
+          <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             <div className="space-y-6">
-              <p className="text-gray-700 text-lg leading-relaxed">
-                What started as a passion project between friends has grown into
-                one of the most trusted online shopping destinations. We noticed
-                a gap in the market for quality products with exceptional
-                customer service, and we decided to fill it.
+              <div>
+                <p className="site-kicker">About the marketplace</p>
+                <h1 className="site-title mt-3">
+                  {storeName} is built to feel like a modern ecommerce operation, not a basic catalog.
+                </h1>
+                <p className="site-copy mt-4 max-w-3xl text-base">
+                  {tagline ||
+                    `${storeName} combines marketplace discovery, reliable checkout, seller-ready operations, and Bangladesh-focused commerce flows in one connected system.`}
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {commerceStats.map((item) => (
+                  <div key={item.label} className="site-metric text-left">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                      {item.label}
+                    </p>
+                    <p className="mt-2 text-lg font-black text-black">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="site-card-muted p-5">
+                  <p className="site-kicker">Our story</p>
+                  <p className="site-copy mt-3 text-sm">
+                    We designed this platform around the gap between ordinary online shops and real operational ecommerce. The focus is not only selling products, but also managing inventory, offers, vendors, support, and storefront control from one clean system.
+                  </p>
+                </div>
+                <div className="site-card-muted p-5">
+                  <p className="site-kicker">Our promise</p>
+                  <p className="site-copy mt-3 text-sm">
+                    Buyers get a cleaner shopping experience, sellers get structured tools, and operators get one control layer for stock, pricing, content, coupons, orders, and branded storefront updates.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="site-card-dark overflow-hidden p-4 md:p-5">
+              <p className="site-kicker !text-white/58">Delivery and operations</p>
+              <h2 className="mt-3 text-2xl font-black text-white md:text-3xl">
+                Built for fast fulfilment and marketplace-scale movement
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/72">
+                The storefront, checkout, order flow, and operations dashboard are aligned so promotions, stock, and customer orders stay visible across the system.
               </p>
-              <p className="text-gray-700 text-lg leading-relaxed">
-                Today, we work with over 150 premium brands to bring you
-                carefully curated collections across fashion, electronics, home
-                goods, and lifestyle products. Every item in our store is
-                handpicked for quality, value, and style.
-              </p>
-              <p className="text-gray-700 text-lg leading-relaxed">
-                Our mission is simple: to make premium shopping accessible to
-                everyone while maintaining the highest standards of quality and
-                service.
-              </p>
+              <div className="mt-5">
+                <DeliveryScene />
+              </div>
             </div>
           </div>
-
-          <DeliveryScene />
         </div>
 
-        <div className="mb-10">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-black mb-4">
+        <div className="site-card p-6 md:p-8">
+          <div className="mb-12 text-center">
+            <p className="site-kicker justify-center">Customer confidence</p>
+            <h2 className="mt-3 text-3xl font-black text-black md:text-4xl">
               Shop With Confidence
             </h2>
-            <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-              We've built our entire platform around your peace of mind
+            <p className="site-copy mx-auto mt-3 max-w-2xl text-base">
+              Every major buyer touchpoint is designed to feel structured, trustworthy, and easy to navigate.
             </p>
           </div>
 
@@ -485,7 +523,7 @@ const AboutUs = () => {
             {features.map((feature, index) => (
               <div
                 key={index}
-                className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-xl hover:border-black transition-all duration-300 group"
+                className="site-card-soft group p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
               >
                 <div
                   className={`w-12 h-12 rounded-lg bg-linear-to-br ${feature.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}

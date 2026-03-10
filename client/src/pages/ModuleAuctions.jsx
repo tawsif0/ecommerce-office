@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiRefreshCw } from "react-icons/fi";
@@ -34,7 +34,7 @@ const ModuleAuctions = () => {
   const isAdmin = user?.userType === "admin";
   const canManage = user?.userType === "vendor" || user?.userType === "staff" || isAdmin;
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     if (!canManage) {
       setProducts([]);
       return;
@@ -48,9 +48,9 @@ const ModuleAuctions = () => {
     } catch {
       setProducts([]);
     }
-  };
+  }, [canManage]);
 
-  const fetchAuctions = async () => {
+  const fetchAuctions = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -67,16 +67,16 @@ const ModuleAuctions = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canManage, isAdmin]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     await Promise.all([fetchAuctions(), fetchProducts()]);
-  };
+  }, [fetchAuctions, fetchProducts]);
 
   useEffect(() => {
     if (!user) return;
     refresh();
-  }, [user]);
+  }, [user, refresh]);
 
   const handleFormChange = (event) => {
     const { name, value } = event.target;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import {
   FiBarChart2,
@@ -23,6 +23,11 @@ import {
 import { useAuth } from "../hooks/useAuth";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const VendorDashboardHome = ({ onTabChange }) => {
   const { user } = useAuth();
@@ -54,12 +59,7 @@ const VendorDashboardHome = ({ onTabChange }) => {
     recentOrders: [],
   });
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const fetchVendorDashboard = async () => {
+  const fetchVendorDashboard = useCallback(async () => {
     try {
       setLoading(true);
       const [profileResponse, statsResponse] = await Promise.all([
@@ -78,13 +78,13 @@ const VendorDashboardHome = ({ onTabChange }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (user?.userType === "vendor") {
       fetchVendorDashboard();
     }
-  }, [user]);
+  }, [user?.userType, fetchVendorDashboard]);
 
   if (user?.userType !== "vendor") {
     return (

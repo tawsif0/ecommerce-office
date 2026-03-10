@@ -131,7 +131,7 @@ const AdminAddOrder = () => {
             ? settings.locations.subCityOptions
             : [],
         });
-      } catch (_error) {
+      } catch {
         if (!mounted) return;
         setLocationOptions({
           cities: [],
@@ -159,7 +159,7 @@ const AdminAddOrder = () => {
           params: { query },
         });
         setResults(Array.isArray(response.data?.products) ? response.data.products : []);
-      } catch (_error) {
+      } catch {
         setResults([]);
       } finally {
         setSearchLoading(false);
@@ -311,11 +311,6 @@ const AdminAddOrder = () => {
 
   return (
     <div className="space-y-5">
-      <div className="bg-linear-to-r from-zinc-900 to-black rounded-xl p-6 text-white">
-        <h1 className="text-2xl font-bold">Add Order</h1>
-        <p className="text-zinc-200 mt-1">Manual order creation with customer risk check.</p>
-      </div>
-
       <form onSubmit={submit} className="space-y-5">
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
           <div className="flex items-center justify-between">

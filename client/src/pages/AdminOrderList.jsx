@@ -678,16 +678,6 @@ const AdminOrderList = () => {
 
   return (
     <div className="p-2">
-      {/* Header */}
-      <div className="mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-black mb-1 sm:mb-2">
-          Order Management
-        </h1>
-        <p className="text-sm sm:text-base text-gray-600">
-          Manage and track all customer orders in one place.
-        </p>
-      </div>
-
       {/* Filters & Search - Mobile Optimized */}
       <div className="bg-white rounded-xl p-3 sm:p-4 md:p-6 mb-4 sm:mb-6 shadow-sm border border-gray-200">
         <div className="flex flex-col gap-3 sm:gap-4">

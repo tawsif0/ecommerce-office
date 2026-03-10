@@ -18,7 +18,7 @@ export const getLandingAttribution = () => {
       source,
       capturedAt: parsed?.capturedAt || null,
     };
-  } catch (_error) {
+  } catch {
     return null;
   }
 };

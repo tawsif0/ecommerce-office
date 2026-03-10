@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import {
@@ -53,7 +53,27 @@ const VendorMessages = () => {
     return Number(selectedConversation.unreadByCustomer || 0);
   }, [selectedConversation, isVendorSide]);
 
-  const fetchConversations = async (preferredId = "") => {
+  const fetchConversationDetail = useCallback(async (conversationId) => {
+    if (!conversationId) {
+      setSelectedConversation(null);
+      return;
+    }
+
+    try {
+      setDetailLoading(true);
+      const response = await axios.get(`${baseUrl}/vendor-messages/${conversationId}`, {
+        headers: getAuthHeaders(),
+      });
+      setSelectedConversation(response.data?.conversation || null);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load conversation");
+      setSelectedConversation(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const fetchConversations = useCallback(async (preferredId = "") => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/vendor-messages`, {
@@ -76,29 +96,9 @@ const VendorMessages = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchConversationDetail, selectedConversationId]);
 
-  const fetchConversationDetail = async (conversationId) => {
-    if (!conversationId) {
-      setSelectedConversation(null);
-      return;
-    }
-
-    try {
-      setDetailLoading(true);
-      const response = await axios.get(`${baseUrl}/vendor-messages/${conversationId}`, {
-        headers: getAuthHeaders(),
-      });
-      setSelectedConversation(response.data?.conversation || null);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to load conversation");
-      setSelectedConversation(null);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const fetchVendorsForCustomer = async () => {
+  const fetchVendorsForCustomer = useCallback(async () => {
     if (!isCustomer) return;
     try {
       const response = await axios.get(`${baseUrl}/vendors`);
@@ -110,16 +110,16 @@ const VendorMessages = () => {
       if (presetVendorId && list.some((entry) => String(entry?._id || "") === presetVendorId)) {
         setNewConversation((prev) => ({ ...prev, vendorId: presetVendorId }));
       }
-    } catch (_error) {
+    } catch {
       setVendors([]);
     }
-  };
+  }, [isCustomer]);
 
   useEffect(() => {
     if (!user) return;
     fetchConversations();
     fetchVendorsForCustomer();
-  }, [user]);
+  }, [user, fetchConversations, fetchVendorsForCustomer]);
 
   const handleSelectConversation = async (conversationId) => {
     setSelectedConversationId(conversationId);

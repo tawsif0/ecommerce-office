@@ -84,7 +84,7 @@ const hydrateAuthFromStorage = (dispatch) => {
     try {
       dispatch(setAuth({ user: JSON.parse(storedUser), token: storedToken }));
       return;
-    } catch (_error) {
+    } catch {
       localStorage.removeItem("user");
       localStorage.removeItem("token");
     }
@@ -287,7 +287,7 @@ export const useAuth = () => {
       dispatch(setUser(updatedUser));
       window.dispatchEvent(new CustomEvent("profileUpdated"));
       return updatedUser;
-    } catch (_error) {
+    } catch {
       return null;
     }
   }, [dispatch, user]);

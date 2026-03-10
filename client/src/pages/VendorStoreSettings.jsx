@@ -1,9 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../hooks/useAuth";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const initialForm = {
   storeName: "",
@@ -43,12 +48,7 @@ const VendorStoreSettings = () => {
   const [vendorStatus, setVendorStatus] = useState("pending");
   const [hasProfile, setHasProfile] = useState(false);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const fetchVendorProfile = async () => {
+  const fetchVendorProfile = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/vendors/me/profile`, {
@@ -79,11 +79,11 @@ const VendorStoreSettings = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchVendorProfile();
-  }, []);
+  }, [fetchVendorProfile]);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;

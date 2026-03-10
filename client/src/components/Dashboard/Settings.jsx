@@ -41,7 +41,7 @@ const Settings = ({ user }) => {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const { logout } = useAuth();
+  const { logout, updateUser } = useAuth();
   const baseUrl = import.meta.env.VITE_API_URL;
   const onSubmitProfile = async (data) => {
     setIsLoading(true);
@@ -54,16 +54,10 @@ const Settings = ({ user }) => {
         },
       });
 
-      // Update local storage with new user data
       const updatedUser = response.data;
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      updateUser(updatedUser);
 
       toast.success("Profile updated successfully!");
-
-      // Reload the page to reflect changes in the app
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
     } catch (error) {
       toast.error(error.response?.data?.error || "Failed to update profile");
     } finally {
@@ -102,15 +96,15 @@ const Settings = ({ user }) => {
   const currentPassword = watch("currentPassword");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Profile Settings Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-300"
+        className="app-panel overflow-hidden"
       >
-        <div className="px-8 py-6 border-b border-gray-300 bg-gray-50">
+        <div className="border-b border-black/8 bg-slate-50 px-8 py-6">
           <div className="flex items-center space-x-3">
             <div className="p-2 rounded-lg bg-black">
               <FiUser className="h-5 w-5 text-white" />
@@ -289,9 +283,9 @@ const Settings = ({ user }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.1 }}
-        className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-300"
+        className="app-panel overflow-hidden"
       >
-        <div className="px-8 py-6 border-b border-gray-300 bg-gray-50">
+        <div className="border-b border-black/8 bg-slate-50 px-8 py-6">
           <div className="flex items-center space-x-3">
             <div className="p-2 rounded-lg bg-black">
               <FiLock className="h-5 w-5 text-white" />

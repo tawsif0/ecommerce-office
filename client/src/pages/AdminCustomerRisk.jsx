@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiEye, FiRefreshCw, FiSave, FiSearch, FiShield, FiUserX } from "react-icons/fi";
@@ -41,7 +41,7 @@ const AdminCustomerRisk = () => {
 
   const filteredRows = useMemo(() => rows, [rows]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/auth/admin/customer-risk`, {
@@ -60,11 +60,11 @@ const AdminCustomerRisk = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [blacklistedOnly, risk, search]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const applyFilters = async () => {
     await loadData();
@@ -94,7 +94,7 @@ const AdminCustomerRisk = () => {
       return;
     }
 
-    const shouldBlacklist = !Boolean(row.isBlacklisted);
+    const shouldBlacklist = !row.isBlacklisted;
     const reason = shouldBlacklist
       ? window.prompt(
           "Blacklist reason (required):",
@@ -163,8 +163,8 @@ const AdminCustomerRisk = () => {
       await axios.patch(
         `${baseUrl}/auth/admin/customer-risk/${profile.customerId}/blacklist`,
         {
-          isBlacklisted: Boolean(profile.isBlacklisted),
-          blacklistReason: Boolean(profile.isBlacklisted)
+          isBlacklisted: !!profile.isBlacklisted,
+          blacklistReason: profile.isBlacklisted
             ? String(profileReason || "").trim()
             : "",
           adminNotes: String(profileNotes || "").trim(),
@@ -178,12 +178,12 @@ const AdminCustomerRisk = () => {
           ? {
               ...prev,
               profile: {
-                ...prev.profile,
-                adminNotes: String(profileNotes || "").trim(),
-                blacklistReason: Boolean(prev.profile?.isBlacklisted)
-                  ? String(profileReason || "").trim()
-                  : "",
-              },
+              ...prev.profile,
+              adminNotes: String(profileNotes || "").trim(),
+              blacklistReason: prev.profile?.isBlacklisted
+                ? String(profileReason || "").trim()
+                : "",
+            },
             }
           : prev,
       );

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiRefreshCw } from "react-icons/fi";
@@ -27,7 +27,7 @@ const ModuleBookings = () => {
   const isAdmin = user?.userType === "admin";
   const isVendorSide = user?.userType === "vendor" || user?.userType === "staff";
 
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -44,12 +44,12 @@ const ModuleBookings = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin, isVendorSide]);
 
   useEffect(() => {
     if (!user) return;
     fetchBookings();
-  }, [user]);
+  }, [user, fetchBookings]);
 
   const updateStatus = async (bookingId, status) => {
     try {

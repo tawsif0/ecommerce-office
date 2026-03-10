@@ -80,12 +80,7 @@ export default function MyWishlist() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-black">My Wishlist</h1>
-        <p className="text-gray-600 mt-1">Saved products for later purchase.</p>
-      </div>
-
+    <div className="w-full p-1 md:p-2">
       {loading ? (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-600">
           Loading wishlist...

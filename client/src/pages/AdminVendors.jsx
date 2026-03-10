@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import {
@@ -11,6 +11,11 @@ import {
 import { useAuth } from "../hooks/useAuth";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const COMMISSION_TYPE_OPTIONS = [
   { value: "inherit", label: "Inherit Global" },
@@ -46,11 +51,6 @@ const AdminVendors = () => {
   });
   const [isSavingGlobal, setIsSavingGlobal] = useState(false);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const hydrateDrafts = (vendorList = []) => {
     const next = {};
     vendorList.forEach((vendor) => {
@@ -63,7 +63,7 @@ const AdminVendors = () => {
     setCommissionDrafts(next);
   };
 
-  const fetchGlobalCommission = async () => {
+  const fetchGlobalCommission = useCallback(async () => {
     const response = await axios.get(`${baseUrl}/auth/admin/settings`, {
       headers: getAuthHeaders(),
     });
@@ -76,9 +76,9 @@ const AdminVendors = () => {
       },
     );
     setGlobalCommission(rule);
-  };
+  }, []);
 
-  const fetchVendors = async () => {
+  const fetchVendors = useCallback(async () => {
     try {
       setLoading(true);
       const [vendorsResponse] = await Promise.all([
@@ -95,13 +95,13 @@ const AdminVendors = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchGlobalCommission]);
 
   useEffect(() => {
     if (user?.userType === "admin") {
       fetchVendors();
     }
-  }, [user]);
+  }, [user?.userType, fetchVendors]);
 
   const updateStatus = async (vendorId, status) => {
     try {

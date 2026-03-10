@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-hot-toast";
@@ -121,7 +121,7 @@ const VendorStore = () => {
     }
   }, [user]);
 
-  const fetchStore = async () => {
+  const fetchStore = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/vendors/${slug}/store`);
@@ -133,9 +133,9 @@ const VendorStore = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [slug]);
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       setReviewLoading(true);
       const response = await axios.get(`${baseUrl}/vendors/${slug}/reviews`);
@@ -145,12 +145,12 @@ const VendorStore = () => {
     } finally {
       setReviewLoading(false);
     }
-  };
+  }, [slug]);
 
   useEffect(() => {
     fetchStore();
     fetchReviews();
-  }, [slug]);
+  }, [fetchReviews, fetchStore]);
 
   useEffect(() => {
     if (!vendor) return undefined;
@@ -267,7 +267,7 @@ const VendorStore = () => {
     try {
       await navigator.clipboard.writeText(storeUrl);
       toast.success("Store link copied");
-    } catch (_error) {
+    } catch {
       toast.error("Failed to copy store link");
     }
   };
@@ -283,7 +283,7 @@ const VendorStore = () => {
         return;
       }
       await copyStoreLink();
-    } catch (_error) {
+    } catch {
       toast.error("Failed to share store link");
     }
   };

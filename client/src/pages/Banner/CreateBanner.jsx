@@ -244,21 +244,7 @@ const CreateBanner = () => {
       transition={{ duration: 0.5 }}
       className="w-full"
     >
-      <div className="w-full mx-auto p-2 md:p-4">
-        {/* Header */}
-        <div className="mb-6 md:mb-8">
-          <div className="flex items-center justify-center">
-            <div>
-              <h1 className="text-xl md:text-3xl font-bold text-gray-900 text-center">
-                Create New Banner
-              </h1>
-              <p className="text-gray-600 mt-1 md:mt-2 text-sm md:text-base text-center">
-                Add a new banner to your store.
-              </p>
-            </div>
-          </div>
-        </div>
-
+      <div className="w-full">
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
             {/* Left Column - Form */}

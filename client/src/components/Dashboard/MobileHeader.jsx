@@ -1,17 +1,37 @@
 import React from "react";
 import { FiMenu } from "react-icons/fi";
+import { isSuperAdminUser, resolveUserRole } from "../../utils/dashboardAccess";
 
-const MobileHeader = ({ toggleSidebar }) => {
+const ROLE_TITLES = {
+  admin: "Admin Console",
+  vendor: "Vendor Console",
+  staff: "Staff Console",
+  user: "Customer Console",
+};
+
+const MobileHeader = ({ toggleSidebar, user, pageMeta }) => {
+  const role = resolveUserRole(user);
+  const isSuperAdmin = isSuperAdminUser(user);
+  const consoleTitle =
+    role === "admin" && isSuperAdmin
+      ? "Super Admin Console"
+      : ROLE_TITLES[role] || ROLE_TITLES.user;
+  const title = pageMeta?.title || consoleTitle;
+  const subtitle = pageMeta?.section || consoleTitle;
+
   return (
-    <div className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-300 flex items-center justify-between px-4 z-50 md:hidden shadow-sm">
+    <div className="fixed left-3 right-3 top-3 z-50 flex h-14 items-center justify-between rounded-[22px] border border-black/10 bg-white/88 px-4 shadow-[0_18px_36px_rgba(15,23,42,0.08)] backdrop-blur-xl md:hidden">
       <button
         onClick={toggleSidebar}
-        className="p-2 rounded-lg text-gray-700 hover:text-black hover:bg-gray-100 transition-all duration-200 border border-gray-300"
+        className="rounded-xl border border-black/10 bg-white px-2.5 py-2 text-gray-700 transition-all duration-200 hover:bg-gray-100 hover:text-black"
       >
         <FiMenu className="w-6 h-6" />
       </button>
       <div className="flex flex-col items-center">
-        <h1 className="text-lg font-bold text-black">Dashboard</h1>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gray-400">
+          {subtitle}
+        </p>
+        <h1 className="text-base font-bold text-black">{title}</h1>
       </div>
       <div className="w-10"></div>
     </div>

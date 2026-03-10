@@ -1,9 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiCheckCircle, FiClock, FiPackage, FiTruck, FiXCircle } from "react-icons/fi";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const getFullImageUrl = (imagePath) => {
   if (!imagePath) return null;
@@ -29,12 +34,7 @@ const VendorOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const fetchVendorOrders = async () => {
+  const fetchVendorOrders = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/vendors/me/orders`, {
@@ -46,11 +46,11 @@ const VendorOrders = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchVendorOrders();
-  }, []);
+  }, [fetchVendorOrders]);
 
   if (loading) {
     return (

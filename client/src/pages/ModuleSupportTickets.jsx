@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiRefreshCw } from "react-icons/fi";
@@ -86,7 +86,24 @@ const ModuleSupportTickets = () => {
     });
   }, [tickets, statusFilter, searchText]);
 
-  const fetchTickets = async () => {
+  const fetchTicketDetails = useCallback(async (ticketId) => {
+    const normalizedId = String(ticketId || "");
+    if (!normalizedId) return;
+
+    try {
+      setOpeningTicketId(normalizedId);
+      const response = await axios.get(`${baseUrl}/support-tickets/${ticketId}`, {
+        headers: getAuthHeaders(),
+      });
+      setSelectedTicket(response.data?.ticket || null);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load ticket details");
+    } finally {
+      setOpeningTicketId((prev) => (prev === normalizedId ? "" : prev));
+    }
+  }, []);
+
+  const fetchTickets = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/support-tickets`, {
@@ -113,29 +130,12 @@ const ModuleSupportTickets = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchTicketDetails = async (ticketId) => {
-    const normalizedId = String(ticketId || "");
-    if (!normalizedId) return;
-
-    try {
-      setOpeningTicketId(normalizedId);
-      const response = await axios.get(`${baseUrl}/support-tickets/${ticketId}`, {
-        headers: getAuthHeaders(),
-      });
-      setSelectedTicket(response.data?.ticket || null);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to load ticket details");
-    } finally {
-      setOpeningTicketId((prev) => (prev === normalizedId ? "" : prev));
-    }
-  };
+  }, [fetchTicketDetails, selectedTicket?._id]);
 
   useEffect(() => {
     if (!user) return;
     fetchTickets();
-  }, [user]);
+  }, [user, fetchTickets]);
 
   const handleCreateInput = (event) => {
     const { name, value } = event.target;

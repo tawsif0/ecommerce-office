@@ -25,12 +25,13 @@ const MarketplaceAds = ({ placement = "home_sidebar", limit = 3 }) => {
         picked.forEach((ad) => {
           axios.post(`${baseUrl}/ads/public/${ad._id}/impression`).catch(() => null);
         });
-      } catch (_error) {
+      } catch {
         if (!mounted) return;
         setAds([]);
       } finally {
-        if (!mounted) return;
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -58,7 +59,7 @@ const MarketplaceAds = ({ placement = "home_sidebar", limit = 3 }) => {
   }
 
   return (
-    <section className="mx-auto mt-4 w-full max-w-7xl px-3 md:mt-6 md:px-6">
+    <section className="site-shell mt-4 w-full md:mt-6">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm md:text-base font-semibold text-black">Sponsored</h2>
         <p className="text-xs text-gray-500">Promoted vendor campaigns</p>
@@ -70,7 +71,7 @@ const MarketplaceAds = ({ placement = "home_sidebar", limit = 3 }) => {
             key={ad._id}
             type="button"
             onClick={() => handleClick(ad)}
-            className="group overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+            className="site-card-soft group overflow-hidden text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
           >
             <div className="relative aspect-[16/6] bg-gray-100">
               <img

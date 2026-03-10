@@ -16,6 +16,7 @@ import {
   normalizeMarketplaceMode,
   SINGLE_VENDOR_DISABLED_TABS,
 } from "../utils/dashboardAccess";
+import { getDashboardTabMeta } from "../utils/dashboardPresentation";
 
 const Settings = React.lazy(() => import("../components/Dashboard/Settings"));
 const AdminPaymentMethods = React.lazy(() => import("./AdminPaymentMethods"));
@@ -24,7 +25,6 @@ const AdminAddOrder = React.lazy(() => import("./AdminAddOrder"));
 const CreateCategory = React.lazy(() => import("./Category/CreateCategory"));
 const ModifyCategory = React.lazy(() => import("./Category/ModifyCategory"));
 const ProductModify = React.lazy(() => import("./Product/ProductModify"));
-const BulkProductUpload = React.lazy(() => import("./Product/BulkProductUpload"));
 const CreateBanner = React.lazy(() => import("./Banner/CreateBanner"));
 const ModifyBanner = React.lazy(() => import("./Banner/ModifyBanner"));
 const AdminOrderList = React.lazy(() => import("./AdminOrderList"));
@@ -42,6 +42,7 @@ const AdminVendorReports = React.lazy(() => import("./AdminVendorReports"));
 const AdminVendorReviews = React.lazy(() => import("./AdminVendorReviews"));
 const AdminProductReports = React.lazy(() => import("./AdminProductReports"));
 const AdminCustomerRisk = React.lazy(() => import("./AdminCustomerRisk"));
+const MyAddresses = React.lazy(() => import("./MyAddresses"));
 const MyWishlist = React.lazy(() => import("./MyWishlist"));
 const ModuleSubscriptions = React.lazy(() => import("./ModuleSubscriptions"));
 const ModuleBookings = React.lazy(() => import("./ModuleBookings"));
@@ -67,7 +68,7 @@ const ModuleAdminUsers = React.lazy(() => import("./ModuleAdminUsers"));
 const ModuleSuperAdminControl = React.lazy(() => import("./ModuleSuperAdminControl"));
 
 const TabLoadingFallback = () => (
-  <div className="flex min-h-[220px] items-center justify-center">
+  <div className="app-panel-soft flex min-h-[260px] items-center justify-center">
     <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-200 border-t-black" />
   </div>
 );
@@ -89,8 +90,8 @@ const TabContent = React.memo(({
     })
   ) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-        <h2 className="text-xl font-semibold text-black mb-2">Access Restricted</h2>
+      <div className="app-panel p-8 text-center">
+        <h2 className="mb-2 text-xl font-semibold text-black">Access Restricted</h2>
         <p className="text-gray-600">
           You do not have permission to access this module.
         </p>
@@ -133,10 +134,6 @@ const TabContent = React.memo(({
       return user?.userType === "admin" || user?.userType === "vendor" ? (
         <ProductModify initialMode="list" />
       ) : null;
-    case "bulk-product-upload":
-      return user?.userType === "admin" || user?.userType === "vendor" ? (
-        <BulkProductUpload />
-      ) : null;
     case "product-approvals":
       return user?.userType === "admin" ? <AdminProductApprovals /> : null;
     case "order-list":
@@ -175,6 +172,8 @@ const TabContent = React.memo(({
       return user?.userType !== "admin" ? <UserOrders /> : null;
     case "wishlist":
       return user?.userType === "user" ? <MyWishlist /> : null;
+    case "my-addresses":
+      return user?.userType === "user" ? <MyAddresses /> : null;
     case "module-subscriptions":
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleSubscriptions />
@@ -275,6 +274,7 @@ const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const pageMeta = getDashboardTabMeta(activeTab, user);
 
   // Check screen size
   useEffect(() => {
@@ -443,30 +443,17 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="dashboard-ui bg-linear-to-br from-gray-50 to-gray-100 min-h-screen flex items-center justify-center p-2 md:p-4 relative">
+    <div className="dashboard-ui app-shell relative p-2 md:p-4">
       {/* Mobile Header */}
-      {isMobile && <MobileHeader toggleSidebar={toggleSidebar} />}
+      {isMobile && (
+        <MobileHeader
+          toggleSidebar={toggleSidebar}
+          user={user}
+          pageMeta={pageMeta}
+        />
+      )}
 
-      {/* Mobile Overlay */}
-      <AnimatePresence>
-        {isMobile && isMobileOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/30 z-40 md:hidden"
-            onClick={() => setIsMobileOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Content */}
-      <div
-        className={`flex w-full bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 relative ${
-          isMobile ? "mt-16 mb-2 h-[calc(100vh-5rem)]" : "h-[95vh]"
-        }`}
-      >
-        {/* Sidebar */}
+      {isMobile && (
         <Sidebar
           isMobile={isMobile}
           isMobileOpen={isMobileOpen}
@@ -480,11 +467,47 @@ const Dashboard = () => {
           isHovered={isHovered}
           setIsHovered={setIsHovered}
         />
+      )}
+
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isMobile && isMobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/30 md:hidden"
+            onClick={() => setIsMobileOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Content */}
+      <div
+        className={`app-frame flex relative ${
+          isMobile ? "mb-2 mt-16 h-[calc(100vh-5rem)]" : "h-[calc(100vh-2rem)]"
+        }`}
+      >
+        {!isMobile && (
+          <Sidebar
+            isMobile={isMobile}
+            isMobileOpen={isMobileOpen}
+            sidebarOpen={sidebarOpen}
+            activeTab={activeTab}
+            user={user}
+            handleTabChange={handleTabChange}
+            toggleSidebar={toggleSidebar}
+            setIsMobileOpen={setIsMobileOpen}
+            handleLogout={handleLogout}
+            isHovered={isHovered}
+            setIsHovered={setIsHovered}
+          />
+        )}
 
         {/* Main Content Area */}
-        <div className="flex-1 h-full overflow-auto relative bg-linear-to-br from-gray-50 to-white">
+        <div className="app-scrollbar relative h-full min-w-0 flex-1 overflow-auto bg-linear-to-br from-slate-50 via-white to-slate-100">
           {/* Rendered Content */}
-          <div className="p-4 md:p-4">
+          <div className="dashboard-content-shell w-full p-4 md:p-4 lg:p-4">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -492,7 +515,24 @@ const Dashboard = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
+                className="dashboard-page-shell w-full min-w-0 space-y-6"
               >
+                <div className="dashboard-page-bar app-panel-soft w-full px-5 py-5 md:px-6">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="min-w-0">
+                      <p className="app-kicker">{pageMeta.section}</p>
+                      <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
+                        {pageMeta.title}
+                      </h1>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 md:text-[0.95rem]">
+                        {pageMeta.description}
+                      </p>
+                    </div>
+                    <div className="app-panel-muted inline-flex items-center rounded-[22px] px-4 py-3 text-sm font-medium text-slate-600">
+                      Active module: <span className="ml-2 font-semibold text-slate-950">{pageMeta.title}</span>
+                    </div>
+                  </div>
+                </div>
                 <Suspense fallback={<TabLoadingFallback />}>
                   <TabContent
                     activeTab={activeTab}
@@ -523,7 +563,7 @@ const Dashboard = () => {
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: -20, opacity: 0, scale: 0.95 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-md border border-gray-300"
+              className="app-panel w-full max-w-md overflow-hidden"
             >
               <div className="p-8 text-center">
                 <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-black mb-4">

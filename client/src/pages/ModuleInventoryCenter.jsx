@@ -158,40 +158,28 @@ const ModuleInventoryCenter = () => {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-sm">
-        <div className="grid gap-5 bg-linear-to-r from-zinc-950 via-black to-zinc-900 px-6 py-7 text-white lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
-              Inventory Center
-            </p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight">
-              Stock control for products, purchases, and public visibility
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/75">
-              Watch low stock, out-of-stock products, and public stock visibility from one place.
-              Use purchases to increase stock and product modify to update thresholds or visibility.
-            </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => openDashboardTab("module-purchases")}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-black"
-              >
-                <FiShoppingBag className="h-4 w-4" />
-                Create Purchase
-              </button>
-              <button
-                type="button"
-                onClick={() => openDashboardTab("modify-product")}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 text-sm font-semibold text-white"
-              >
-                <FiEdit3 className="h-4 w-4" />
-                Manage Products
-              </button>
-            </div>
+      <div className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => openDashboardTab("module-purchases")}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-black px-5 text-sm font-bold text-white"
+            >
+              <FiShoppingBag className="h-4 w-4" />
+              Create Purchase
+            </button>
+            <button
+              type="button"
+              onClick={() => openDashboardTab("modify-product")}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-5 text-sm font-semibold text-black transition hover:border-black"
+            >
+              <FiEdit3 className="h-4 w-4" />
+              Manage Products
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 lg:w-[320px]">
             {[
               { label: "Products", value: summary.totalProducts, icon: FiBox },
               { label: "Stock Units", value: summary.totalStock, icon: FiPackage },
@@ -202,15 +190,15 @@ const ModuleInventoryCenter = () => {
               return (
                 <div
                   key={item.label}
-                  className="rounded-[22px] border border-white/10 bg-white/10 p-4 backdrop-blur-sm"
+                  className="rounded-[22px] border border-gray-200 bg-slate-50 p-4"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
                       {item.label}
                     </p>
-                    <Icon className="h-4 w-4 text-white/70" />
+                    <Icon className="h-4 w-4 text-gray-500" />
                   </div>
-                  <p className="mt-3 text-2xl font-black text-white">{item.value}</p>
+                  <p className="mt-3 text-2xl font-black text-black">{item.value}</p>
                 </div>
               );
             })}

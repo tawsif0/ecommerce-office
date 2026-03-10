@@ -220,15 +220,7 @@ function ModifyCategory() {
           className="bg-white rounded-xl shadow-lg p-4 md:p-8 border border-gray-200"
         >
           <div className="py-1 border-b border-gray-100">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">
-                  Category Manager
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  Manage your categories
-                </p>
-              </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">
               <div className="flex items-center justify-between md:justify-end gap-2">
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                   {categories.length} categories

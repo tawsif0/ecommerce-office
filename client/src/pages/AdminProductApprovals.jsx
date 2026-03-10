@@ -1,10 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiCheckCircle, FiRefreshCw, FiXCircle } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const AdminProductApprovals = () => {
   const { user } = useAuth();
@@ -14,12 +19,7 @@ const AdminProductApprovals = () => {
   const [savingStatus, setSavingStatus] = useState("");
   const [rejectionReason, setRejectionReason] = useState({});
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const fetchPendingProducts = async () => {
+  const fetchPendingProducts = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/products`, {
@@ -35,13 +35,13 @@ const AdminProductApprovals = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (user?.userType === "admin") {
       fetchPendingProducts();
     }
-  }, [user]);
+  }, [user?.userType, fetchPendingProducts]);
 
   const handleStatusChange = async (productId, status) => {
     try {

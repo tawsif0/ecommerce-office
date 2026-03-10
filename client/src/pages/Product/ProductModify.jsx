@@ -1145,28 +1145,18 @@ function ProductModify({ initialMode = "list" }) {
         transition={{ duration: 0.5 }}
         className="w-full"
       >
-        <div className="w-full mx-auto p-2 md:p-4">
-          {/* Header */}
-          <div className="mb-6 md:mb-8">
-            <div className="flex items-center">
+        <div className="w-full">
+          {editingId ? (
+            <div className="mb-4">
               <button
                 onClick={cancelForm}
-                className="mr-3 md:mr-4 p-2 rounded-full hover:bg-gray-200 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
-                <FiArrowLeft className="h-5 w-5" />
+                <FiArrowLeft className="h-4 w-4" />
+                Back to products
               </button>
-              <div>
-                <h1 className="text-xl md:text-3xl font-bold text-gray-900">
-                  {editingId ? "Edit Product" : "Create New Product"}
-                </h1>
-                <p className="text-gray-600 mt-1 md:mt-2 text-sm md:text-base">
-                  {editingId
-                    ? "Edit the product details"
-                    : "Add a new product to your store. Fill in all required details."}
-                </p>
-              </div>
             </div>
-          </div>
+          ) : null}
 
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
@@ -2233,7 +2223,7 @@ function ProductModify({ initialMode = "list" }) {
       transition={{ duration: 0.5 }}
       className="w-full"
     >
-      <div className="w-full mx-auto p-2 md:p-4">
+      <div className="w-full">
         {/* Products List */}
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
@@ -2242,15 +2232,7 @@ function ProductModify({ initialMode = "list" }) {
           className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
         >
           <div className="py-1 border-b border-gray-100 mb-4 md:mb-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg md:text-2xl font-bold text-gray-900">
-                  Product List
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  View and manage your products
-                </p>
-              </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center px-2 md:px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                   {products.length} products

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import jsPDF from "jspdf";
@@ -55,7 +55,7 @@ const AdminVendorReports = () => {
   });
   const [isApplying, setIsApplying] = useState(false);
 
-  const fetchReports = async (overrideFilters = {}) => {
+  const fetchReports = useCallback(async (overrideFilters = {}) => {
     const appliedFrom =
       overrideFilters.from !== undefined ? overrideFilters.from : filters.from;
     const appliedTo =
@@ -79,13 +79,13 @@ const AdminVendorReports = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.from, filters.to]);
 
   useEffect(() => {
     if (user?.userType === "admin") {
       fetchReports();
     }
-  }, [user]);
+  }, [user?.userType, fetchReports]);
 
   const handleApplyFilters = async () => {
     try {

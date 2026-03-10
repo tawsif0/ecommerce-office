@@ -48,6 +48,7 @@ const Register = lazy(() => import("./pages/Registration"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Banner = lazy(() => import("./Home/pages/Banner"));
+const Demo03Landing = lazy(() => import("./Home/pages/Demo03Landing"));
 const MarketplaceAds = lazy(() => import("./Home/pages/MarketplaceAds"));
 const MarketplaceHomeFloors = lazy(() => import("./Home/pages/MarketplaceHomeFloors"));
 const FAQ = lazy(() => import("./Home/pages/FAQ"));
@@ -66,14 +67,7 @@ const CompareProducts = lazy(() => import("./pages/CompareProducts"));
 
 function HomePage() {
   return (
-    <>
-      <Banner />
-      <MarketplaceAds placement="home_sidebar" limit={3} />
-      <MarketplaceHomeFloors />
-      <div className="site-shell pb-12">
-        <RecentlyViewedShelf />
-      </div>
-    </>
+    <Demo03Landing />
   );
 }
 
@@ -107,11 +101,14 @@ function HashScrollHandler() {
 
 // Layout component for public pages (with Navbar and Footer)
 function PublicLayout() {
+  const location = useLocation();
+  const hidePublicShell = location.pathname === "/";
+
   return (
     <>
-      <Navbar />
+      {!hidePublicShell && <Navbar />}
       <HashScrollHandler />
-      <main className="min-h-screen">
+      <main className={hidePublicShell ? undefined : "min-h-screen"}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             {/* Redirect all root paths to home */}
@@ -161,7 +158,7 @@ function PublicLayout() {
           </Routes>
         </Suspense>
       </main>
-      <Footer />
+      {!hidePublicShell && <Footer />}
     </>
   );
 }

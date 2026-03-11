@@ -20,12 +20,17 @@ const toNonNegativeNumber = (value, fallback = 0) => {
   return parsed;
 };
 
+const normalizeCategoryImage = (value) => {
+  const normalized = String(value || "").trim();
+  return normalized;
+};
+
 // @desc    Create new category
 // @route   POST /api/categories
 // @access  Private (Admin only)
 const createCategory = async (req, res) => {
   try {
-    const { name, type, commissionType, commissionValue, commissionFixed } = req.body;
+    const { name, type, image, commissionType, commissionValue, commissionFixed } = req.body;
 
     // Check if category already exists
     const categoryExists = await Category.findOne({ name });
@@ -40,6 +45,7 @@ const createCategory = async (req, res) => {
     const category = await Category.create({
       name,
       type: type || "General",
+      image: normalizeCategoryImage(image),
       commissionType: normalizeCommissionType(commissionType),
       commissionValue: toNonNegativeNumber(commissionValue, 0),
       commissionFixed: toNonNegativeNumber(commissionFixed, 0),
@@ -69,7 +75,7 @@ const createCategory = async (req, res) => {
 const getPublicCategories = async (req, res) => {
   try {
     const categories = await Category.find({ isActive: true })
-      .select("name type _id")
+      .select("name type image _id")
       .sort({ name: 1 })
       .lean();
 
@@ -143,7 +149,7 @@ const getCategory = async (req, res) => {
 // @access  Private (Admin only)
 const updateCategory = async (req, res) => {
   try {
-    const { name, type, isActive, commissionType, commissionValue, commissionFixed } = req.body;
+    const { name, type, image, isActive, commissionType, commissionValue, commissionFixed } = req.body;
 
     let category = await Category.findById(req.params.id);
     if (!category) {
@@ -169,6 +175,7 @@ const updateCategory = async (req, res) => {
       {
         name,
         type: type || category.type,
+        image: image !== undefined ? normalizeCategoryImage(image) : category.image || "",
         commissionType:
           commissionType !== undefined
             ? normalizeCommissionType(commissionType)

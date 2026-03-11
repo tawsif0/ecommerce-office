@@ -14,6 +14,7 @@ function ModifyCategory() {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("General");
+  const [editImage, setEditImage] = useState("");
   const [editCommissionType, setEditCommissionType] = useState("inherit");
   const [editCommissionValue, setEditCommissionValue] = useState("");
   const [editCommissionFixed, setEditCommissionFixed] = useState("");
@@ -103,6 +104,7 @@ function ModifyCategory() {
     setEditingId(category._id);
     setEditName(category.name);
     setEditType(category.type || "General");
+    setEditImage(category.image || "");
     setEditCommissionType(category.commissionType || "inherit");
     setEditCommissionValue(String(category.commissionValue ?? ""));
     setEditCommissionFixed(String(category.commissionFixed ?? ""));
@@ -113,6 +115,7 @@ function ModifyCategory() {
     setEditingId(null);
     setEditName("");
     setEditType("General");
+    setEditImage("");
     setEditCommissionType("inherit");
     setEditCommissionValue("");
     setEditCommissionFixed("");
@@ -138,6 +141,7 @@ function ModifyCategory() {
         {
           name: editName,
           type: editType,
+          image: editImage.trim(),
           commissionType: editCommissionType,
           commissionValue: Number(editCommissionValue || 0),
           commissionFixed: Number(editCommissionFixed || 0),
@@ -159,6 +163,7 @@ function ModifyCategory() {
         setEditingId(null);
         setEditName("");
         setEditType("General");
+        setEditImage("");
         setEditCommissionType("inherit");
         setEditCommissionValue("");
         setEditCommissionFixed("");
@@ -281,7 +286,17 @@ function ModifyCategory() {
                 >
                   {editingId === category._id ? (
                     <div>
-                      <div className="flex flex-col md:flex-row md:items-center gap-3 mb-3">
+                      <div className="flex flex-col gap-3 mb-3">
+                        <div className="w-full">
+                          <input
+                            type="url"
+                            value={editImage}
+                            onChange={(e) => setEditImage(e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
+                            placeholder="Category image URL"
+                          />
+                        </div>
+                        <div className="flex flex-col md:flex-row md:items-center gap-3">
                         <div className="flex-1">
                           <input
                             type="text"
@@ -347,7 +362,7 @@ function ModifyCategory() {
                             step="0.01"
                             value={editCommissionFixed}
                             onChange={(e) => setEditCommissionFixed(e.target.value)}
-                            placeholder="Fixed TK"
+                            placeholder="Fixed Tk"
                             disabled={
                               editCommissionType === "inherit" ||
                               editCommissionType === "percentage"
@@ -370,6 +385,16 @@ function ModifyCategory() {
                           </button>
                         </div>
                       </div>
+                        {editImage.trim() ? (
+                          <div className="h-20 w-20 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                            <img
+                              src={editImage}
+                              alt={`${editName || category.name} preview`}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
                       {/* Red error text under the edit input */}
                       {editError && (
                         <p className="text-sm text-red-600 font-medium mt-1 ml-1">
@@ -380,11 +405,21 @@ function ModifyCategory() {
                   ) : (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="flex items-center space-x-3">
-                        <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-gray-100 shrink-0">
-                          <span className="text-sm font-medium text-gray-600">
-                            {category.name.charAt(0).toUpperCase()}
+                        {category.image ? (
+                          <div className="h-12 w-12 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shrink-0">
+                            <img
+                              src={category.image}
+                              alt={category.name}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-gray-100 shrink-0">
+                            <span className="text-sm font-medium text-gray-600">
+                              {category.name.charAt(0).toUpperCase()}
+                            </span>
                           </span>
-                        </span>
+                        )}
                         <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 gap-1 sm:gap-0">
                           <span className="text-base font-medium text-gray-900 wrap-break-word">
                             {category.name}
@@ -399,7 +434,7 @@ function ModifyCategory() {
                               ` ${Number(category.commissionValue || 0)}%`}
                             {(category.commissionType === "fixed" ||
                               category.commissionType === "hybrid") &&
-                              ` + ${Number(category.commissionFixed || 0)} TK`}
+                              ` + ${Number(category.commissionFixed || 0)} Tk`}
                           </span>
                         </div>
                       </div>

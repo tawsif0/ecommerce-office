@@ -15,7 +15,6 @@ import { GLOBAL_TOAST_OPTIONS } from "./utils/globalToast";
 // Home components
 import Navbar from "./Home/components/Navbar";
 import Footer from "./Home/components/Footer";
-import RecentlyViewedShelf from "./components/RecentlyViewedShelf";
 import { pushDataLayerEvent } from "./utils/marketingDataLayer";
 import GlobalVoiceAssistant from "./components/GlobalVoiceAssistant";
 import { loadPublicSettings } from "./store/publicSettingsSlice";
@@ -47,10 +46,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Registration"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const Banner = lazy(() => import("./Home/pages/Banner"));
 const Demo03Home = lazy(() => import("./Home/pages/Demo03Home"));
-const MarketplaceAds = lazy(() => import("./Home/pages/MarketplaceAds"));
-const MarketplaceHomeFloors = lazy(() => import("./Home/pages/MarketplaceHomeFloors"));
 const FAQ = lazy(() => import("./Home/pages/FAQ"));
 const Contact = lazy(() => import("./Home/pages/Contact"));
 const ProductDetails = lazy(() => import("./Home/subPages/ProductDetails"));
@@ -112,13 +108,14 @@ function DashboardTabRedirect({ tab }) {
 // Layout component for public pages (with Navbar and Footer)
 function PublicLayout() {
   const location = useLocation();
-  const hidePublicShell = location.pathname === "/";
+  const isDemoHome = location.pathname === "/";
+  const hidePublicFooter = isDemoHome;
 
   return (
     <>
-      {!hidePublicShell && <Navbar />}
+      {!isDemoHome && <Navbar />}
       <HashScrollHandler />
-      <main className={hidePublicShell ? undefined : "min-h-screen"}>
+      <main className={hidePublicFooter ? undefined : "min-h-screen"}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             {/* Redirect all root paths to home */}
@@ -173,7 +170,7 @@ function PublicLayout() {
           </Routes>
         </Suspense>
       </main>
-      {!hidePublicShell && <Footer />}
+      {!hidePublicFooter && <Footer />}
     </>
   );
 }

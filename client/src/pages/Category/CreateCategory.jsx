@@ -10,6 +10,7 @@ const baseUrl = import.meta.env.VITE_API_URL;
 function CreateCategory() {
   const [categoryName, setCategoryName] = useState("");
   const [categoryType, setCategoryType] = useState("General");
+  const [categoryImage, setCategoryImage] = useState("");
   const [commissionType, setCommissionType] = useState("inherit");
   const [commissionValue, setCommissionValue] = useState("");
   const [commissionFixed, setCommissionFixed] = useState("");
@@ -65,6 +66,7 @@ function CreateCategory() {
         {
           name: categoryName,
           type: categoryType,
+          image: categoryImage.trim(),
           commissionType,
           commissionValue: Number(commissionValue || 0),
           commissionFixed: Number(commissionFixed || 0),
@@ -82,6 +84,7 @@ function CreateCategory() {
         // Reset form
         setCategoryName("");
         setCategoryType("General");
+        setCategoryImage("");
         setCommissionType("inherit");
         setCommissionValue("");
         setCommissionFixed("");
@@ -211,6 +214,36 @@ function CreateCategory() {
               )}
             </div>
 
+            <div className="mb-4">
+              <label
+                htmlFor="categoryImage"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Category Image URL
+              </label>
+              <input
+                type="url"
+                id="categoryImage"
+                value={categoryImage}
+                onChange={(e) => setCategoryImage(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-base md:text-lg"
+                placeholder="https://example.com/category-image.png"
+                autoComplete="off"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Optional. This image will be used on the demo home category rail.
+              </p>
+              {categoryImage.trim() ? (
+                <div className="mt-3 h-24 w-24 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                  <img
+                    src={categoryImage}
+                    alt="Category preview"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              ) : null}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div>
                 <label
@@ -255,7 +288,7 @@ function CreateCategory() {
                   htmlFor="commissionFixed"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Fixed (TK)
+                  Fixed (Tk)
                 </label>
                 <input
                   id="commissionFixed"

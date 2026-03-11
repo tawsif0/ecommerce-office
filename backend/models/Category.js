@@ -20,6 +20,11 @@ const categorySchema = new mongoose.Schema({
     ],
     default: "General",
   },
+  image: {
+    type: String,
+    trim: true,
+    default: "",
+  },
   commissionType: {
     type: String,
     enum: ["inherit", "percentage", "fixed", "hybrid"],

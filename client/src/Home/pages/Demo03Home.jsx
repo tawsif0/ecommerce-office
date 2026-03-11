@@ -1,10 +1,129 @@
-import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useSelector } from "react-redux";
 import Demo03Carousel from "../demo03/Demo03Carousel";
 import useDemo03Assets from "../demo03/useDemo03Assets";
 import { selectPublicSettings } from "../../store/publicSettingsSlice";
 import { toPublicAssetUrl } from "../../utils/publicSettings";
+import { useCart } from "../../context/CartContext";
+import { useAuth } from "../../hooks/useAuth";
+
+const baseUrl = import.meta.env.VITE_API_URL;
+
+const normalizeKey = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const resolveMediaUrl = (value) => {
+  if (!value) return "";
+
+  if (Array.isArray(value)) {
+    return resolveMediaUrl(value[0]);
+  }
+
+  if (typeof value === "object") {
+    return resolveMediaUrl(
+      value.data || value.url || value.secure_url || value.src || value.path || "",
+    );
+  }
+
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("data:")) {
+    return raw;
+  }
+  if (raw.startsWith("/")) {
+    return baseUrl ? `${baseUrl}${raw}` : raw;
+  }
+  return baseUrl ? `${baseUrl}/uploads/products/${raw}` : `/uploads/products/${raw}`;
+};
+
+const formatTkAmount = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return "0.00 Tk";
+  return `${new Intl.NumberFormat("en-BD", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numericValue)} Tk`;
+};
+
+const getProductImageSet = (product) => {
+  const rawImages = [
+    ...(Array.isArray(product?.gallery) ? product.gallery : []),
+    ...(Array.isArray(product?.images) ? product.images : []),
+    product?.image,
+  ]
+    .map((item) => resolveMediaUrl(item))
+    .filter(Boolean);
+
+  return [...new Set(rawImages)];
+};
+
+const getProductPriceLabel = (product) => {
+  if (typeof product?.price === "string") {
+    if (product.price.includes("Tk")) {
+      return product.price;
+    }
+
+    const parsedValues = String(product.price)
+      .replaceAll(",", "")
+      .match(/\d+(\.\d+)?/g);
+
+    if (parsedValues?.length === 1) {
+      return formatTkAmount(parsedValues[0]);
+    }
+
+    if (parsedValues?.length > 1) {
+      return `${formatTkAmount(parsedValues[0])} – ${formatTkAmount(
+        parsedValues[parsedValues.length - 1],
+      )}`;
+    }
+  }
+
+  if (String(product?.priceType || "single").toLowerCase() === "tba") {
+    return "TBA";
+  }
+
+  if (String(product?.marketplaceType || "simple").toLowerCase() === "variable") {
+    const variationPrices = (Array.isArray(product?.variations) ? product.variations : [])
+      .filter((variation) => variation?.isActive !== false)
+      .map((variation) => {
+        const salePrice = Number(variation?.salePrice);
+        if (Number.isFinite(salePrice) && salePrice >= 0) return salePrice;
+        const regularPrice = Number(variation?.price);
+        return Number.isFinite(regularPrice) && regularPrice >= 0 ? regularPrice : null;
+      })
+      .filter((value) => value !== null);
+
+    if (variationPrices.length > 0) {
+      const minPrice = Math.min(...variationPrices);
+      const maxPrice = Math.max(...variationPrices);
+      return minPrice === maxPrice
+        ? formatTkAmount(minPrice)
+        : `${formatTkAmount(minPrice)} – ${formatTkAmount(maxPrice)}`;
+    }
+  }
+
+  const salePrice = Number(product?.salePrice);
+  if (
+    String(product?.priceType || "single").toLowerCase() === "best" &&
+    Number.isFinite(salePrice) &&
+    salePrice >= 0
+  ) {
+    return formatTkAmount(salePrice);
+  }
+
+  const regularPrice = Number(product?.price);
+  if (Number.isFinite(regularPrice) && regularPrice >= 0) {
+    return formatTkAmount(regularPrice);
+  }
+
+  return "0.00 Tk";
+};
 
 const HERO_SLIDES = [
   {
@@ -93,6 +212,11 @@ const CATEGORY_SLIDES = [
       "https://demo03.arbeitonline.top/wp-content/uploads/2024/12/category-speakers.png",
   },
 ];
+
+const CATEGORY_ART_FALLBACKS = CATEGORY_SLIDES.reduce((accumulator, category) => {
+  accumulator.set(normalizeKey(category.title), category.image);
+  return accumulator;
+}, new Map());
 
 const BANNER_PRIMARY = {
   subtitle: "Premium Standards",
@@ -413,7 +537,13 @@ const VIDEO_BANNER = {
   height: { mobile: 400, tablet: 580, desktop: 760 },
 };
 
-function SiteHeader({ settings }) {
+function SiteHeader({
+  settings,
+  cartCount = 0,
+  accountHref = "/login",
+  accountLabel = "Account",
+  featuredCategoryLinks = [],
+}) {
   const website = settings?.website || {};
   const storeName = String(website?.storeName || "arbeit").trim() || "arbeit";
   const logoMode = String(website?.logoMode || "image").trim().toLowerCase();
@@ -424,6 +554,12 @@ function SiteHeader({ settings }) {
   const preventToggleJump = (event) => {
     event.preventDefault();
   };
+  const primaryLinks = featuredCategoryLinks.length > 0
+    ? featuredCategoryLinks.slice(0, 2)
+    : [
+        { label: "Headphones", path: "/shop" },
+        { label: "Accessories", path: "/shop" },
+      ];
 
   return (
     <header id="masthead" className="site-header header-type1">
@@ -476,12 +612,11 @@ function SiteHeader({ settings }) {
                   <li className="menu-item">
                     <Link to="/shop">Shop</Link>
                   </li>
-                  <li className="menu-item">
-                    <Link to="/shop">Headphones</Link>
-                  </li>
-                  <li className="menu-item">
-                    <Link to="/shop">Accessories</Link>
-                  </li>
+                  {primaryLinks.map((link) => (
+                    <li key={link.path} className="menu-item">
+                      <Link to={link.path}>{link.label}</Link>
+                    </li>
+                  ))}
                   <li className="menu-item">
                     <Link to="/blog">Blog</Link>
                   </li>
@@ -508,7 +643,7 @@ function SiteHeader({ settings }) {
                 </div>
 
                 <div className="site-action-button action-account">
-                  <Link to="/login" className="site-action-link">
+                  <Link to={accountHref} className="site-action-link">
                     <div className="site-action-icon">
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -527,7 +662,7 @@ function SiteHeader({ settings }) {
                       </svg>
                     </div>
                     <div className="site-action-label">
-                      <p>Account</p>
+                      <p>{accountLabel}</p>
                     </div>
                   </Link>
                 </div>
@@ -595,7 +730,9 @@ function SiteHeader({ settings }) {
                           strokeWidth="1.5"
                         />
                       </svg>
-                      <div className="site-action-count cart-count count">0</div>
+                      <div className="site-action-count cart-count count">
+                        {Number(cartCount || 0)}
+                      </div>
                     </div>
                   </Link>
                 </div>
@@ -644,7 +781,9 @@ function SiteHeader({ settings }) {
                         strokeWidth="1.5"
                       />
                     </svg>
-                    <div className="site-action-count cart-count count">0</div>
+                    <div className="site-action-count cart-count count">
+                      {Number(cartCount || 0)}
+                    </div>
                   </div>
                 </Link>
               </div>
@@ -704,12 +843,19 @@ function BannerBlock({ slide }) {
   );
 }
 
-function ProductCard({ product }) {
-  const hoverGallery = Array.isArray(product?.gallery) ? product.gallery.filter(Boolean) : [];
-  const galleryImages =
-    hoverGallery.length > 0
-      ? hoverGallery.slice(0, 4)
-      : [product?.image, product?.image].filter(Boolean);
+function ProductCard({ product, onAddToCart }) {
+  const productImages = useMemo(() => {
+    return getProductImageSet(product).slice(0, 2);
+  }, [product]);
+  const primaryImage = productImages[0] || "";
+  const secondaryImage = productImages[1] || "";
+  const priceLabel = getProductPriceLabel(product);
+  const actionLabel =
+    String(product?.priceType || "single").toLowerCase() === "tba"
+      ? "View details"
+      : String(product?.marketplaceType || "simple").toLowerCase() === "variable"
+        ? "Select options"
+        : "Add to cart";
 
   const preventDefault = (event) => event.preventDefault();
 
@@ -728,9 +874,9 @@ function ProductCard({ product }) {
 
           <div className="product-buttons">
             <div className="product-button product-quickview">
-              <a href="#" onClick={preventDefault} aria-label="Quick view">
+              <Link to={product.href} aria-label="Quick view">
                 <i className="klb-icon-eye" />
-              </a>
+              </Link>
             </div>
             <div className="product-button product-compare">
               <Link to="/compare" className="klbcp-btn">
@@ -741,32 +887,31 @@ function ProductCard({ product }) {
 
           <div className="product-thumbnail">
             <Link to={product.href}>
-              <div className="product-card-carousel">
-                <div className="hover-gallery-slider">
-                  {galleryImages.map((src, idx) => (
-                    <div key={idx} className="hover-gallery-item">
-                      <img decoding="async" src={src} alt="" />
-                    </div>
-                  ))}
-                </div>
+              {secondaryImage ? (
                 <img
                   decoding="async"
-                  src={product.image}
+                  src={secondaryImage}
                   alt={product.title}
-                  className="wp-post-image"
+                  className="product-second-image"
                 />
-              </div>
+              ) : null}
+              <img
+                decoding="async"
+                src={primaryImage}
+                alt={product.title}
+                className="wp-post-image"
+              />
             </Link>
           </div>
 
           <div className="product-cart-button">
-            <Link
-              to="/cart"
+            <button
+              type="button"
               className="button product_type_simple add_to_cart_button ajax_add_to_cart"
-              role="button"
+              onClick={() => onAddToCart?.(product)}
             >
-              Add to cart
-            </Link>
+              {actionLabel}
+            </button>
             <span className="screen-reader-text" />
           </div>
         </div>
@@ -789,7 +934,7 @@ function ProductCard({ product }) {
             <h2 className="product-title">
               <Link to={product.href}>{product.title}</Link>
             </h2>
-            <span className="price">{product.price}</span>
+            <span className="price">{priceLabel}</span>
           </div>
 
           <div className="product-buttons">
@@ -956,7 +1101,7 @@ function SiteFooter({ settings }) {
   );
 }
 
-function MobileBottomNav() {
+function MobileBottomNav({ accountHref = "/login" }) {
   return (
     <div className="klb-mobile-bottom site-mobile-navbar">
       <div className="site-mobile-navbar-inner">
@@ -984,7 +1129,7 @@ function MobileBottomNav() {
             </li>
 
             <li className="menu-item">
-              <Link to="/login">
+              <Link to={accountHref}>
                 <i className="klb-icon-user-line" />
                 <span>ACCOUNT</span>
               </Link>
@@ -1005,14 +1150,191 @@ function MobileBottomNav() {
 
 export default function Demo03Home() {
   useDemo03Assets(true);
+  const navigate = useNavigate();
   const settings = useSelector(selectPublicSettings);
+  const { user } = useAuth();
+  const { cartCount, addToCart } = useCart();
   const [activeTab, setActiveTab] = useState("headphones");
-  const products = useMemo(() => PRODUCT_DEMOS[activeTab] || [], [activeTab]);
+  const [publicProducts, setPublicProducts] = useState([]);
+  const [publicCategories, setPublicCategories] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadStorefrontData = async () => {
+      const [productResponse, categoryResponse] = await Promise.allSettled([
+        axios.get(`${baseUrl}/products/public`),
+        axios.get(`${baseUrl}/categories/public`),
+      ]);
+
+      if (!mounted) return;
+
+      setPublicProducts(
+        productResponse.status === "fulfilled" &&
+          Array.isArray(productResponse.value.data?.products)
+          ? productResponse.value.data.products
+          : [],
+      );
+
+      setPublicCategories(
+        categoryResponse.status === "fulfilled" &&
+          Array.isArray(categoryResponse.value.data?.categories)
+          ? categoryResponse.value.data.categories
+          : [],
+      );
+    };
+
+    loadStorefrontData();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const productsByCategoryId = useMemo(() => {
+    const groupedProducts = new Map();
+
+    publicProducts.forEach((product) => {
+      const categoryId =
+        typeof product?.category === "string" ? product.category : product?.category?._id;
+      if (!categoryId) return;
+      const currentItems = groupedProducts.get(categoryId) || [];
+      currentItems.push(product);
+      groupedProducts.set(categoryId, currentItems);
+    });
+
+    return groupedProducts;
+  }, [publicProducts]);
+
+  const normalizeProductForCard = (product) => {
+    const resolvedImages = getProductImageSet(product);
+    const categoryName =
+      typeof product?.category === "object" ? product.category?.name : product?.categoryName || "";
+
+    return {
+      ...product,
+      id: product?._id || product?.id,
+      href: product?._id ? `/product/${product._id}` : product?.href || "/shop",
+      image: resolvedImages[0] || "",
+      gallery: resolvedImages.slice(1),
+      brand: [categoryName, product?.brand].filter(Boolean),
+      rating: Number(product?.ratingAverage ?? product?.rating ?? 0).toFixed(2),
+      price: getProductPriceLabel(product),
+      rawProduct: product,
+    };
+  };
+
+  const categorySlides = useMemo(() => {
+    const dynamicSlides = [...publicCategories]
+      .filter((category) => productsByCategoryId.has(category._id))
+      .sort(
+        (left, right) =>
+          Number(productsByCategoryId.get(right._id)?.length || 0) -
+          Number(productsByCategoryId.get(left._id)?.length || 0),
+      )
+      .slice(0, 8)
+      .map((category) => {
+        const linkedProducts = productsByCategoryId.get(category._id) || [];
+        const fallbackProductImage = linkedProducts
+          .map((product) => getProductImageSet(product)[0] || "")
+          .find(Boolean);
+        const categoryImage =
+          resolveMediaUrl(category.image) ||
+          fallbackProductImage ||
+          CATEGORY_ART_FALLBACKS.get(normalizeKey(category.name)) ||
+          CATEGORY_SLIDES[0]?.image ||
+          "";
+
+        return {
+          id: category._id,
+          title: category.name,
+          count: `${linkedProducts.length} Product${linkedProducts.length === 1 ? "" : "s"}`,
+          href: `/shop?category=${category._id}`,
+          image: categoryImage,
+        };
+      });
+
+    return dynamicSlides.length > 0 ? dynamicSlides : CATEGORY_SLIDES;
+  }, [publicCategories, productsByCategoryId]);
+
+  const productTabGroups = useMemo(() => {
+    const dynamicGroups = [...publicCategories]
+      .filter((category) => productsByCategoryId.has(category._id))
+      .sort(
+        (left, right) =>
+          Number(productsByCategoryId.get(right._id)?.length || 0) -
+          Number(productsByCategoryId.get(left._id)?.length || 0),
+      )
+      .slice(0, 4)
+      .map((category) => ({
+        id: category._id,
+        label: category.name,
+        products: (productsByCategoryId.get(category._id) || []).map(normalizeProductForCard),
+      }))
+      .filter((group) => group.products.length > 0);
+
+    if (dynamicGroups.length > 0) {
+      return dynamicGroups;
+    }
+
+    return PRODUCT_TABS.map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      products: (PRODUCT_DEMOS[tab.id] || []).map((product) => ({
+        ...product,
+        price: getProductPriceLabel(product),
+      })),
+    }));
+  }, [publicCategories, productsByCategoryId]);
+
+  useEffect(() => {
+    if (productTabGroups.length === 0) return;
+    const hasActiveTab = productTabGroups.some((group) => group.id === activeTab);
+    if (!hasActiveTab) {
+      setActiveTab(productTabGroups[0].id);
+    }
+  }, [activeTab, productTabGroups]);
+
+  const products = useMemo(
+    () => productTabGroups.find((group) => group.id === activeTab)?.products || [],
+    [activeTab, productTabGroups],
+  );
+
+  const featuredCategoryLinks = useMemo(
+    () =>
+      categorySlides.slice(0, 2).map((category) => ({
+        label: category.title,
+        path: category.href,
+      })),
+    [categorySlides],
+  );
+
+  const accountHref = user ? "/dashboard" : "/login";
+  const accountLabel = user ? "Dashboard" : "Account";
+
+  const handleHomeProductAction = async (product) => {
+    const rawProduct = product?.rawProduct || product;
+    const isVariable = String(rawProduct?.marketplaceType || "simple").toLowerCase() === "variable";
+    const isTba = String(rawProduct?.priceType || "single").toLowerCase() === "tba";
+    const hasLiveProductId = Boolean(String(rawProduct?._id || "").trim());
+
+    if (!hasLiveProductId || isVariable || isTba) {
+      navigate(product?.href || (rawProduct?._id ? `/product/${rawProduct._id}` : "/shop"));
+      return;
+    }
+
+    await addToCart(rawProduct, 1, "", "", { unitPrice: Number(rawProduct?.salePrice || rawProduct?.price || 0) });
+  };
 
   return (
     <div id="page" className="page-content">
-      <SiteHeader settings={settings} />
-
+      <SiteHeader
+        settings={settings}
+        cartCount={cartCount}
+        accountHref={accountHref}
+        accountLabel={accountLabel}
+        featuredCategoryLinks={featuredCategoryLinks}
+      />
       <div id="main" className="main-content">
         <Demo03Carousel
           items={HERO_SLIDES}
@@ -1062,7 +1384,7 @@ export default function Demo03Home() {
 
         <div className="container section-margin">
           <Demo03Carousel
-            items={CATEGORY_SLIDES}
+            items={categorySlides}
             renderItem={(category) => (
               <div className="site-category-block style-1 category-bg-gray">
                 <div className="category-block-header">
@@ -1073,7 +1395,7 @@ export default function Demo03Home() {
                   <Link to={category.href} className="image-padding">
                     <img
                       decoding="async"
-                      src={category.image}
+                      src={resolveMediaUrl(category.image)}
                       alt={category.title}
                     />
                   </Link>
@@ -1223,7 +1545,7 @@ export default function Demo03Home() {
               <div className="column">
                 <div className="site-module-tabs style-1">
                   <ul>
-                    {PRODUCT_TABS.map((tab) => (
+                    {productTabGroups.map((tab) => (
                       <li key={tab.id}>
                         <a
                           className={`header-tab-link${activeTab === tab.id ? " active" : ""}`}
@@ -1247,7 +1569,7 @@ export default function Demo03Home() {
                 items={products}
                 renderItem={(product) => (
                   <div className="product">
-                    <ProductCard product={product} />
+                    <ProductCard product={product} onAddToCart={handleHomeProductAction} />
                   </div>
                 )}
                 className="carousel-style products has-overflow"
@@ -1260,8 +1582,10 @@ export default function Demo03Home() {
                 dotsTablet={false}
                 dotsMobile={false}
                 autoplay
-                autoplayMs={1600}
-                loop={false}
+                autoplayDirection="prev"
+                autoplayMs={12000}
+                scrollPerPage
+                loop
               />
             </div>
           </div>
@@ -1505,7 +1829,7 @@ export default function Demo03Home() {
       </div>
 
       <SiteFooter settings={settings} />
-      <MobileBottomNav />
+      <MobileBottomNav accountHref={accountHref} />
     </div>
   );
 }

@@ -10,7 +10,8 @@ const baseUrl = import.meta.env.VITE_API_URL;
 function CreateCategory() {
   const [categoryName, setCategoryName] = useState("");
   const [categoryType, setCategoryType] = useState("General");
-  const [categoryImage, setCategoryImage] = useState("");
+  const [categoryImageFile, setCategoryImageFile] = useState(null);
+  const [categoryImagePreview, setCategoryImagePreview] = useState("");
   const [commissionType, setCommissionType] = useState("inherit");
   const [commissionValue, setCommissionValue] = useState("");
   const [commissionFixed, setCommissionFixed] = useState("");
@@ -25,6 +26,38 @@ function CreateCategory() {
     "Best Selling",
     "Latest",
   ];
+
+  const handleCategoryImageChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/jpg",
+      "image/webp",
+      "image/gif",
+    ];
+
+    if (!validTypes.includes(file.type)) {
+      toast.error("Invalid file type. Only JPG, PNG, WebP, GIF allowed.");
+      event.target.value = "";
+      return;
+    }
+
+    setCategoryImageFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCategoryImagePreview(String(reader.result || ""));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeCategoryImage = () => {
+    setCategoryImageFile(null);
+    setCategoryImagePreview("");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,30 +94,31 @@ function CreateCategory() {
         return;
       }
 
-      const response = await axios.post(
-        `${baseUrl}/categories`,
-        {
-          name: categoryName,
-          type: categoryType,
-          image: categoryImage.trim(),
-          commissionType,
-          commissionValue: Number(commissionValue || 0),
-          commissionFixed: Number(commissionFixed || 0),
-          isActive: true,
+      const formData = new FormData();
+      formData.append("name", categoryName);
+      formData.append("type", categoryType);
+      formData.append("commissionType", commissionType);
+      formData.append("commissionValue", String(Number(commissionValue || 0)));
+      formData.append("commissionFixed", String(Number(commissionFixed || 0)));
+      formData.append("isActive", "true");
+
+      if (categoryImageFile) {
+        formData.append("image", categoryImageFile);
+      }
+
+      const response = await axios.post(`${baseUrl}/categories`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      });
 
       if (response.data.success) {
         // Reset form
         setCategoryName("");
         setCategoryType("General");
-        setCategoryImage("");
+        setCategoryImageFile(null);
+        setCategoryImagePreview("");
         setCommissionType("inherit");
         setCommissionValue("");
         setCommissionFixed("");
@@ -215,31 +249,37 @@ function CreateCategory() {
             </div>
 
             <div className="mb-4">
-              <label
-                htmlFor="categoryImage"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Category Image URL
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Category Image
               </label>
-              <input
-                type="url"
-                id="categoryImage"
-                value={categoryImage}
-                onChange={(e) => setCategoryImage(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-base md:text-lg"
-                placeholder="https://example.com/category-image.png"
-                autoComplete="off"
-              />
+              <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-100">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/jpg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleCategoryImageChange}
+                />
+                Upload image
+              </label>
               <p className="mt-1 text-xs text-gray-500">
-                Optional. This image will be used on the demo home category rail.
+                Optional. This image will be uploaded to Cloudinary and used on the demo home category rail.
               </p>
-              {categoryImage.trim() ? (
-                <div className="mt-3 h-24 w-24 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
-                  <img
-                    src={categoryImage}
-                    alt="Category preview"
-                    className="h-full w-full object-cover"
-                  />
+              {categoryImagePreview ? (
+                <div className="mt-3 flex items-start gap-3">
+                  <div className="h-24 w-24 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                    <img
+                      src={categoryImagePreview}
+                      alt="Category preview"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={removeCategoryImage}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  >
+                    Remove
+                  </button>
                 </div>
               ) : null}
             </div>

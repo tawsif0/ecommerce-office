@@ -30,9 +30,9 @@ const formatPrice = (product) => {
   const pricing = getProductPricingDisplay(product);
   if (pricing.isTba) return "TBA";
   if (pricing.hasDiscount) {
-    return `${Number(pricing.currentPrice || 0).toFixed(2)} TK`;
+    return `${Number(pricing.currentPrice || 0).toFixed(2)} Tk`;
   }
-  return `${Number(pricing.currentPrice || 0).toFixed(2)} TK`;
+  return `${Number(pricing.currentPrice || 0).toFixed(2)} Tk`;
 };
 
 const CompareProducts = () => {
@@ -53,11 +53,11 @@ const CompareProducts = () => {
           <div className="space-y-1">
             {pricing.hasDiscount ? (
               <p className="text-xs text-gray-400 line-through">
-                {Number(pricing.previousPrice || 0).toFixed(2)} TK
+                {Number(pricing.previousPrice || 0).toFixed(2)} Tk
               </p>
             ) : null}
             <p className="text-base font-bold text-black">
-              {Number(pricing.currentPrice || 0).toFixed(2)} TK
+              {Number(pricing.currentPrice || 0).toFixed(2)} Tk
             </p>
           </div>
         );

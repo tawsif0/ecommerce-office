@@ -89,7 +89,7 @@ const getFullImageUrl = (imagePath) => {
   return null;
 };
 
-const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} TK`;
+const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} Tk`;
 
 // Image component with fallback (same as in CheckOut)
 const ProductImage = ({ src, alt, className }) => {

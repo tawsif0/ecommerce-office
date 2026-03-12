@@ -120,7 +120,7 @@ const AdminProductApprovals = () => {
 
                 <div className="lg:col-span-2 text-sm text-gray-700">
                   <p>Price</p>
-                  <p className="font-semibold">{Number(product.price || 0).toFixed(2)} TK</p>
+                  <p className="font-semibold">{Number(product.price || 0).toFixed(2)} Tk</p>
                 </div>
 
                 <div className="lg:col-span-3">

@@ -241,7 +241,7 @@ const AdminVendors = () => {
               globalCommission.commissionType === "percentage"
             }
             className="px-3 py-2 border border-gray-200 rounded-lg disabled:bg-gray-100"
-            placeholder="Fixed TK"
+            placeholder="Fixed Tk"
           />
           <button
             onClick={saveGlobalCommission}

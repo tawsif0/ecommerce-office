@@ -255,15 +255,15 @@ const ModulePurchases = () => {
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Total Amount</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalAmount || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalAmount || 0).toFixed(2)} Tk</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Paid</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.paidAmount || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.paidAmount || 0).toFixed(2)} Tk</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Due</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.dueAmount || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.dueAmount || 0).toFixed(2)} Tk</p>
         </div>
       </div>
 
@@ -406,7 +406,7 @@ const ModulePurchases = () => {
           </div>
 
           <div className="rounded-lg border border-gray-200 px-3 py-2.5 bg-gray-50 text-sm text-gray-700">
-            Estimated total: <span className="font-semibold text-black">{computedTotal.toFixed(2)} TK</span>
+            Estimated total: <span className="font-semibold text-black">{computedTotal.toFixed(2)} Tk</span>
           </div>
 
           <button
@@ -463,10 +463,10 @@ const ModulePurchases = () => {
                           : "-"}
                       </td>
                       <td className="py-3 pr-3 font-semibold text-black">
-                        {Number(purchase.totalAmount || 0).toFixed(2)} TK
+                        {Number(purchase.totalAmount || 0).toFixed(2)} Tk
                       </td>
-                      <td className="py-3 pr-3">{Number(purchase.paidAmount || 0).toFixed(2)} TK</td>
-                      <td className="py-3 pr-3">{Number(purchase.dueAmount || 0).toFixed(2)} TK</td>
+                      <td className="py-3 pr-3">{Number(purchase.paidAmount || 0).toFixed(2)} Tk</td>
+                      <td className="py-3 pr-3">{Number(purchase.dueAmount || 0).toFixed(2)} Tk</td>
                       <td className="py-3 pr-3">
                         <button
                           onClick={() => addPayment(purchase)}

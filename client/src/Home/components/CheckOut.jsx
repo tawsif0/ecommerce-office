@@ -940,87 +940,7 @@ const CheckOut = () => {
           <FiChevronLeft />
           Back to cart
         </button>
-
-        <div className="mb-8 overflow-hidden rounded-[30px] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
-          <div className="grid gap-0 lg:grid-cols-[1.35fr,0.85fr]">
-            <div className="p-6 md:p-8 lg:p-10">
-              <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white">
-                Secure Checkout
-              </span>
-              <h1 className="mt-5 text-3xl font-bold tracking-tight text-black md:text-4xl">
-                Finalize delivery, payment, and coupon details in one place.
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600 md:text-base">
-                This checkout keeps payment method selection, shipping estimates,
-                and guest order handling aligned for Bangladesh ecommerce flow.
-              </p>
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Products
-                  </p>
-                  <p className="mt-2 text-2xl font-bold text-black">{cartItems.length}</p>
-                  <p className="mt-1 text-xs text-gray-500">Distinct products</p>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Units
-                  </p>
-                  <p className="mt-2 text-2xl font-bold text-black">{totalUnits}</p>
-                  <p className="mt-1 text-xs text-gray-500">Total quantity ordered</p>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Payable Now
-                  </p>
-                  <p className="mt-2 text-2xl font-bold text-black">
-                    {formatCurrency(total)}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Includes live coupon and shipping estimate
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 bg-[radial-gradient(circle_at_top_left,_rgba(0,0,0,0.08),_transparent_60%),linear-gradient(135deg,_#111111_0%,_#2a2a2a_100%)] p-6 text-white md:p-8 lg:border-l lg:border-t-0 lg:p-10">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
-                Checkout Steps
-              </p>
-              <div className="mt-5 space-y-3">
-                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <FiMapPin className="mt-0.5 h-5 w-5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold">1. Address</p>
-                    <p className="mt-1 text-xs leading-5 text-white/70">
-                      Collects customer and shipping destination details.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <FiCreditCard className="mt-0.5 h-5 w-5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold">2. Payment</p>
-                    <p className="mt-1 text-xs leading-5 text-white/70">
-                      Supports manual proof, cash on delivery, and external gateways.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <FiCheckCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold">3. Confirmation</p>
-                    <p className="mt-1 text-xs leading-5 text-white/70">
-                      Places the order or redirects to gateway based on payment type.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+ 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.85fr)]">
           <form onSubmit={handleSubmitOrder} className="space-y-6">
             <div className={sectionCardClass}>
@@ -1512,46 +1432,7 @@ const CheckOut = () => {
               </div>
             </div>
 
-            <div className={sectionCardClass}>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
-                Buyer Protection
-              </p>
-              <div className="mt-4 space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
-                    <FiShield className="h-5 w-5 text-black" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-black">Validated order data</p>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Address, coupon, payment method, and item totals are validated before order creation.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
-                    <FiTruck className="h-5 w-5 text-black" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-black">Bangladesh delivery estimate</p>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Shipping is estimated using vendor rules and your selected city or district.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
-                    <FiTag className="h-5 w-5 text-black" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-black">Coupon-aware payment</p>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Applied discount and free-delivery rules are recalculated before submit.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+          
           </div>
         </div>
       </div>

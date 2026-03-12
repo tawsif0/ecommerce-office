@@ -3531,3 +3531,108 @@ section.up-sells + section.related {
     margin-left: -1rem;
     margin-right: -0.375rem;
 }
+
+/* Demo03Carousel (React) fixes */
+.site-slider .slick-track:before,
+.site-slider .slick-track:after {
+    content: none;
+    display: none;
+}
+
+.site-slider.carousel-style.products {
+    max-width: 100%;
+}
+
+/* Ensure slider arrows are visible/clickable */
+.slick-slider.slider-style .slick-nav {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    -webkit-transform: translateX(0);
+    transform: translateX(0);
+}
+
+@media (hover: none), (pointer: coarse) {
+    .site-slider .slick-nav {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        -webkit-transform: translateX(0);
+        transform: translateX(0);
+    }
+}
+
+/* Arrow contrast */
+.site-slider .slick-nav {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+}
+
+.site-slider .slick-nav svg * {
+    stroke: #000000 !important;
+}
+
+.demo03-scope .site-slider .slick-nav {
+    color: #000000 !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 244, 246, 0.96)) !important;
+    border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+.demo03-scope .site-slider .slick-nav svg {
+    display: none !important;
+}
+
+.demo03-scope .site-slider .slick-nav::before {
+    content: "";
+    display: block;
+    width: 0.78rem;
+    height: 0.78rem;
+    background: none !important;
+    border-top: 2.4px solid #000000;
+    border-right: 2.4px solid #000000;
+    border-radius: 1px;
+}
+
+.demo03-scope .site-slider .slick-nav.slick-prev::before {
+    transform: rotate(-135deg);
+}
+
+.demo03-scope .site-slider .slick-nav.slick-next::before {
+    transform: rotate(45deg);
+}
+
+.demo03-scope .slick-slider.slider-style .slick-nav {
+    top: auto !important;
+    bottom: 4.75rem !important;
+    width: 3.25rem !important;
+    height: 3.25rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.24) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    z-index: 4 !important;
+    transform: none !important;
+}
+
+.demo03-scope .slick-slider.slider-style .slick-prev {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-125%) !important;
+}
+
+.demo03-scope .slick-slider.slider-style .slick-next {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(25%) !important;
+}
+
+.demo03-scope .slick-slider.slider-style .slick-nav::before {
+    width: 0.92rem;
+    height: 0.92rem;
+    border-top-width: 2.6px;
+    border-right-width: 2.6px;
+}

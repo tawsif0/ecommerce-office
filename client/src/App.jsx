@@ -47,6 +47,7 @@ const Register = lazy(() => import("./pages/Registration"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Demo03Home = lazy(() => import("./Home/pages/Demo03Home"));
+const MarketplaceHomeFloors = lazy(() => import("./Home/pages/MarketplaceHomeFloors"));
 const FAQ = lazy(() => import("./Home/pages/FAQ"));
 const Contact = lazy(() => import("./Home/pages/Contact"));
 const ProductDetails = lazy(() => import("./Home/subPages/ProductDetails"));
@@ -107,22 +108,20 @@ function DashboardTabRedirect({ tab }) {
 
 // Layout component for public pages (with Navbar and Footer)
 function PublicLayout() {
-  const location = useLocation();
-  const isDemoHome = location.pathname === "/";
-  const hidePublicFooter = isDemoHome;
-
   return (
     <>
-      {!isDemoHome && <Navbar />}
+      <Navbar />
       <HashScrollHandler />
-      <main className={hidePublicFooter ? undefined : "min-h-screen"}>
+      <main className="min-h-screen">
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             {/* Redirect all root paths to home */}
             <Route path="/" element={<HomePage />} />
-            <Route path="/home" element={<Navigate to="/" replace />} />
+            <Route path="/home" element={<MarketplaceHomeFloors />} />
             <Route path="/index" element={<Navigate to="/" replace />} />
             <Route path="/index.html" element={<Navigate to="/" replace />} />
+            <Route path="/demo03" element={<Demo03Home />} />
+            <Route path="/demo03-home" element={<Demo03Home />} />
 
             {/* Shop / product listing */}
             <Route path="/shop" element={<ProductGrid />} />
@@ -170,7 +169,7 @@ function PublicLayout() {
           </Routes>
         </Suspense>
       </main>
-      {!hidePublicFooter && <Footer />}
+      <Footer />
     </>
   );
 }

@@ -216,21 +216,21 @@ const ModuleAccounts = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Total Income</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalIncome || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalIncome || 0).toFixed(2)} Tk</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Total Expense</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalExpense || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalExpense || 0).toFixed(2)} Tk</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Net Profit</p>
           <p className={`text-2xl font-bold mt-1 ${Number(summary.netProfit || 0) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-            {Number(summary.netProfit || 0).toFixed(2)} TK
+            {Number(summary.netProfit || 0).toFixed(2)} Tk
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Supplier Due</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.supplierDue || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.supplierDue || 0).toFixed(2)} Tk</p>
         </div>
       </div>
 
@@ -238,31 +238,31 @@ const ModuleAccounts = () => {
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-500">Fund Transfer</p>
           <p className="text-lg font-bold text-black mt-1">
-            {Number(summary?.breakdownByType?.fund_transfer || 0).toFixed(2)} TK
+            {Number(summary?.breakdownByType?.fund_transfer || 0).toFixed(2)} Tk
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-500">Salary</p>
           <p className="text-lg font-bold text-black mt-1">
-            {Number(summary?.breakdownByType?.salary || 0).toFixed(2)} TK
+            {Number(summary?.breakdownByType?.salary || 0).toFixed(2)} Tk
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-500">Bills</p>
           <p className="text-lg font-bold text-black mt-1">
-            {Number(summary?.breakdownByType?.bill || 0).toFixed(2)} TK
+            {Number(summary?.breakdownByType?.bill || 0).toFixed(2)} Tk
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-500">Vendor Payout</p>
           <p className="text-lg font-bold text-black mt-1">
-            {Number(summary?.breakdownByType?.payout || 0).toFixed(2)} TK
+            {Number(summary?.breakdownByType?.payout || 0).toFixed(2)} Tk
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-500">Manual Balance</p>
           <p className="text-lg font-bold text-black mt-1">
-            {Number(summary?.manualBalance || 0).toFixed(2)} TK
+            {Number(summary?.manualBalance || 0).toFixed(2)} Tk
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
@@ -272,7 +272,7 @@ const ModuleAccounts = () => {
               Number(summary?.currentBalance || 0) >= 0 ? "text-emerald-600" : "text-red-600"
             }`}
           >
-            {Number(summary?.currentBalance || 0).toFixed(2)} TK
+            {Number(summary?.currentBalance || 0).toFixed(2)} Tk
           </p>
         </div>
       </div>
@@ -402,7 +402,7 @@ const ModuleAccounts = () => {
                       <td className="py-3 pr-3 font-semibold text-black">
                         <span className="inline-flex items-center gap-1">
                           <FiDollarSign className="w-4 h-4" />
-                          {Number(entry.amount || 0).toFixed(2)} TK
+                          {Number(entry.amount || 0).toFixed(2)} Tk
                         </span>
                       </td>
                       <td className="py-3 pr-3">

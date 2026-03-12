@@ -14,7 +14,8 @@ function ModifyCategory() {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("General");
-  const [editImage, setEditImage] = useState("");
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImagePreview, setEditImagePreview] = useState("");
   const [editCommissionType, setEditCommissionType] = useState("inherit");
   const [editCommissionValue, setEditCommissionValue] = useState("");
   const [editCommissionFixed, setEditCommissionFixed] = useState("");
@@ -29,6 +30,38 @@ function ModifyCategory() {
     "Best Selling",
     "Latest",
   ];
+
+  const handleEditImageChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/jpg",
+      "image/webp",
+      "image/gif",
+    ];
+
+    if (!validTypes.includes(file.type)) {
+      toast.error("Invalid file type. Only JPG, PNG, WebP, GIF allowed.");
+      event.target.value = "";
+      return;
+    }
+
+    setEditImageFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditImagePreview(String(reader.result || ""));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearEditImageSelection = () => {
+    setEditImageFile(null);
+    setEditImagePreview("");
+  };
 
   const fetchCategories = async () => {
     try {
@@ -104,7 +137,8 @@ function ModifyCategory() {
     setEditingId(category._id);
     setEditName(category.name);
     setEditType(category.type || "General");
-    setEditImage(category.image || "");
+    setEditImageFile(null);
+    setEditImagePreview(category.image || "");
     setEditCommissionType(category.commissionType || "inherit");
     setEditCommissionValue(String(category.commissionValue ?? ""));
     setEditCommissionFixed(String(category.commissionFixed ?? ""));
@@ -115,7 +149,8 @@ function ModifyCategory() {
     setEditingId(null);
     setEditName("");
     setEditType("General");
-    setEditImage("");
+    setEditImageFile(null);
+    setEditImagePreview("");
     setEditCommissionType("inherit");
     setEditCommissionValue("");
     setEditCommissionFixed("");
@@ -136,23 +171,23 @@ function ModifyCategory() {
     try {
       const token = localStorage.getItem("token");
 
-      const response = await axios.put(
-        `${baseUrl}/categories/${id}`,
-        {
-          name: editName,
-          type: editType,
-          image: editImage.trim(),
-          commissionType: editCommissionType,
-          commissionValue: Number(editCommissionValue || 0),
-          commissionFixed: Number(editCommissionFixed || 0),
+      const formData = new FormData();
+      formData.append("name", editName);
+      formData.append("type", editType);
+      formData.append("commissionType", editCommissionType);
+      formData.append("commissionValue", String(Number(editCommissionValue || 0)));
+      formData.append("commissionFixed", String(Number(editCommissionFixed || 0)));
+
+      if (editImageFile) {
+        formData.append("image", editImageFile);
+      }
+
+      const response = await axios.put(`${baseUrl}/categories/${id}`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      });
 
       if (response.data.success) {
         setCategories(
@@ -163,7 +198,8 @@ function ModifyCategory() {
         setEditingId(null);
         setEditName("");
         setEditType("General");
-        setEditImage("");
+        setEditImageFile(null);
+        setEditImagePreview("");
         setEditCommissionType("inherit");
         setEditCommissionValue("");
         setEditCommissionFixed("");
@@ -288,16 +324,18 @@ function ModifyCategory() {
                     <div>
                       <div className="flex flex-col gap-3 mb-3">
                         <div className="w-full">
-                          <input
-                            type="url"
-                            value={editImage}
-                            onChange={(e) => setEditImage(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
-                            placeholder="Category image URL"
-                          />
+                          <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-100">
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/jpg,image/webp,image/gif"
+                              className="hidden"
+                              onChange={handleEditImageChange}
+                            />
+                            Upload new image
+                          </label>
                         </div>
                         <div className="flex flex-col md:flex-row md:items-center gap-3">
-                        <div className="flex-1">
+                          <div className="flex-1">
                           <input
                             type="text"
                             value={editName}
@@ -314,10 +352,10 @@ function ModifyCategory() {
                             placeholder="Category name"
                             autoFocus
                           />
-                        </div>
-                        <div className="w-full md:w-auto">
-                          <select
-                            value={editType}
+                          </div>
+                          <div className="w-full md:w-auto">
+                            <select
+                              value={editType}
                             onChange={(e) => setEditType(e.target.value)}
                             className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
                           >
@@ -327,10 +365,10 @@ function ModifyCategory() {
                               </option>
                             ))}
                           </select>
-                        </div>
-                        <div className="w-full md:w-auto">
-                          <select
-                            value={editCommissionType}
+                          </div>
+                          <div className="w-full md:w-auto">
+                            <select
+                              value={editCommissionType}
                             onChange={(e) => setEditCommissionType(e.target.value)}
                             className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
                           >
@@ -339,10 +377,10 @@ function ModifyCategory() {
                             <option value="fixed">Fixed</option>
                             <option value="hybrid">Hybrid</option>
                           </select>
-                        </div>
-                        <div className="w-full md:w-32">
-                          <input
-                            type="number"
+                          </div>
+                          <div className="w-full md:w-32">
+                            <input
+                              type="number"
                             min="0"
                             step="0.01"
                             value={editCommissionValue}
@@ -354,10 +392,10 @@ function ModifyCategory() {
                             }
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900 disabled:bg-gray-100"
                           />
-                        </div>
-                        <div className="w-full md:w-36">
-                          <input
-                            type="number"
+                          </div>
+                          <div className="w-full md:w-36">
+                            <input
+                              type="number"
                             min="0"
                             step="0.01"
                             value={editCommissionFixed}
@@ -369,10 +407,10 @@ function ModifyCategory() {
                             }
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900 disabled:bg-gray-100"
                           />
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                          <button
-                            onClick={() => handleUpdate(category._id)}
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                            <button
+                              onClick={() => handleUpdate(category._id)}
                             className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
                           >
                             Save
@@ -380,18 +418,29 @@ function ModifyCategory() {
                           <button
                             onClick={cancelEditing}
                             className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 text-gray-700 transition-colors duration-200"
-                          >
-                            Cancel
-                          </button>
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                        {editImage.trim() ? (
-                          <div className="h-20 w-20 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
-                            <img
-                              src={editImage}
-                              alt={`${editName || category.name} preview`}
-                              className="h-full w-full object-cover"
-                            />
+                        {editImagePreview ? (
+                          <div className="flex items-start gap-3">
+                            <div className="h-20 w-20 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                              <img
+                                src={editImagePreview}
+                                alt={`${editName || category.name} preview`}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            {editImageFile ? (
+                              <button
+                                type="button"
+                                onClick={clearEditImageSelection}
+                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                              >
+                                Remove selection
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>

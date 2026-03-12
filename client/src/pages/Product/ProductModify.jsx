@@ -158,10 +158,10 @@ function ProductModify({ initialMode = "list" }) {
       const previous = Number(product?.price || 0);
       const next = Number(product?.salePrice || 0);
       if (previous > 0 && next > 0) {
-        return `${previous.toFixed(2)} -> ${next.toFixed(2)} TK`;
+        return `${previous.toFixed(2)} -> ${next.toFixed(2)} Tk`;
       }
     }
-    return `${getEffectiveProductPrice(product).toFixed(2)} TK`;
+    return `${getEffectiveProductPrice(product).toFixed(2)} Tk`;
   };
 
   const getFullImageUrl = (imagePath) => {
@@ -1262,7 +1262,7 @@ function ProductModify({ initialMode = "list" }) {
                         form.priceType === "single" && (
                           <div>
                             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                              Price (TK) *
+                              Price (Tk) *
                             </label>
                             <input
                               type="number"
@@ -1288,7 +1288,7 @@ function ProductModify({ initialMode = "list" }) {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                             <div>
                               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                                Previous Price (TK) *
+                                Previous Price (Tk) *
                               </label>
                               <input
                                 type="number"
@@ -1309,7 +1309,7 @@ function ProductModify({ initialMode = "list" }) {
                             </div>
                             <div>
                               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                                New Price (TK) *
+                                New Price (Tk) *
                               </label>
                               <input
                                 type="number"
@@ -1378,7 +1378,7 @@ function ProductModify({ initialMode = "list" }) {
                       </div>
                       <div>
                         <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                          Fixed Commission (TK)
+                          Fixed Commission (Tk)
                         </label>
                         <input
                           type="number"

@@ -375,7 +375,7 @@ const HotDeals = () => {
                 return (
                   <div
                     key={product.id}
-                    className="group bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:shadow-xl sm:hover:shadow-2xl transition-all duration-300 overflow-hidden w-full h-[300px] sm:h-[330px] md:h-[350px] relative flex flex-col basis-[calc(33.333%-0.5rem)] sm:basis-[calc(33.333%-0.75rem)] md:basis-[calc(25%-0.75rem)] lg:basis-[calc(20%-0.75rem)]"
+                    className="group relative flex h-full w-full basis-[calc(33.333%-0.5rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-gray-300 hover:shadow-lg sm:basis-[calc(33.333%-0.75rem)] md:basis-[calc(25%-0.75rem)] lg:basis-[calc(20%-0.75rem)]"
                     style={{
                       animationDelay: `${index * 100}ms`,
                     }}
@@ -390,7 +390,7 @@ const HotDeals = () => {
 
                     {/* Product Image */}
                     <div
-                      className="relative overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2 sm:p-3 cursor-pointer"
+                      className="relative overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2 sm:p-2.5 cursor-pointer"
                       onClick={() => {
                         navigate(`/product/${product.id}`);
                         window.scrollTo(0, 0);
@@ -400,7 +400,7 @@ const HotDeals = () => {
                         <ProductImage
                           src={product.image}
                           alt={product.title}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
                         />
 
                         {/* Hot Overlay Effect */}
@@ -409,10 +409,10 @@ const HotDeals = () => {
                     </div>
 
                     {/* Product Info */}
-                    <div className="p-3 sm:p-4 flex flex-col flex-1">
+                    <div className="flex flex-1 flex-col px-3 py-2.5 text-left sm:px-4 sm:py-3">
                       <div className="space-y-1">
                         <h3
-                          className="font-semibold text-black line-clamp-2 text-xs sm:text-sm cursor-pointer hover:text-red-600 transition-colors leading-tight"
+                          className="line-clamp-2 cursor-pointer text-[13px] font-semibold leading-snug text-black transition-colors hover:text-red-600 sm:text-sm"
                           onClick={() => navigate(`/product/${product.id}`)}
                         >
                           {product.title}
@@ -451,25 +451,33 @@ const HotDeals = () => {
                       </div>
 
                       {/* Fixed Footer */}
-                      <div className="mt-auto pt-2 border-t border-gray-100 flex flex-col gap-2">
-                        <div>
+                      <div className="mt-auto flex flex-col gap-2 border-t border-gray-100 pt-2.5">
+                        <div className="flex items-baseline justify-start gap-2">
                           {pricing.isTba ? (
-                            <div className="text-sm sm:text-base font-semibold text-gray-700">
+                            <div className="text-base font-black text-gray-900 sm:text-lg">
                               TBA
                             </div>
                           ) : pricing.hasDiscount ? (
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs text-gray-500 line-through">
-                                ৳{Number(pricing.previousPrice || 0).toFixed(2)}
+                            <>
+                              <div className="text-xs text-gray-400 line-through sm:text-sm">
+                                {Number(pricing.previousPrice || 0).toFixed(2)} Tk
                               </div>
-                              <div className="text-sm sm:text-base font-bold text-red-600">
-                                ৳{Number(pricing.currentPrice || 0).toFixed(2)}
+                              <div className="text-base font-black text-black sm:text-lg">
+                                {Number(pricing.currentPrice || 0).toFixed(2)}
                               </div>
-                            </div>
+                              <div className="text-xs font-semibold text-gray-600 sm:text-sm">
+                                Tk
+                              </div>
+                            </>
                           ) : (
-                            <div className="text-sm sm:text-base font-bold text-red-600">
-                              ৳{Number(pricing.currentPrice || 0).toFixed(2)}
-                            </div>
+                            <>
+                              <div className="text-base font-black text-black sm:text-lg">
+                                {Number(pricing.currentPrice || 0).toFixed(2)}
+                              </div>
+                              <div className="text-xs font-semibold text-gray-600 sm:text-sm">
+                                Tk
+                              </div>
+                            </>
                           )}
                         </div>
 
@@ -478,10 +486,10 @@ const HotDeals = () => {
                             navigate(`/product/${product.id}`);
                             window.scrollTo(0, 0);
                           }}
-                          className="cursor-pointer w-full h-8 px-3 sm:px-4 bg-gray-600 text-white rounded-full text-xs sm:text-sm font-semibold hover:bg-gray-900 transition-colors flex items-center gap-1 sm:gap-2 justify-center"
+                          className="flex h-8 w-full items-center justify-center gap-1 rounded-none bg-gray-900 px-3 text-xs font-semibold text-white transition hover:bg-black sm:h-9 sm:gap-2 sm:text-sm"
                         >
                           <FiEye className="text-xs sm:text-sm" />
-                          <span className="xs:inline">View</span>
+                          <span>View Details</span>
                         </button>
                       </div>
                     </div>

@@ -90,7 +90,7 @@ const ProductImage = ({ src, alt, className }) => {
   );
 };
 
-const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} TK`;
+const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} Tk`;
 
 const AddToCart = () => {
   const navigate = useNavigate();
@@ -349,99 +349,7 @@ const AddToCart = () => {
           <FaArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
           <span>Back to Shopping</span>
         </button>
-
-        <div className="mb-8 overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
-          <div className="grid gap-0 lg:grid-cols-[1.35fr,0.85fr]">
-            <div className="p-6 md:p-8 lg:p-10">
-              <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white">
-                Marketplace Cart
-              </span>
-              <div className="mt-5 max-w-2xl">
-                <h1 className="text-3xl font-bold tracking-tight text-black md:text-4xl">
-                  Review products, lock your pricing, and move to checkout fast.
-                </h1>
-                <p className="mt-3 text-sm leading-6 text-gray-600 md:text-base">
-                  Your basket keeps coupon pricing synced, preserves product options,
-                  and prepares delivery across Bangladesh before payment.
-                </p>
-              </div>
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Products
-                  </p>
-                  <p className="mt-2 text-2xl font-bold text-black">{cartCount}</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Distinct items in cart
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Units
-                  </p>
-                  <p className="mt-2 text-2xl font-bold text-black">{totalUnits}</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Total quantities selected
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-[#fafafa] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Current Total
-                  </p>
-                  <p className="mt-2 text-2xl font-bold text-black">
-                    {formatCurrency(total)}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Coupon adjusts automatically
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 bg-[radial-gradient(circle_at_top_left,_rgba(0,0,0,0.08),_transparent_60%),linear-gradient(135deg,_#111111_0%,_#2a2a2a_100%)] p-6 text-white md:p-8 lg:border-l lg:border-t-0 lg:p-10">
-              <div className="max-w-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
-                  Checkout Benefits
-                </p>
-                <h2 className="mt-4 text-2xl font-semibold leading-tight">
-                  Built for quick ordering with fewer mistakes.
-                </h2>
-                <div className="mt-6 space-y-3">
-                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <FiShield className="mt-0.5 h-5 w-5 shrink-0 text-white" />
-                    <div>
-                      <p className="text-sm font-semibold">Protected checkout</p>
-                      <p className="mt-1 text-xs leading-5 text-white/70">
-                        Product options, quantities, and pricing stay aligned into the
-                        order flow.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <FiTruck className="mt-0.5 h-5 w-5 shrink-0 text-white" />
-                    <div>
-                      <p className="text-sm font-semibold">Bangladesh-ready delivery</p>
-                      <p className="mt-1 text-xs leading-5 text-white/70">
-                        Shipping is estimated later using destination and vendor rules.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <FiTag className="mt-0.5 h-5 w-5 shrink-0 text-white" />
-                    <div>
-                      <p className="text-sm font-semibold">Coupon-safe totals</p>
-                      <p className="mt-1 text-xs leading-5 text-white/70">
-                        Applied coupon discounts stay refreshed whenever your cart changes.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+     
         {cartItems.length === 0 ? (
           <div className="rounded-[28px] border border-dashed border-gray-300 bg-white p-10 text-center shadow-sm">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
@@ -710,36 +618,7 @@ const AddToCart = () => {
                   Continue Shopping
                 </button>
               </div>
-
-              <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
-                  Why buy here
-                </p>
-                <div className="mt-4 space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
-                      <FiShield className="h-5 w-5 text-black" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-black">Protected order flow</p>
-                      <p className="mt-1 text-xs leading-5 text-gray-500">
-                        Product options and price changes stay synced up to checkout.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
-                      <FiTruck className="h-5 w-5 text-black" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-black">Shipping in Bangladesh</p>
-                      <p className="mt-1 text-xs leading-5 text-gray-500">
-                        Delivery fee and timeline are estimated by your destination at checkout.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          
             </div>
           </div>
         )}
@@ -750,7 +629,7 @@ const AddToCart = () => {
         title="Remove item"
         message={`Are you sure you want to remove "${removeConfirm?.title || "this item"}" from your cart?`}
         confirmText={isRemoving ? "Removing..." : "Remove"}
-        cancelText="Cancel"
+        cancelText="Cancel" 
         onConfirm={confirmRemoveCartItem}
         onCancel={() => setRemoveConfirm(null)}
         isLoading={isRemoving}

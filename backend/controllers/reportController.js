@@ -676,7 +676,7 @@ const getColumnsForType = (type) => {
     profit: [
       { key: "metric", label: "Metric" },
       { key: "type", label: "Type" },
-      { key: "amount", label: "Amount (TK)", type: "currency" },
+      { key: "amount", label: "Amount (Tk)", type: "currency" },
       { key: "note", label: "Notes" },
     ],
     sales: [
@@ -685,23 +685,23 @@ const getColumnsForType = (type) => {
       { key: "customerName", label: "Customer" },
       { key: "customerPhone", label: "Phone" },
       { key: "orderStatus", label: "Status" },
-      { key: "amount", label: "Amount (TK)", type: "currency" },
+      { key: "amount", label: "Amount (Tk)", type: "currency" },
     ],
     purchases: [
       { key: "invoiceNumber", label: "Invoice" },
       { key: "purchaseDate", label: "Date", type: "date" },
       { key: "supplierName", label: "Supplier" },
       { key: "paymentStatus", label: "Payment Status" },
-      { key: "totalAmount", label: "Total (TK)", type: "currency" },
-      { key: "paidAmount", label: "Paid (TK)", type: "currency" },
-      { key: "dueAmount", label: "Due (TK)", type: "currency" },
+      { key: "totalAmount", label: "Total (Tk)", type: "currency" },
+      { key: "paidAmount", label: "Paid (Tk)", type: "currency" },
+      { key: "dueAmount", label: "Due (Tk)", type: "currency" },
     ],
     suppliers: [
       { key: "name", label: "Supplier" },
       { key: "phone", label: "Phone" },
       { key: "email", label: "Email" },
-      { key: "currentDue", label: "Current Due (TK)", type: "currency" },
-      { key: "totalPaid", label: "Total Paid (TK)", type: "currency" },
+      { key: "currentDue", label: "Current Due (Tk)", type: "currency" },
+      { key: "totalPaid", label: "Total Paid (Tk)", type: "currency" },
       { key: "isActive", label: "Active", type: "boolean" },
     ],
     stock: [
@@ -711,7 +711,7 @@ const getColumnsForType = (type) => {
       { key: "stock", label: "Stock", type: "number" },
       { key: "lowStockThreshold", label: "Low Stock Alert", type: "number" },
       { key: "priceType", label: "Price Type" },
-      { key: "regularPrice", label: "Price (TK)", type: "currency" },
+      { key: "regularPrice", label: "Price (Tk)", type: "currency" },
     ],
     abandoned: [
       { key: "capturedAt", label: "Captured", type: "date" },
@@ -720,7 +720,7 @@ const getColumnsForType = (type) => {
       { key: "status", label: "Status" },
       { key: "source", label: "Source" },
       { key: "itemCount", label: "Items", type: "number" },
-      { key: "total", label: "Value (TK)", type: "currency" },
+      { key: "total", label: "Value (Tk)", type: "currency" },
     ],
     risk: [
       { key: "customerName", label: "Customer" },

@@ -110,7 +110,7 @@ const formatCell = (value, type = "") => {
   }
 
   if (type === "currency") {
-    return `${Number(value || 0).toFixed(2)} TK`;
+    return `${Number(value || 0).toFixed(2)} Tk`;
   }
 
   if (type === "boolean") {
@@ -337,19 +337,19 @@ const ModuleBusinessReports = () => {
   const topSummaryCards = [
     {
       label: "Net Profit",
-      value: `${Number(summaryByModule?.profit?.netProfit || 0).toFixed(2)} TK`,
+      value: `${Number(summaryByModule?.profit?.netProfit || 0).toFixed(2)} Tk`,
     },
     {
       label: "Sales Revenue",
-      value: `${Number(summaryByModule?.sales?.revenue || 0).toFixed(2)} TK`,
+      value: `${Number(summaryByModule?.sales?.revenue || 0).toFixed(2)} Tk`,
     },
     {
       label: "Purchase Total",
-      value: `${Number(summaryByModule?.purchases?.totalAmount || 0).toFixed(2)} TK`,
+      value: `${Number(summaryByModule?.purchases?.totalAmount || 0).toFixed(2)} Tk`,
     },
     {
       label: "Supplier Due",
-      value: `${Number(summaryByModule?.suppliers?.totalDue || 0).toFixed(2)} TK`,
+      value: `${Number(summaryByModule?.suppliers?.totalDue || 0).toFixed(2)} Tk`,
     },
     {
       label: "Low Stock Products",
@@ -357,7 +357,7 @@ const ModuleBusinessReports = () => {
     },
     {
       label: "Abandoned Value",
-      value: `${Number(summaryByModule?.abandoned?.potentialValue || 0).toFixed(2)} TK`,
+      value: `${Number(summaryByModule?.abandoned?.potentialValue || 0).toFixed(2)} Tk`,
     },
     {
       label: "Risk Profiles",

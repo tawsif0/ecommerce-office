@@ -334,7 +334,7 @@ const ModuleSubscriptions = () => {
               >
                 <p className="font-semibold text-black">{plan.name}</p>
                 <p className="text-sm text-gray-600 mt-1">
-                  {plan.price} TK / {plan.billingCycle}
+                  {plan.price} Tk / {plan.billingCycle}
                 </p>
                 <p className="text-xs text-gray-500 mt-2">
                   Product limit: {plan.productLimit || "Unlimited"} | Upload/month:{" "}
@@ -662,7 +662,7 @@ const ModuleSubscriptions = () => {
                     <div>
                       <p className="font-semibold text-black">{plan.name}</p>
                       <p className="text-sm text-gray-600">
-                        {plan.price} TK / {plan.billingCycle} | Products: {plan.productLimit || "Unlimited"} | Upload/month: {plan.uploadLimitPerMonth || "Unlimited"}
+                        {plan.price} Tk / {plan.billingCycle} | Products: {plan.productLimit || "Unlimited"} | Upload/month: {plan.uploadLimitPerMonth || "Unlimited"}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">Status: {plan.isActive ? "Active" : "Inactive"}</p>
                     </div>

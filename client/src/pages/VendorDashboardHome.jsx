@@ -144,7 +144,7 @@ const VendorDashboardHome = ({ onTabChange }) => {
             <FiDollarSign className="w-5 h-5 text-gray-500" />
           </div>
           <p className="text-2xl font-bold text-black mt-2">
-            {Number(stats.netEarnings || 0).toFixed(2)} TK
+            {Number(stats.netEarnings || 0).toFixed(2)} Tk
           </p>
         </div>
       </div>
@@ -155,31 +155,31 @@ const VendorDashboardHome = ({ onTabChange }) => {
           <div className="rounded-lg border border-gray-200 p-4">
             <p className="text-gray-500">Today Sales</p>
             <p className="text-xl font-bold text-black mt-1">
-              {Number(stats.todaySales || 0).toFixed(2)} TK
+              {Number(stats.todaySales || 0).toFixed(2)} Tk
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 p-4">
             <p className="text-gray-500">Monthly Sales</p>
             <p className="text-xl font-bold text-black mt-1">
-              {Number(stats.monthlySales || 0).toFixed(2)} TK
+              {Number(stats.monthlySales || 0).toFixed(2)} Tk
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 p-4">
             <p className="text-gray-500">Gross Sales</p>
             <p className="text-xl font-bold text-black mt-1">
-              {Number(stats.grossSales || 0).toFixed(2)} TK
+              {Number(stats.grossSales || 0).toFixed(2)} Tk
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 p-4">
             <p className="text-gray-500">Marketplace Commission</p>
             <p className="text-xl font-bold text-black mt-1">
-              {Number(stats.commissionTotal || 0).toFixed(2)} TK
+              {Number(stats.commissionTotal || 0).toFixed(2)} Tk
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 p-4">
             <p className="text-gray-500">Net Earnings</p>
             <p className="text-xl font-bold text-black mt-1">
-              {Number(stats.netEarnings || 0).toFixed(2)} TK
+              {Number(stats.netEarnings || 0).toFixed(2)} Tk
             </p>
           </div>
         </div>
@@ -245,7 +245,7 @@ const VendorDashboardHome = ({ onTabChange }) => {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-semibold text-black">
-                      {Number(order.total || 0).toFixed(2)} TK
+                      {Number(order.total || 0).toFixed(2)} Tk
                     </p>
                     <p className="text-xs text-gray-500 capitalize">{order.orderStatus}</p>
                   </div>
@@ -309,7 +309,7 @@ const VendorDashboardHome = ({ onTabChange }) => {
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="name" tick={{ fill: "#374151", fontSize: 12 }} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} />
-              <Tooltip formatter={(value) => [`${Number(value).toFixed(2)} TK`, "Amount"]} />
+              <Tooltip formatter={(value) => [`${Number(value).toFixed(2)} Tk`, "Amount"]} />
               <Bar dataKey="value" fill="#111827" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

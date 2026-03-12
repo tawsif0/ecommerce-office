@@ -137,12 +137,12 @@ export default function MyWishlist() {
                     ) : pricing.hasDiscount ? (
                       <div className="flex items-baseline gap-2">
                         <span className="text-sm text-gray-400 line-through font-medium">
-                          {Number(pricing.previousPrice || 0).toFixed(2)} TK
+                          {Number(pricing.previousPrice || 0).toFixed(2)} Tk
                         </span>
-                        <span>{Number(pricing.currentPrice || 0).toFixed(2)} TK</span>
+                        <span>{Number(pricing.currentPrice || 0).toFixed(2)} Tk</span>
                       </div>
                     ) : (
-                      `${Number(pricing.currentPrice || 0).toFixed(2)} TK`
+                      `${Number(pricing.currentPrice || 0).toFixed(2)} Tk`
                     )}
                   </div>
 

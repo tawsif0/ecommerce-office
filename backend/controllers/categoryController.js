@@ -1,5 +1,12 @@
 const Category = require("../models/Category");
+const { uploadImageBuffer, deleteImage } = require("../config/cloudinary");
 const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
+
+const CATEGORY_IMAGE_OPTIONS = {
+  folder: "ecommerce/categories",
+  resource_type: "image",
+  transformation: [{ quality: "auto:best", fetch_format: "auto" }],
+};
 
 const invalidatePublicCategoryCache = () => {
   clearResponseCacheByPrefix("/api/categories/public");
@@ -25,12 +32,18 @@ const normalizeCategoryImage = (value) => {
   return normalized;
 };
 
+const uploadCategoryImage = async (file) => {
+  if (!file?.buffer) return null;
+  return uploadImageBuffer(file.buffer, CATEGORY_IMAGE_OPTIONS);
+};
+
 // @desc    Create new category
 // @route   POST /api/categories
 // @access  Private (Admin only)
 const createCategory = async (req, res) => {
+  let uploadedImagePublicId = "";
   try {
-    const { name, type, image, commissionType, commissionValue, commissionFixed } = req.body;
+    const { name, type, commissionType, commissionValue, commissionFixed } = req.body;
 
     // Check if category already exists
     const categoryExists = await Category.findOne({ name });
@@ -41,11 +54,24 @@ const createCategory = async (req, res) => {
       });
     }
 
+    let image = "";
+    let imagePublicId = "";
+
+    if (req.file) {
+      const uploadedImage = await uploadCategoryImage(req.file);
+      if (uploadedImage?.secure_url) {
+        image = uploadedImage.secure_url;
+        imagePublicId = uploadedImage.public_id || "";
+        uploadedImagePublicId = imagePublicId;
+      }
+    }
+
     // Create new category
     const category = await Category.create({
       name,
       type: type || "General",
       image: normalizeCategoryImage(image),
+      imagePublicId,
       commissionType: normalizeCommissionType(commissionType),
       commissionValue: toNonNegativeNumber(commissionValue, 0),
       commissionFixed: toNonNegativeNumber(commissionFixed, 0),
@@ -60,6 +86,9 @@ const createCategory = async (req, res) => {
       category,
     });
   } catch (error) {
+    if (uploadedImagePublicId) {
+      await deleteImage(uploadedImagePublicId);
+    }
     console.error("Create category error:", error);
     res.status(500).json({
       success: false,
@@ -148,8 +177,9 @@ const getCategory = async (req, res) => {
 // @route   PUT /api/categories/:id
 // @access  Private (Admin only)
 const updateCategory = async (req, res) => {
+  let uploadedImagePublicId = "";
   try {
-    const { name, type, image, isActive, commissionType, commissionValue, commissionFixed } = req.body;
+    const { name, type, isActive, commissionType, commissionValue, commissionFixed } = req.body;
 
     let category = await Category.findById(req.params.id);
     if (!category) {
@@ -170,12 +200,26 @@ const updateCategory = async (req, res) => {
       }
     }
 
+    const previousImagePublicId = category.imagePublicId || "";
+    let nextImage = category.image || "";
+    let nextImagePublicId = previousImagePublicId;
+
+    if (req.file) {
+      const uploadedImage = await uploadCategoryImage(req.file);
+      if (uploadedImage?.secure_url) {
+        nextImage = uploadedImage.secure_url;
+        nextImagePublicId = uploadedImage.public_id || "";
+        uploadedImagePublicId = nextImagePublicId;
+      }
+    }
+
     category = await Category.findByIdAndUpdate(
       req.params.id,
       {
         name,
         type: type || category.type,
-        image: image !== undefined ? normalizeCategoryImage(image) : category.image || "",
+        image: normalizeCategoryImage(nextImage),
+        imagePublicId: nextImagePublicId,
         commissionType:
           commissionType !== undefined
             ? normalizeCommissionType(commissionType)
@@ -193,6 +237,10 @@ const updateCategory = async (req, res) => {
       },
       { new: true, runValidators: true }
     );
+
+    if (req.file && previousImagePublicId && previousImagePublicId !== nextImagePublicId) {
+      await deleteImage(previousImagePublicId);
+    }
     invalidatePublicCategoryCache();
 
     res.json({
@@ -201,6 +249,9 @@ const updateCategory = async (req, res) => {
       category,
     });
   } catch (error) {
+    if (uploadedImagePublicId) {
+      await deleteImage(uploadedImagePublicId);
+    }
     console.error("Update category error:", error);
     res.status(500).json({
       success: false,
@@ -222,6 +273,10 @@ const deleteCategory = async (req, res) => {
         success: false,
         message: "Category not found",
       });
+    }
+
+    if (category.imagePublicId) {
+      await deleteImage(category.imagePublicId);
     }
 
     await category.deleteOne();

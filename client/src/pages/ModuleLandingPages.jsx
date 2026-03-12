@@ -507,7 +507,7 @@ const ModuleLandingPages = () => {
               </div>
               <div className="border border-gray-200 rounded-lg p-3">
                 <p className="text-xs text-gray-500">Revenue</p>
-                <p className="text-xl font-bold text-black">{Number(statsData.deliveredRevenue || 0).toFixed(2)} TK</p>
+                <p className="text-xl font-bold text-black">{Number(statsData.deliveredRevenue || 0).toFixed(2)} Tk</p>
               </div>
               <div className="border border-gray-200 rounded-lg p-3">
                 <p className="text-xs text-gray-500">Conversion</p>

@@ -25,6 +25,11 @@ const categorySchema = new mongoose.Schema({
     trim: true,
     default: "",
   },
+  imagePublicId: {
+    type: String,
+    trim: true,
+    default: "",
+  },
   commissionType: {
     type: String,
     enum: ["inherit", "percentage", "fixed", "hybrid"],

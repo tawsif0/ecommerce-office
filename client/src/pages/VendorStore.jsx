@@ -67,7 +67,7 @@ const renderStars = (rating = 0) =>
     />
   ));
 
-const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} TK`;
+const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} Tk`;
 
 const VendorStore = () => {
   const { slug } = useParams();

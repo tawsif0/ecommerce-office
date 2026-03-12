@@ -347,7 +347,7 @@ exports.placeBid = async (req, res) => {
     if (amount < minRequired) {
       return res.status(400).json({
         success: false,
-        message: `Bid too low. Minimum required is ${minRequired.toFixed(2)} TK`,
+        message: `Bid too low. Minimum required is ${minRequired.toFixed(2)} Tk`,
       });
     }
 

@@ -2,7 +2,7 @@
 // components/Navbar.jsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useSelector } from "react-redux";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -45,35 +45,7 @@ const getReadableTextColor = (backgroundHex) => {
   return luminance > 0.62 ? "#111827" : "#ffffff";
 };
 
-const normalizeNavQuickLinks = (value) => {
-  if (!Array.isArray(value)) {
-    return [
-      { label: "Daily Deals", path: "/shop?collection=deals" },
-      { label: "Top Categories", path: "/#top-categories" },
-      { label: "New Arrivals", path: "/shop?collection=new-arrivals" },
-      { label: "Buyer Protection", path: "/faqs#buyer-protection" },
-      { label: "Track Order", path: "/track-order" },
-    ];
-  }
 
-  const uniqueValues = new Map();
-  value.forEach((entry) => {
-    const label = String(entry?.label || "").trim();
-    const path = String(entry?.path || "").trim() || "/";
-    if (!label) return;
-    uniqueValues.set(`${label}|${path}`, { label, path });
-  });
-
-  return uniqueValues.size > 0
-    ? Array.from(uniqueValues.values())
-    : [
-        { label: "Daily Deals", path: "/shop?collection=deals" },
-        { label: "Top Categories", path: "/#top-categories" },
-        { label: "New Arrivals", path: "/shop?collection=new-arrivals" },
-        { label: "Buyer Protection", path: "/faqs#buyer-protection" },
-        { label: "Track Order", path: "/track-order" },
-      ];
-};
 
 const Navbar = () => {
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
@@ -84,6 +56,7 @@ const Navbar = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Search functionality
   const [searchQuery, setSearchQuery] = useState("");
@@ -680,10 +653,32 @@ const Navbar = () => {
       { label: "Support Tickets", tab: "module-support" },
     ];
   }, [userRole]);
-  const marketplaceNavLinks = useMemo(
-    () => normalizeNavQuickLinks(storefront?.navQuickLinks),
-    [storefront?.navQuickLinks],
+
+
+  const primaryNavItems = useMemo(
+    () => [
+      { label: "Home", to: "/" },
+      { label: "Shop", to: "/shop" },
+      { label: "About", to: "/about" },
+      { label: "Contact", to: "/contact" },
+      { label: "FAQs", to: "/faqs" },
+    ],
+    [],
   );
+
+  const isPrimaryNavActive = (to) => {
+    const pathname = location.pathname || "/";
+
+    if (to === "/") {
+      return pathname === "/" || pathname === "/demo03" || pathname === "/demo03-home";
+    }
+
+    if (to === "/shop") {
+      return pathname === "/shop" || pathname.startsWith("/shop/");
+    }
+
+    return pathname === to || pathname.startsWith(`${to}/`);
+  };
   const navigateStorefrontLink = (path) => {
     const target = String(path || "/").trim() || "/";
     navigate(target);
@@ -733,16 +728,13 @@ const Navbar = () => {
   return (
     <header className="font-sans">
       {/* Top bar - Hidden on mobile */}
-      <div
-        className="hidden lg:block py-1.5"
-        style={{ backgroundColor: themeColor, color: `${themeTextColor}CC` }}
-      >
+      <div className="hidden lg:block border-b border-white/10 bg-black py-1.5 text-white/80">
         <div className="site-shell flex justify-end items-center text-xs">
           <div className="flex items-center space-x-6">
             {/* Phone - Clickable */}
             <a
               href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
-              className="flex items-center space-x-2 group transition-colors duration-200"
+              className="flex items-center space-x-2 group transition-colors duration-200 hover:text-white"
             >
               <svg
                 className="w-4 h-4 transition-transform duration-200 group-hover:scale-110"
@@ -761,7 +753,7 @@ const Navbar = () => {
             {/* Email - Clickable */}
             <a
               href={`mailto:${supportEmail}`}
-              className="flex items-center space-x-2 group transition-colors duration-200"
+              className="flex items-center space-x-2 group transition-colors duration-200 hover:text-white"
             >
               <svg
                 className="w-4 h-4 transition-transform duration-200 group-hover:scale-110"
@@ -781,20 +773,14 @@ const Navbar = () => {
       </div>
 
       {/* Main Navigation */}
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+      <nav className="border-b border-gray-200 bg-white text-black shadow-[0_18px_48px_-36px_rgba(15,23,42,0.45)]">
         <div className="site-shell">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex h-20 items-center justify-between gap-4">
             {/* Logo */}
-            <div className="flex items-center lg:hidden">
-              <Link to="/" className="flex items-center gap-2 text-2xl font-bold text-black">
+            <div className="flex items-center shrink-0">
+              <Link to="/" className="flex items-center gap-2 font-bold text-black">
                 {!hasBrandLogoImage ? (
-                  <span
-                    className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-black tracking-[0.08em]"
-                    style={{
-                      backgroundColor: `${themeColor}18`,
-                      color: themeColor,
-                    }}
-                  >
+                  <span className="text-lg font-black tracking-[0.08em] text-black">
                     {brandLogoText}
                   </span>
                 ) : (
@@ -802,7 +788,7 @@ const Navbar = () => {
                     <img
                       src={brandLogoUrl}
                       alt={brandName}
-                      className="block h-8 w-auto max-w-[180px] object-contain"
+                      className="block h-9 w-auto max-w-[190px] object-contain [filter:brightness(0)_saturate(100%)]"
                     />
                     <span className="sr-only">{brandName}</span>
                   </>
@@ -811,15 +797,15 @@ const Navbar = () => {
             </div>
 
             {/* Desktop Navigation - Center */}
-            <div className="hidden lg:flex lg:items-center lg:justify-between lg:flex-1">
+            <div className="hidden lg:flex lg:min-w-0 lg:flex-1 lg:items-center lg:gap-4 xl:gap-5 lg:pl-4">
               {/* Categories Dropdown */}
               <div
                 ref={shopByCategoriesRef}
-                className="relative"
+                className="relative shrink-0"
                 onMouseEnter={handleShopByCategoriesMouseEnter}
                 onMouseLeave={handleShopByCategoriesMouseLeave}
               >
-                <button className="flex items-center space-x-2 py-4 pr-4 text-black hover:text-gray-700 transition-colors duration-200 font-medium">
+                <button className="inline-flex items-center gap-2 rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-900">
                   <svg
                     className="w-5 h-5"
                     fill="none"
@@ -833,7 +819,8 @@ const Navbar = () => {
                       d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
                     />
                   </svg>
-                  <span className="font-semibold">SHOP BY CATEGORIES</span>
+                    <span className="hidden xl:inline font-semibold">SHOP BY CATEGORIES</span>
+                    <span className="xl:hidden font-semibold">Categories</span>
                   <svg
                     className="w-4 h-4"
                     fill="none"
@@ -851,7 +838,7 @@ const Navbar = () => {
 
                 {isShopByCategoriesOpen && (
                   <div
-                    className="absolute top-full left-0 w-64 bg-white rounded-lg shadow-xl border border-gray-300 py-2 z-40 animate-fadeIn"
+                    className="absolute top-full left-0 z-40 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white py-2 shadow-xl animate-fadeIn"
                     onMouseEnter={() => handleDropdownMouseEnter("shop")}
                     onMouseLeave={handleShopByCategoriesMouseLeave}
                   >
@@ -898,7 +885,7 @@ const Navbar = () => {
               {/* Search Bar */}
               <div
                 ref={searchRef}
-                className="relative w-full max-w-xl mx-4 pr-16"
+                className="relative min-w-[260px] flex-1 max-w-[700px]"
               >
                 <form onSubmit={handleSearchSubmit} className="relative">
                   <input
@@ -912,7 +899,7 @@ const Navbar = () => {
                       }
                     }}
                     placeholder="Search for products, brands, or order numbers..."
-                    className="w-full px-4 py-2.5 pl-12 pr-4 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-transparent transition-all duration-200"
+                    className="w-full rounded-full border border-gray-200 bg-gray-50 px-4 py-3 pl-12 pr-4 text-sm text-black shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-transparent"
                   />
                   <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
                     <svg
@@ -932,7 +919,7 @@ const Navbar = () => {
                 </form>
 
                 {showSuggestions && searchQuery.trim() && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-300 z-50 max-h-96 overflow-y-auto animate-fadeIn">
+                  <div className="absolute top-full left-0 right-0 z-50 mt-3 max-h-96 overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl animate-fadeIn">
                     <div className="p-4 border-b border-gray-200">
                       <div className="flex justify-between items-center">
                         <h3 className="text-sm font-semibold text-gray-900">
@@ -1117,7 +1104,7 @@ const Navbar = () => {
                                       ) : suggestion.price !== null &&
                                         suggestion.price !== undefined ? (
                                         <span className="ml-2 font-medium">
-                                          ৳{Number(suggestion.price).toFixed(2)}
+                                          Tk {Number(suggestion.price).toFixed(2)}
                                         </span>
                                       ) : null)}
                                   </div>
@@ -1146,18 +1133,38 @@ const Navbar = () => {
                   </div>
                 )}
               </div>
+
+              {/* Desktop primary links (merged from old bottom bar) */}
+              <div className="hidden xl:flex items-center gap-5 shrink-0">
+                {primaryNavItems.map(({ label, to }) => {
+                  const isActive = isPrimaryNavActive(to);
+                  return (
+                    <Link
+                      key={label}
+                      to={to}
+                      className={`-mb-px border-b-2 px-1 py-2 text-sm font-semibold transition-colors ${
+                        isActive
+                          ? "border-black text-black"
+                          : "border-transparent text-gray-500 hover:border-black/35 hover:text-black"
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Desktop Navigation - Right */}
-            <div className="hidden lg:flex lg:items-center lg:space-x-6">
+            <div className="hidden lg:flex lg:items-center lg:gap-2 xl:gap-3 shrink-0">
               {/* User Menu */}
               {isLoggedIn ? (
                 <div className="relative group">
-                  <button className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors duration-200">
-                    <div className="w-8 h-8 bg-linear-to-r from-gray-800 to-black rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                  <button className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-sm transition hover:border-gray-300 hover:bg-gray-50">
+                    <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white font-semibold text-sm">
                       {userName.charAt(0).toUpperCase()}
                     </div>
-                    <span className="text-sm font-medium text-gray-800">
+                    <span className="hidden xl:inline text-sm font-medium text-gray-900">
                       {userName}
                     </span>
                     <svg
@@ -1174,8 +1181,8 @@ const Navbar = () => {
                       />
                     </svg>
                   </button>
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-300 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div className="px-4 py-2 border-b border-gray-200">
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div className="px-4 py-3 border-b border-gray-100">
                       <p className="text-sm font-medium text-gray-900">
                         {userName}
                       </p>
@@ -1183,7 +1190,7 @@ const Navbar = () => {
                     </div>
                     <Link
                       to="/dashboard"
-                      className="flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-100 hover:text-black transition-colors duration-150"
+                      className="flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 hover:text-black transition-colors duration-150"
                     >
                       <svg
                         className="w-4 h-4 mr-3"
@@ -1205,7 +1212,7 @@ const Navbar = () => {
                         key={entry.tab}
                         type="button"
                         onClick={() => openDashboardTab(entry.tab)}
-                        className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-100 hover:text-black transition-colors duration-150 text-left"
+                        className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 hover:text-black transition-colors duration-150 text-left"
                       >
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-500 mr-3" />
                         {entry.label}
@@ -1213,7 +1220,7 @@ const Navbar = () => {
                     ))}
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-100 transition-colors duration-150"
+                      className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 transition-colors duration-150"
                     >
                       <svg
                         className="w-4 h-4 mr-3"
@@ -1236,13 +1243,13 @@ const Navbar = () => {
                 <div className="flex items-center gap-3">
                   <Link
                     to="/login"
-                    className="px-4 py-2 text-sm font-medium text-gray-800 hover:text-black transition-colors duration-200"
+                    className="rounded-full px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100 hover:text-black transition-colors duration-200"
                   >
                     Login
                   </Link>
                   <Link
                     to="/register"
-                    className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-black transition hover:border-black"
+                    className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-900"
                   >
                     Register
                   </Link>
@@ -1252,10 +1259,10 @@ const Navbar = () => {
               {/* Cart */}
               <button
                 onClick={handleCompareClick}
-                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                className="relative rounded-full border border-gray-200 bg-white p-2.5 text-gray-900 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
                 aria-label="Open compare products"
               >
-                <FiShuffle className="w-5 h-5 text-gray-800" />
+                <FiShuffle className="w-5 h-5 text-gray-900" />
                 {compareCount > 0 && (
                   <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
                     {compareCount > 99 ? "99+" : compareCount}
@@ -1264,10 +1271,10 @@ const Navbar = () => {
               </button>
               <button
                 onClick={handleCartClick}
-                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                className="relative rounded-full border border-gray-200 bg-white p-2.5 text-gray-900 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
               >
                 <svg
-                  className="w-6 h-6 text-gray-800"
+                  className="w-6 h-6 text-gray-900"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1292,10 +1299,10 @@ const Navbar = () => {
               {/* Mobile Search Button */}
               <button
                 onClick={toggleMobileSearch}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                className="rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100"
               >
                 <svg
-                  className="w-6 h-6 text-gray-800"
+                  className="w-6 h-6 text-gray-900"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1312,10 +1319,10 @@ const Navbar = () => {
               {/* Mobile Cart */}
               <button
                 onClick={handleCompareClick}
-                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                className="relative rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100"
                 aria-label="Open compare products"
               >
-                <FiShuffle className="w-5 h-5 text-gray-800" />
+                <FiShuffle className="w-5 h-5 text-gray-900" />
                 {compareCount > 0 && (
                   <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
                     {compareCount > 99 ? "99+" : compareCount}
@@ -1324,10 +1331,10 @@ const Navbar = () => {
               </button>
               <button
                 onClick={handleCartClick}
-                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                className="relative rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100"
               >
                 <svg
-                  className="w-6 h-6 text-gray-800"
+                  className="w-6 h-6 text-gray-900"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1349,10 +1356,10 @@ const Navbar = () => {
               <button
                 id="mobile-menu-button"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-800"
+                className="rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-black/10"
               >
                 <svg
-                  className="w-6 h-6 text-gray-800"
+                  className="w-6 h-6 text-gray-900"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1384,7 +1391,7 @@ const Navbar = () => {
                   }
                 }}
                 placeholder="Search products or order numbers..."
-                className="w-full pl-12 pr-12 py-3.5 text-sm bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-transparent"
+                className="w-full pl-12 pr-12 py-3.5 text-sm bg-gray-50 text-black border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-transparent"
               />
               <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center h-5 pointer-events-none">
                 <svg
@@ -1534,11 +1541,11 @@ const Navbar = () => {
                                 : "Category"}
                               {suggestion.type === "product" &&
                                 (suggestion.priceType === "tba" ? (
-                                  <span className="ml-1 font-medium">• TBA</span>
+                                  <span className="ml-1 font-medium">- TBA</span>
                                 ) : suggestion.price !== null &&
                                   suggestion.price !== undefined ? (
                                   <span className="ml-1 font-medium">
-                                    • ৳{Number(suggestion.price).toFixed(2)}
+                                    - Tk {Number(suggestion.price).toFixed(2)}
                                   </span>
                                 ) : null)}
                             </div>
@@ -1736,23 +1743,7 @@ const Navbar = () => {
                 );
               })}
 
-              <div className="pt-4 border-t border-gray-200">
-                <p className="px-4 pb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
-                  Marketplace Links
-                </p>
-                <div className="space-y-1">
-                  {marketplaceNavLinks.map((entry) => (
-                    <button
-                      key={`mobile-${entry.label}-${entry.path}`}
-                      type="button"
-                      onClick={() => navigateStorefrontLink(entry.path)}
-                      className="w-full text-left rounded-lg px-4 py-3 text-base font-medium text-gray-800 transition-colors duration-150 hover:bg-gray-100 hover:text-black"
-                    >
-                      {entry.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            
 
               {/* ============================================================ */}
 
@@ -1762,7 +1753,7 @@ const Navbar = () => {
                   <>
                     <div className="px-4 py-3">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 bg-linear-to-r from-gray-800 to-black rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">
+                        <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">
                           {userName.charAt(0).toUpperCase()}
                         </div>
                         <div>
@@ -1820,88 +1811,6 @@ const Navbar = () => {
           </div>
         )}
       </nav>
-
-      <div className="hidden lg:block border-b border-gray-200 bg-white">
-        <div className="site-shell">
-          <div className="flex items-center gap-2 overflow-x-auto py-3">
-            {marketplaceNavLinks.map((entry) => (
-              <button
-                key={`${entry.label}-${entry.path}`}
-                type="button"
-                onClick={() => navigateStorefrontLink(entry.path)}
-                className="shrink-0 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-black hover:bg-gray-50 hover:text-black"
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Navigation Bar (Desktop only) */}
-      <div
-        className="hidden lg:block"
-        style={{ backgroundColor: themeColor, color: themeTextColor }}
-      >
-        <div className="site-shell">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Link to="/" className="shrink-0 flex items-center py-4">
-                <div className="flex items-center gap-2">
-                  {!hasBrandLogoImage ? (
-                    <div className="text-2xl font-black tracking-[0.08em]">
-                      {brandLogoText}
-                    </div>
-                  ) : (
-                    <>
-                      <img
-                        src={brandLogoUrl}
-                        alt={brandName}
-                        className="block h-10 w-auto max-w-[220px] object-contain"
-                      />
-                      <span className="sr-only">{brandName}</span>
-                    </>
-                  )}
-                </div>
-              </Link>
-            </div>
-
-            {/* Main Navigation Links */}
-            <div className="flex items-center space-x-8">
-              {["Home", "Shop", "About", "Contact", "FAQs"].map((item) => {
-                const to =
-                  item === "Home"
-                    ? "/"
-                    : item === "Shop"
-                      ? "/shop"
-                      : item === "About"
-                        ? "/about"
-                        : item === "Contact"
-                          ? "/contact"
-                          : "/faqs";
-
-                return (
-                  <NavLink
-                    key={item}
-                    to={to}
-                    className={({ isActive }) =>
-                      `py-4 font-medium transition-opacity duration-200 ${
-                        isActive ? "opacity-100 border-b-2" : "opacity-80 hover:opacity-100"
-                      }`
-                    }
-                    style={({ isActive }) => ({
-                      color: themeTextColor,
-                      borderColor: isActive ? themeTextColor : "transparent",
-                    })}
-                  >
-                    {item}
-                  </NavLink>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
     </header>
   );
 };

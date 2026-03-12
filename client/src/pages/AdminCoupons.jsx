@@ -452,10 +452,10 @@ const AdminCoupons = () => {
                       ? "Free delivery offer"
                       : coupon.discountType === "percentage"
                       ? `${coupon.discountValue}%`
-                      : `${coupon.discountValue} TK`}{" "}
+                      : `${coupon.discountValue} Tk`}{" "}
                     {(coupon.offerType || "discount") === "free_shipping"
                       ? ""
-                      : `discount, min ${coupon.minPurchase || 0} TK, `}used {coupon.usedCount || 0}
+                      : `discount, min ${coupon.minPurchase || 0} Tk, `}used {coupon.usedCount || 0}
                     {coupon.usageLimit ? `/${coupon.usageLimit}` : ""}
                   </p>
                   {coupon.offerType === "combo" && (

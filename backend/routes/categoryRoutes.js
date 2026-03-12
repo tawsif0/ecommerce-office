@@ -9,6 +9,7 @@ const {
   deleteCategory,
 } = require("../controllers/categoryController");
 const auth = require("../middlewares/auth");
+const { upload, handleMulterError } = require("../middlewares/upload");
 const responseCache = require("../middlewares/responseCache");
 
 // Public
@@ -19,8 +20,8 @@ router.get("/", auth, getCategories);
 router.get("/:id", auth, getCategory);
 
 // Admin
-router.post("/", auth, createCategory);
-router.put("/:id", auth, updateCategory);
+router.post("/", auth, upload.single("image"), handleMulterError, createCategory);
+router.put("/:id", auth, upload.single("image"), handleMulterError, updateCategory);
 router.delete("/:id", auth, deleteCategory);
 
 module.exports = router;

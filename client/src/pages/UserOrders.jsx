@@ -373,7 +373,7 @@ const UserOrders = () => {
                       </div>
                       <div className="text-right">
                         <div className="font-bold text-lg text-black">
-                          ৳{order.total?.toFixed(2) || "0.00"}
+                          Tk {order.total?.toFixed(2) || "0.00"}
                         </div>
                         <div className="text-sm text-gray-500">
                           {order.items?.length || 0} item
@@ -416,7 +416,7 @@ const UserOrders = () => {
                                 {item.product?.title || "Product"}
                               </p>
                               <p className="text-sm text-gray-600">
-                                Qty: {item.quantity} × ৳{item.price?.toFixed(2)}
+                                Qty: {item.quantity} × Tk {item.price?.toFixed(2)}
                               </p>
                             </div>
                           </div>
@@ -644,10 +644,10 @@ const UserOrders = () => {
                           )}
                           <div className="mt-2 flex justify-between items-center">
                             <div className="text-sm text-gray-500">
-                              Unit Price: ৳{item.price?.toFixed(2)}
+                              Unit Price: Tk {item.price?.toFixed(2)}
                             </div>
                             <div className="font-semibold">
-                              ৳{(item.quantity * item.price).toFixed(2)}
+                              Tk {(item.quantity * item.price).toFixed(2)}
                             </div>
                           </div>
                         </div>
@@ -663,24 +663,24 @@ const UserOrders = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal</span>
-                    <span>৳{selectedOrder.subtotal?.toFixed(2)}</span>
+                    <span>Tk {selectedOrder.subtotal?.toFixed(2)}</span>
                   </div>
                   {selectedOrder.shippingFee > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Shipping Fee</span>
-                      <span>৳{selectedOrder.shippingFee?.toFixed(2)}</span>
+                      <span>Tk {selectedOrder.shippingFee?.toFixed(2)}</span>
                     </div>
                   )}
                   {selectedOrder.discount > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Discount</span>
-                      <span>-৳{selectedOrder.discount?.toFixed(2)}</span>
+                      <span>-Tk {selectedOrder.discount?.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="border-t pt-3">
                     <div className="flex justify-between font-bold text-lg">
                       <span>Total Amount</span>
-                      <span>৳{selectedOrder.total?.toFixed(2)}</span>
+                      <span>Tk {selectedOrder.total?.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>

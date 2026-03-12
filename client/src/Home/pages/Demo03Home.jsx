@@ -3,9 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useSelector } from "react-redux";
 import Demo03Carousel from "../demo03/Demo03Carousel";
-import useDemo03Assets from "../demo03/useDemo03Assets";
+import useDemo03Assets, {
+  DEMO03_SCOPE_CLASS,
+  DEMO03_THEME_CLASSES,
+} from "../demo03/useDemo03Assets";
 import { selectPublicSettings } from "../../store/publicSettingsSlice";
-import { toPublicAssetUrl } from "../../utils/publicSettings";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -125,41 +127,30 @@ const getProductPriceLabel = (product) => {
   return "0.00 Tk";
 };
 
-const HERO_SLIDES = [
-  {
-    id: "hero-1",
-    subtitle: "Highest Quality",
-    title: "High Performance and Elegant Design",
+const normalizeHeroBanner = (banner, storeName) => {
+  const resolvedTitle =
+    String(banner?.title || "").trim() ||
+    String(banner?.description || "").trim() ||
+    "Featured Collection";
+  const resolvedDescription = String(banner?.description || "").trim();
+  const resolvedMedia = resolveMediaUrl(banner?.image || banner?.thumb || "");
+
+  if (!resolvedMedia) return null;
+
+  return {
+    id: banner?._id || banner?.id || normalizeKey(resolvedTitle),
+    subtitle: String(storeName || "").trim() || "Featured Collection",
+    title: resolvedTitle,
     description:
-      "Sleek designs, cutting-edge tech, unmatched performance for modern living",
-    cta: "View Headphones",
-    href: "/shop",
-    media: "https://klbtheme.com/fynode/wp-content/uploads/2024/12/slider-03.jpg",
+      resolvedDescription && resolvedDescription !== resolvedTitle
+        ? resolvedDescription
+        : "Discover curated products and marketplace highlights in our latest collection.",
+    cta: "Shop Now",
+    href: String(banner?.link || banner?.href || "/shop").trim() || "/shop",
+    media: resolvedMedia,
     overlayOpacity: 0.3,
-  },
-  {
-    id: "hero-2",
-    subtitle: "Superior Craftsmanship",
-    title: "Technology That Inspires Confidence",
-    description:
-      "Experience innovation, style, and performance in every electronic product.",
-    cta: "View Headphones",
-    href: "/shop",
-    media: "https://klbtheme.com/fynode/wp-content/uploads/2024/12/slider-02-1.jpg",
-    overlayOpacity: 0.3,
-  },
-  {
-    id: "hero-3",
-    subtitle: "Highest Quality",
-    title: "Experience Power, Discover Style",
-    description:
-      "Technology redefined: sleek, powerful, reliable, designed for your lifestyle",
-    cta: "View Headphones",
-    href: "/shop",
-    media: "https://klbtheme.com/fynode/wp-content/uploads/2024/12/slider-03-1.jpg",
-    overlayOpacity: 0.3,
-  },
-];
+  };
+};
 
 const LOGO_MARQUEE = [
   "https://klbtheme.com/fynode/wp-content/uploads/2024/12/logo-01.png",
@@ -482,33 +473,6 @@ const BLOG_POSTS = [
   },
 ];
 
-const FOOTER_FEATURES = [
-  {
-    id: "f-1",
-    title: "Customer service",
-    description: "It\u2019s not actually free we just price it into the products.",
-    icon: "https://klbtheme.com/fynode/wp-content/uploads/2024/12/footer.png",
-  },
-  {
-    id: "f-2",
-    title: "Fast Free Shipping",
-    description: "Get free shipping on orders of $150 or more (within the US)",
-    icon: "https://klbtheme.com/fynode/wp-content/uploads/2024/12/footer2.png",
-  },
-  {
-    id: "f-3",
-    title: "Returns & Exchanges",
-    description: "We offer free returns and exchanges within 30 days of purchase.",
-    icon: "https://klbtheme.com/fynode/wp-content/uploads/2024/12/footer3.png",
-  },
-  {
-    id: "f-4",
-    title: "Secure payment",
-    description: "Your payment information is processed securely and encrypted.",
-    icon: "https://klbtheme.com/fynode/wp-content/uploads/2024/12/footer4.png",
-  },
-];
-
 const COUNTER_BLOCKS = [
   {
     id: "c-1",
@@ -536,264 +500,6 @@ const VIDEO_BANNER = {
   overlayOpacity: 0.1,
   height: { mobile: 400, tablet: 580, desktop: 760 },
 };
-
-function SiteHeader({
-  settings,
-  cartCount = 0,
-  accountHref = "/login",
-  accountLabel = "Account",
-  featuredCategoryLinks = [],
-}) {
-  const website = settings?.website || {};
-  const storeName = String(website?.storeName || "arbeit").trim() || "arbeit";
-  const logoMode = String(website?.logoMode || "image").trim().toLowerCase();
-  const logoUrl = toPublicAssetUrl(website?.logoUrl);
-  const logoText = String(website?.logoText || "").trim() || storeName;
-  const showImageLogo = logoMode === "image" && Boolean(logoUrl);
-
-  const preventToggleJump = (event) => {
-    event.preventDefault();
-  };
-  const primaryLinks = featuredCategoryLinks.length > 0
-    ? featuredCategoryLinks.slice(0, 2)
-    : [
-        { label: "Headphones", path: "/shop" },
-        { label: "Accessories", path: "/shop" },
-      ];
-
-  return (
-    <header id="masthead" className="site-header header-type1">
-      <div className="site-header-row">
-        <div className="container">
-          <div className="site-header-inner d-flex align-items-center">
-            <div className="column mobile-column">
-              <div className="site-action-button">
-                <a
-                  href="#"
-                  className="site-action-link toggle-button menu-toggle"
-                  onClick={preventToggleJump}
-                >
-                  <div className="site-action-icon">
-                    <i className="klb-icon-menu" />
-                  </div>
-                </a>
-              </div>
-            </div>
-
-            <div className="column brand-column">
-              <div className="site-brand black">
-                <Link to="/" title={storeName} aria-label={storeName}>
-                  {showImageLogo ? (
-                    <>
-                      <img
-                        src={logoUrl}
-                        alt={storeName}
-                        className="site-brand-logo default"
-                        style={{ filter: "none" }}
-                      />
-                      <img
-                        src={logoUrl}
-                        alt={storeName}
-                        className="site-brand-logo transparent"
-                        style={{ filter: "none" }}
-                      />
-                    </>
-                  ) : (
-                    <span className="site-brand-logo default">{logoText}</span>
-                  )}
-                </Link>
-              </div>
-
-              <div className="site-nav menu-horizontal primary-menu">
-                <ul className="site-menu">
-                  <li className="menu-item current-menu-item">
-                    <Link to="/">Home</Link>
-                  </li>
-                  <li className="menu-item">
-                    <Link to="/shop">Shop</Link>
-                  </li>
-                  {primaryLinks.map((link) => (
-                    <li key={link.path} className="menu-item">
-                      <Link to={link.path}>{link.label}</Link>
-                    </li>
-                  ))}
-                  <li className="menu-item">
-                    <Link to="/blog">Blog</Link>
-                  </li>
-                  <li className="menu-item">
-                    <Link to="/contact">Contact</Link>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="column actions-column">
-              <div className="site-actions">
-                <div className="site-action-button">
-                  <a
-                    href="#"
-                    className="site-action-link toggle-button search-toggle"
-                    onClick={preventToggleJump}
-                    aria-label="Search"
-                  >
-                    <div className="site-action-icon">
-                      <i className="klb-icon-search" />
-                    </div>
-                  </a>
-                </div>
-
-                <div className="site-action-button action-account">
-                  <Link to={accountHref} className="site-action-link">
-                    <div className="site-action-icon">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          d="M18.5,19.3c-1.5-2-4-3.3-6.5-3.3-2.6,0-5,1.2-6.5,3.3M18.5,19.3c4.1-3.6,4.4-9.8.8-13.9-3.6-4.1-9.8-4.4-13.9-.8-4.1,3.6-4.4,9.8-.8,13.9.3.3.5.6.8.8M18.5,19.3c-1.8,1.6-4.1,2.5-6.5,2.5-2.4,0-4.7-.9-6.5-2.5M15.3,9.5c0,1.8-1.5,3.3-3.3,3.3s-3.3-1.5-3.3-3.3,1.5-3.3,3.3-3.3,3.3,1.5,3.3,3.3Z"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="1.4"
-                        />
-                      </svg>
-                    </div>
-                    <div className="site-action-label">
-                      <p>{accountLabel}</p>
-                    </div>
-                  </Link>
-                </div>
-
-                <div className="site-action-button">
-                  <Link
-                    to="/wishlist"
-                    className="site-action-link toggle-button wishlist-toggle"
-                  >
-                    <div className="site-action-icon">
-                      <i className="klb-icon-hearth" />
-                      <div className="site-action-count klbwl-wishlist-count">
-                        0
-                      </div>
-                    </div>
-                  </Link>
-                </div>
-
-                <div className="site-action-button action-compare">
-                  <Link to="/compare" className="site-action-link compare-toggle">
-                    <div className="site-action-icon">
-                      <i className="klb-icon-repeat" />
-                    </div>
-                  </Link>
-                </div>
-
-                <div className="site-action-button action-cart">
-                  <Link
-                    to="/cart"
-                    className="site-action-link toggle-button cart-toggle"
-                  >
-                    <div className="site-action-icon">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="25"
-                        height="22"
-                        viewBox="0 0 25 22"
-                      >
-                        <path
-                          d="M1.4,1.4h3.4c.2,0,.4.1.4.3l2.3,11.9c0,.2.2.3.4.3h13c.2,0,.3-.1.4-.3l2.3-9.7c0-.3-.1-.5-.4-.5H5.5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="1.5"
-                        />
-                        <circle
-                          cx="8.8"
-                          cy="18.9"
-                          r="1.9"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="1.5"
-                        />
-                        <circle
-                          cx="19.2"
-                          cy="18.9"
-                          r="1.9"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="1.5"
-                        />
-                      </svg>
-                      <div className="site-action-count cart-count count">
-                        {Number(cartCount || 0)}
-                      </div>
-                    </div>
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            <div className="column mobile-column">
-              <div className="site-action-button action-cart">
-                <Link
-                  to="/cart"
-                  className="site-action-link toggle-button cart-toggle"
-                >
-                  <div className="site-action-icon">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="25"
-                      height="22"
-                      viewBox="0 0 25 22"
-                    >
-                      <path
-                        d="M1.4,1.4h3.4c.2,0,.4.1.4.3l2.3,11.9c0,.2.2.3.4.3h13c.2,0,.3-.1.4-.3l2.3-9.7c0-.3-.1-.5-.4-.5H5.5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="1.5"
-                      />
-                      <circle
-                        cx="8.8"
-                        cy="18.9"
-                        r="1.9"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="1.5"
-                      />
-                      <circle
-                        cx="19.2"
-                        cy="18.9"
-                        r="1.9"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="1.5"
-                      />
-                    </svg>
-                    <div className="site-action-count cart-count count">
-                      {Number(cartCount || 0)}
-                    </div>
-                  </div>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
 
 function BannerBlock({ slide }) {
   return (
@@ -951,156 +657,6 @@ function ProductCard({ product, onAddToCart }) {
   );
 }
 
-function SiteFooter({ settings }) {
-  const website = settings?.website || {};
-  const contact = settings?.contact || {};
-  const storeName = String(website?.storeName || "arbeit").trim() || "arbeit";
-  const logoUrl =
-    toPublicAssetUrl(website?.logoUrl) ||
-    "https://demo03.arbeitonline.top/wp-content/uploads/2026/03/download-3-300x120.png";
-  const address =
-    String(contact?.address || "").trim() || "1234 Fashion Street, Suite 567, Dhaka";
-  const phone = String(contact?.phone1 || "").trim() || "+880 1707-387608";
-  const email = String(contact?.email || "").trim() || "contact@arbeittechnology.com";
-
-  return (
-    <footer className="site-footer">
-      <div className="site-footer-row footer-widgets">
-        <div className="container">
-          <div className="site-footer-inner">
-            <div className="row gap-y-20">
-              <div className="col col-12 col-md-6 col-lg-3">
-                <div className="widget">
-                  <div className="widget-body">
-                    <div className="branding-detail">
-                      <p>
-                        <img
-                          loading="lazy"
-                          decoding="async"
-                          src={logoUrl}
-                          alt={storeName}
-                          width="121"
-                          height="48"
-                          style={{ filter: "none" }}
-                        />
-                      </p>
-                      <p>
-                        <strong>Address:</strong> {address}
-                      </p>
-                      <p>
-                        <strong>Phone:</strong> {phone}
-                      </p>
-                      <p>
-                        <strong>Email:</strong> {email}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="col col-12 col-md-6 col-lg-3">
-                <div className="widget">
-                  <h4 className="widget-title">Let Us Help You</h4>
-                  <div className="widget-body">
-                    <ul className="menu">
-                      <li className="menu-item">
-                        <Link to="/policy/privacy">Accessibility Statement</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/track-order">Your Orders</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/policy/returns">
-                          Returns &amp; Replacements
-                        </Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/faqs">Shipping Rates &amp; Policies</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/policy/privacy">Privacy Policy</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/policy/terms">Terms and Conditions</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/contact">Help Center</Link>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <div className="col col-12 col-md-6 col-lg-3">
-                <div className="widget">
-                  <h4 className="widget-title">Get to Know Us</h4>
-                  <div className="widget-body">
-                    <ul className="menu">
-                      <li className="menu-item">
-                        <Link to="/about">Careers</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/about">About Us</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/about">Investor Relations</Link>
-                      </li>
-                      <li className="menu-item">
-                        <Link to="/shop">Store Locations</Link>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <div className="col col-12 col-md-6 col-lg-3">
-                <div className="widget">
-                  <h4 className="widget-title">Sign Up for Email</h4>
-                  <div className="widget-body">
-                    <div className="site-newsletter-form">
-                      <p>
-                        Sign up to get first dibs on new arrivals, sales,
-                        exclusive content, events and more!
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="site-row footer-copyright">
-        <div className="container">
-          <div className="site-footer-inner">
-            <p className="site-copyright">
-              Copyright \u00A9 {new Date().getFullYear()}
-              <Link to="/"> {storeName} </Link>. All rights reserved.
-            </p>
-
-            <div className="site-payment-cards">
-              <ul>
-                {[
-                  "https://klbtheme.com/fynode/wp-content/uploads/2024/11/payment.png",
-                  "https://klbtheme.com/fynode/wp-content/uploads/2024/11/payment2.png",
-                  "https://klbtheme.com/fynode/wp-content/uploads/2024/11/payment3.png",
-                  "https://klbtheme.com/fynode/wp-content/uploads/2024/11/payment4.png",
-                  "https://klbtheme.com/fynode/wp-content/uploads/2024/11/payment5.png",
-                ].map((src) => (
-                  <li key={src}>
-                    <img src={src} alt="payment" />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
 function MobileBottomNav({ accountHref = "/login" }) {
   return (
     <div className="klb-mobile-bottom site-mobile-navbar">
@@ -1153,18 +709,22 @@ export default function Demo03Home() {
   const navigate = useNavigate();
   const settings = useSelector(selectPublicSettings);
   const { user } = useAuth();
-  const { cartCount, addToCart } = useCart();
+  const { addToCart } = useCart();
   const [activeTab, setActiveTab] = useState("headphones");
   const [publicProducts, setPublicProducts] = useState([]);
   const [publicCategories, setPublicCategories] = useState([]);
+  const [publicBanners, setPublicBanners] = useState([]);
+  const storeName =
+    String(settings?.website?.storeName || "").trim() || "Featured Collection";
 
   useEffect(() => {
     let mounted = true;
 
     const loadStorefrontData = async () => {
-      const [productResponse, categoryResponse] = await Promise.allSettled([
+      const [productResponse, categoryResponse, bannerResponse] = await Promise.allSettled([
         axios.get(`${baseUrl}/products/public`),
         axios.get(`${baseUrl}/categories/public`),
+        axios.get(`${baseUrl}/banners/public`),
       ]);
 
       if (!mounted) return;
@@ -1182,6 +742,15 @@ export default function Demo03Home() {
           ? categoryResponse.value.data.categories
           : [],
       );
+
+      setPublicBanners(
+        bannerResponse.status === "fulfilled" &&
+          Array.isArray(bannerResponse.value.data?.banners)
+          ? bannerResponse.value.data.banners.filter(
+              (banner) => banner?.isActive !== false,
+            )
+          : [],
+      );
     };
 
     loadStorefrontData();
@@ -1190,6 +759,12 @@ export default function Demo03Home() {
       mounted = false;
     };
   }, []);
+
+  const heroSlides = useMemo(() => {
+    return publicBanners
+      .map((banner) => normalizeHeroBanner(banner, storeName))
+      .filter(Boolean);
+  }, [publicBanners, storeName]);
 
   const productsByCategoryId = useMemo(() => {
     const groupedProducts = new Map();
@@ -1300,17 +875,7 @@ export default function Demo03Home() {
     [activeTab, productTabGroups],
   );
 
-  const featuredCategoryLinks = useMemo(
-    () =>
-      categorySlides.slice(0, 2).map((category) => ({
-        label: category.title,
-        path: category.href,
-      })),
-    [categorySlides],
-  );
-
   const accountHref = user ? "/dashboard" : "/login";
-  const accountLabel = user ? "Dashboard" : "Account";
 
   const handleHomeProductAction = async (product) => {
     const rawProduct = product?.rawProduct || product;
@@ -1327,60 +892,58 @@ export default function Demo03Home() {
   };
 
   return (
-    <div id="page" className="page-content">
-      <SiteHeader
-        settings={settings}
-        cartCount={cartCount}
-        accountHref={accountHref}
-        accountLabel={accountLabel}
-        featuredCategoryLinks={featuredCategoryLinks}
-      />
-      <div id="main" className="main-content">
-        <Demo03Carousel
-          items={HERO_SLIDES}
-          renderItem={(slide) => <BannerBlock slide={slide} />}
-          className="slider-style"
-          itemsDesktop={1}
-          itemsTablet={1}
-          itemsMobile={1}
-          arrows
-          dotsDesktop
-          dotsTablet
-          dotsMobile
-          autoplay
-          autoplayMs={6000}
-          loop={false}
-          style={{ "--dots-background": "#f3f4f6" }}
-        />
+    <div className={DEMO03_SCOPE_CLASS}>
+      <div className={DEMO03_THEME_CLASSES.join(" ")}>
+        <div id="page" className="page-content" style={{ paddingTop: 0 }}>
+          <div id="main" className="main-content">
+            {heroSlides.length > 0 && (
+              <Demo03Carousel
+                items={heroSlides}
+                renderItem={(slide) => <BannerBlock slide={slide} />}
+                className="slider-style"
+                itemsDesktop={1}
+                itemsTablet={1}
+                itemsMobile={1}
+                arrows
+                dotsDesktop
+                dotsTablet
+                dotsMobile
+                autoplay
+                autoplayMs={6000}
+                loop
+                arrowPlacement="above-dots"
+                style={{ "--dots-background": "#f3f4f6" }}
+              />
+            )}
 
-        <div className="container section-margin">
-          <div
-            className="site-logos"
-            style={{ "--logo-desktop-height": "72px", "--logo-mobile-height": "66px" }}
-          >
-            <div
-              className="site-logos-inner animation-marquee"
-              style={{
-                "--marquee-speed": "45s",
-                "--marquee-gap-desktop": "28px",
-                "--marquee-gap-mobile": "30px",
-              }}
-            >
-              {Array.from({ length: 3 }, (_, columnIndex) => (
-                <div key={columnIndex} className="marquee-column">
-                  {LOGO_MARQUEE.map((src, idx) => (
-                    <div
-                      key={`${columnIndex}-${idx}`}
-                      className="marquee-item site-logos-item"
-                    >
-                      <img decoding="async" src={src} alt="" />
+            <div className="container section-margin">
+              <div
+                className="site-logos"
+                style={{ "--logo-desktop-height": "72px", "--logo-mobile-height": "66px" }}
+              >
+                <div
+                  className="site-logos-inner animation-marquee"
+                  style={{
+                    "--marquee-speed": "45s",
+                    "--marquee-gap-desktop": "28px",
+                    "--marquee-gap-mobile": "30px",
+                  }}
+                >
+                  {Array.from({ length: 3 }, (_, columnIndex) => (
+                    <div key={columnIndex} className="marquee-column">
+                      {LOGO_MARQUEE.map((src, idx) => (
+                        <div
+                          key={`${columnIndex}-${idx}`}
+                          className="marquee-item site-logos-item"
+                        >
+                          <img decoding="async" src={src} alt="" />
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
-        </div>
 
         <div className="container section-margin">
           <Demo03Carousel
@@ -1789,47 +1352,9 @@ export default function Demo03Home() {
         </div>
       </div>
 
-      <div className="container">
-        <div
-          className="section-padding border-top section-margin"
-          style={{
-            "--padding-top-mobile": "40px",
-            "--padding-top-tablet": "40px",
-            "--padding-top-desktop": "60px",
-          }}
-        >
-          <Demo03Carousel
-            items={FOOTER_FEATURES}
-            renderItem={(feature) => (
-              <div className="site-iconbox horizontal">
-                <div className="site-iconbox-icon">
-                  <img src={feature.icon} alt="" />
-                </div>
-                <div className="site-iconbox-content">
-                  <h4 className="entry-title">{feature.title}</h4>
-                  <div className="entry-description">
-                    <p>{feature.description}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-            className="carousel-style"
-            gapClass="gap-base"
-            itemsDesktop={4}
-            itemsTablet={3}
-            itemsMobile={1}
-            arrows={false}
-            dotsDesktop={false}
-            dotsTablet
-            dotsMobile
-            autoplay={false}
-            loop={false}
-          />
+          <MobileBottomNav accountHref={accountHref} />
         </div>
       </div>
-
-      <SiteFooter settings={settings} />
-      <MobileBottomNav accountHref={accountHref} />
     </div>
   );
 }

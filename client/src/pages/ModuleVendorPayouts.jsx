@@ -18,7 +18,7 @@ const getAuthHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-const formatAmount = (value) => `${Number(value || 0).toFixed(2)} TK`;
+const formatAmount = (value) => `${Number(value || 0).toFixed(2)} Tk`;
 
 const ModuleVendorPayouts = () => {
   const { user } = useAuth();

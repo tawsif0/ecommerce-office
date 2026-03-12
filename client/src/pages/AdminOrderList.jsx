@@ -501,7 +501,7 @@ const AdminOrderList = () => {
             <div class="row">
               <div>
                 <div class="label">Amount to Collect</div>
-                <div class="value">${Number(label.amountToCollect || 0).toFixed(2)} TK</div>
+                <div class="value">${Number(label.amountToCollect || 0).toFixed(2)} Tk</div>
               </div>
             </div>
             <div class="items">
@@ -631,8 +631,8 @@ const AdminOrderList = () => {
                 <tr>
                   <td>${item.product}</td>
                   <td>${item.quantity}</td>
-                  <td>৳${item.price.toFixed(2)}</td>
-                  <td>৳${item.total.toFixed(2)}</td>
+                  <td>Tk ${item.price.toFixed(2)}</td>
+                  <td>Tk ${item.total.toFixed(2)}</td>
                 </tr>
               `,
                 )
@@ -640,7 +640,7 @@ const AdminOrderList = () => {
             </tbody>
           </table>
           <div class="total">
-            <p>Total: ৳${order.total.toFixed(2)}</p>
+            <p>Total: Tk ${order.total.toFixed(2)}</p>
           </div>
         </body>
       </html>
@@ -816,7 +816,7 @@ const AdminOrderList = () => {
                       </td>
                       <td className="px-4 sm:px-6 py-3 sm:py-4">
                         <div className="font-semibold text-gray-900 text-sm sm:text-base">
-                          ৳{order.total.toFixed(2)}
+                          Tk {order.total.toFixed(2)}
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-3 sm:py-4">
@@ -908,7 +908,7 @@ const AdminOrderList = () => {
                     </div>
                     <div className="text-right">
                       <div className="font-semibold text-sm">
-                        ৳{order.total.toFixed(2)}
+                        Tk {order.total.toFixed(2)}
                       </div>
                       <span
                         className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
@@ -1141,7 +1141,7 @@ const AdminOrderList = () => {
                     <p>
                       <span className="text-gray-600">Total:</span>{" "}
                       <span className="font-medium">
-                        ৳{selectedOrder.total.toFixed(2)}
+                        Tk {selectedOrder.total.toFixed(2)}
                       </span>
                     </p>
                   </div>
@@ -1348,10 +1348,10 @@ const AdminOrderList = () => {
                             {item.quantity}
                           </td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3">
-                            ৳{item.price.toFixed(2)}
+                            Tk {item.price.toFixed(2)}
                           </td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3">
-                            ৳{item.total.toFixed(2)}
+                            Tk {item.total.toFixed(2)}
                           </td>
                         </tr>
                         );
@@ -1367,24 +1367,24 @@ const AdminOrderList = () => {
                   <div className="w-full sm:w-64 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span>৳{selectedOrder.subtotal.toFixed(2)}</span>
+                      <span>Tk {selectedOrder.subtotal.toFixed(2)}</span>
                     </div>
                     {selectedOrder.shippingFee > 0 && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Shipping:</span>
-                        <span>৳{selectedOrder.shippingFee.toFixed(2)}</span>
+                        <span>Tk {selectedOrder.shippingFee.toFixed(2)}</span>
                       </div>
                     )}
                     {selectedOrder.discount > 0 && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Discount:</span>
-                        <span>-৳{selectedOrder.discount.toFixed(2)}</span>
+                        <span>-Tk {selectedOrder.discount.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="border-t pt-2">
                       <div className="flex justify-between font-semibold text-sm sm:text-base">
                         <span>Total:</span>
-                        <span>৳{selectedOrder.total.toFixed(2)}</span>
+                        <span>Tk {selectedOrder.total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>

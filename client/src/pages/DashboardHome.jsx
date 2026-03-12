@@ -170,7 +170,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                   <div>
                     <p className="text-sm text-gray-500">Today Sales</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {Number(systemStats?.sales?.today || 0).toFixed(2)} TK
+                      {Number(systemStats?.sales?.today || 0).toFixed(2)} Tk
                     </p>
                   </div>
                 </div>
@@ -189,7 +189,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                   <div>
                     <p className="text-sm text-gray-500">Monthly Sales</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {Number(systemStats?.sales?.monthly || 0).toFixed(2)} TK
+                      {Number(systemStats?.sales?.monthly || 0).toFixed(2)} Tk
                     </p>
                   </div>
                 </div>
@@ -312,13 +312,13 @@ const DashboardHome = ({ user, onTabChange }) => {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Revenue</span>
                     <span className="font-semibold text-black">
-                      {Number(systemStats?.financials?.revenue || 0).toFixed(2)} TK
+                      {Number(systemStats?.financials?.revenue || 0).toFixed(2)} Tk
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Expense</span>
                     <span className="font-semibold text-black">
-                      {Number(systemStats?.financials?.expense || 0).toFixed(2)} TK
+                      {Number(systemStats?.financials?.expense || 0).toFixed(2)} Tk
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-gray-100 pt-2">
@@ -330,7 +330,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                           : "text-red-700"
                       }`}
                     >
-                      {Number(systemStats?.financials?.netProfit || 0).toFixed(2)} TK
+                      {Number(systemStats?.financials?.netProfit || 0).toFixed(2)} Tk
                     </span>
                   </div>
                 </div>
@@ -378,7 +378,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Abandoned Value</span>
                     <span className="font-semibold text-black">
-                      {Number(systemStats?.customerInsights?.abandonedValue || 0).toFixed(2)} TK
+                      {Number(systemStats?.customerInsights?.abandonedValue || 0).toFixed(2)} Tk
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -410,7 +410,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-semibold text-black">
-                          {Number(order.total || 0).toFixed(2)} TK
+                          {Number(order.total || 0).toFixed(2)} Tk
                         </p>
                         <p className="text-xs text-gray-500 capitalize">{order.status}</p>
                       </div>

@@ -300,8 +300,8 @@ const getOrderStatusEmailTemplate = (order, newStatus) => {
                     ${item.size ? `<br><small>Size: ${item.size}</small>` : ""}
                   </td>
                   <td>${item.quantity}</td>
-                  <td>৳${item.price?.toFixed(2)}</td>
-                  <td>৳${(item.quantity * item.price).toFixed(2)}</td>
+                  <td>Tk ${item.price?.toFixed(2)}</td>
+                  <td>Tk ${(item.quantity * item.price).toFixed(2)}</td>
                 </tr>
               `,
                 )
@@ -313,14 +313,14 @@ const getOrderStatusEmailTemplate = (order, newStatus) => {
             <h3 style="color: #000; margin-bottom: 15px;">Order Summary</h3>
             <div class="summary-row">
               <span>Subtotal:</span>
-              <span>৳${order.subtotal?.toFixed(2)}</span>
+              <span>Tk ${order.subtotal?.toFixed(2)}</span>
             </div>
             ${
               order.shippingFee > 0
                 ? `
             <div class="summary-row">
               <span>Shipping Fee:</span>
-              <span>৳${order.shippingFee?.toFixed(2)}</span>
+              <span>Tk ${order.shippingFee?.toFixed(2)}</span>
             </div>
             `
                 : ""
@@ -330,14 +330,14 @@ const getOrderStatusEmailTemplate = (order, newStatus) => {
                 ? `
             <div class="summary-row">
               <span>Discount:</span>
-              <span>-৳${order.discount?.toFixed(2)}</span>
+              <span>-Tk ${order.discount?.toFixed(2)}</span>
             </div>
             `
                 : ""
             }
             <div class="summary-row">
               <span>Total Amount:</span>
-              <span>৳${order.total?.toFixed(2)}</span>
+              <span>Tk ${order.total?.toFixed(2)}</span>
             </div>
           </div>
           
@@ -389,7 +389,7 @@ const isEmailConfigured = () =>
       (process.env.EMAIL_SERVICE || process.env.EMAIL_HOST),
   );
 
-const formatMoney = (value) => `${Number(value || 0).toFixed(2)} TK`;
+const formatMoney = (value) => `${Number(value || 0).toFixed(2)} Tk`;
 
 const escapeHtml = (value) =>
   String(value || "")

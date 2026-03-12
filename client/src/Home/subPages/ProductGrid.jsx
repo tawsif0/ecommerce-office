@@ -665,70 +665,12 @@ const ProductGrid = () => {
 
   return (
     <section className="min-h-screen bg-[radial-gradient(circle_at_top,#ffffff_0%,#f6f8fb_40%,#edf2f7_100%)]">
-      <div className="border-b border-gray-200/70 bg-transparent">
-        <div className="site-shell py-4 md:py-5">
-          <div className="site-card overflow-hidden">
-            <div className="grid gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center lg:px-8 lg:py-7">
-              <div>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex rounded-full bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
-                    {storeName}
-                  </span>
-                  {searchTerm ? (
-                    <span className="inline-flex rounded-full bg-yellow-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-yellow-900">
-                      Search: {searchTerm}
-                    </span>
-                  ) : null}
-                </div>
-                <h1 className="site-title text-2xl sm:text-3xl lg:text-4xl">
-                  {catalogTitle}
-                </h1>
-                <p className="site-copy mt-2 max-w-3xl text-sm sm:text-base">
-                  {tagline || catalogDescription}
-                </p>
-                <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
-                  Showing {filteredProducts.length} matched products in the current view
-                </p>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {visibleCategories.slice(0, 8).map((category) => (
-                    <button
-                      key={category._id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategory(category._id);
-                        navigate(`/shop?category=${category._id}`);
-                      }}
-                      className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                        selectedCategory === category._id
-                          ? "border-black bg-black text-white"
-                          : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-white"
-                      }`}
-                    >
-                      {category.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 xs:grid-cols-3 gap-3">
-                {[
-                  { label: "Products", value: catalogProductCount },
-                  { label: "Deals", value: catalogDealCount },
-                  publicStockSummaryEnabled
-                    ? { label: "Stock units", value: catalogStockUnits }
-                    : { label: "Categories", value: totalCategoryCount },
-                ].map((item) => (
-                  <div key={item.label} className="site-metric px-3 py-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                      {item.label}
-                    </p>
-                    <p className="mt-1 text-xl font-black text-black">{item.value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+      <div className="site-shell py-10 sm:py-12 lg:py-14">
+        <div className="mx-auto max-w-3xl text-center">
+          <h1 className="text-3xl font-black tracking-tight text-gray-950 sm:text-4xl lg:text-5xl">
+            {catalogTitle}
+          </h1>
+          <div className="mx-auto mt-5 h-px w-28 bg-gray-200" />
         </div>
       </div>
 
@@ -756,19 +698,7 @@ const ProductGrid = () => {
                 )}
               </div>
 
-              <div className="site-card-dark mb-6 px-4 py-4 text-white">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
-                  Inventory note
-                </p>
-                <p className="mt-2 text-sm leading-6 text-white/80">
-                  Exact product quantities still depend on each product's public stock toggle. The catalog summary above is controlled separately from Website Setup.
-                </p>
-                <div className="mt-3 flex items-center justify-between text-sm">
-                  <span className="text-white/70">TBA products</span>
-                  <span className="font-bold text-white">{tbaProductCount}</span>
-                </div>
-              </div>
-
+            
               {/* Categories */}
               <div className="mb-6 md:mb-8">
                 <button
@@ -883,8 +813,8 @@ const ProductGrid = () => {
                 {expandedFilters.price && (
                   <div className="space-y-4">
                     <div className="hidden items-center justify-between text-sm text-gray-600">
-                      <span>৳{priceRange[0].toFixed(2)}</span>
-                      <span>৳{priceRange[1].toFixed(2)}</span>
+                      <span>{priceRange[0].toFixed(2)} Tk</span>
+                      <span>{priceRange[1].toFixed(2)} Tk</span>
                     </div>
                     <input
                       type="range"
@@ -901,8 +831,8 @@ const ProductGrid = () => {
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                     />
                     <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span>{priceRange[0].toFixed(2)} TK</span>
-                      <span>{priceRange[1].toFixed(2)} TK</span>
+                      <span>{priceRange[0].toFixed(2)} Tk</span>
+                      <span>{priceRange[1].toFixed(2)} Tk</span>
                     </div>
                   </div>
                 )}
@@ -983,29 +913,24 @@ const ProductGrid = () => {
             </div>
 
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-              <div className="mb-4 sm:mb-0">
-                <h2 className="text-xl xs:text-2xl font-bold text-black">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl xs:text-2xl font-black tracking-tight text-gray-950">
                   {collectionLabel
                     ? collectionLabel
                     : selectedCategory !== "all" && categoryName
-                    ? `${categoryName} Products`
-                    : "All Products"}
+                      ? `${categoryName} Products`
+                      : "All Products"}
                 </h2>
-                <p className="text-gray-600 mt-1 text-sm">
-                  {filteredProducts.length} products found
-                  {collectionLabel && ` in ${collectionLabel.toLowerCase()}`}
-                  {selectedCategoryType !== "all" &&
-                    ` in ${selectedCategoryType}`}
-                </p>
-                {searchTerm && (
-                  <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-900 text-xs sm:text-sm font-semibold">
-                    Showing results for
-                    <span className="bg-yellow-200 text-black px-2 py-0.5 rounded">
-                      {searchTerm}
-                    </span>
-                  </div>
-                )}
+                <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                  {filteredProducts.length} items
+                </span>
+                {searchTerm ? (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    Search:
+                    <span className="ml-1 text-amber-900">{searchTerm}</span>
+                  </span>
+                ) : null}
               </div>
 
               {/* Desktop Controls */}
@@ -1069,120 +994,109 @@ const ProductGrid = () => {
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
                   {filteredProducts.slice(0, displayLimit).map((product) => {
-                    const categoryType = getCategoryTypeForProduct(product);
-                    const categoryName = getCategoryNameForProduct(product);
-                    const vendor = getVendorForProduct(product);
                     const pricing = getProductPricing(product);
-                    const vendorName = vendor?.storeName
-                      ? `Sold by ${vendor.storeName}`
-                      : "";
-                    const productMetaLine = getProductCardMetaLine(product);
-                    const metaSummary = [
-                      getVendorSummary(vendor),
-                      product.marketplaceType
-                        ? `Type: ${product.marketplaceType}`
-                        : null,
-                      getPublicStockBadgeText(product),
-                    ]
-                      .filter(Boolean)
-                      .join(" | ");
                     const previewColors = Array.isArray(product.colors)
                       ? product.colors.slice(0, 4)
                       : [];
                     const hasMoreColors =
                       Array.isArray(product.colors) && product.colors.length > 4;
                     const compared = isProductCompared(product._id);
+                    const discountPercent =
+                      pricing.hasDiscount &&
+                      Number.isFinite(pricing.previousPrice) &&
+                      Number(pricing.previousPrice || 0) > 0
+                        ? Math.round(
+                            ((Number(pricing.previousPrice || 0) -
+                              Number(pricing.currentPrice || 0)) /
+                              Number(pricing.previousPrice || 0)) *
+                              100,
+                          )
+                        : null;
+                    const stockBadgeText = getPublicStockBadgeText(product);
+                    const showStockBadge =
+                      Boolean(stockBadgeText) && isPublicStockVisible(product);
 
                     return (
                       <div
                         key={product._id}
-                        className="group relative flex flex-col h-[316px] sm:h-[334px] md:h-[348px] rounded-[24px] border border-gray-200/80 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(15,23,42,0.12)]"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          navigate(`/product/${product._id}`);
+                          if (typeof window !== "undefined") window.scrollTo(0, 0);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            navigate(`/product/${product._id}`);
+                            if (typeof window !== "undefined") window.scrollTo(0, 0);
+                          }
+                        }}
+                        className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-gray-300 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-black/40"
                       >
                         {/* Product Image */}
-                        <div
-                          className="relative overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2.5 sm:p-3 cursor-pointer"
-                          onClick={() => {
-                            navigate(`/product/${product._id}`);
-                            window.scrollTo(0, 0);
-                          }}
-                        >
-                          <div className="aspect-square rounded-xl overflow-hidden bg-white shadow-sm ring-1 ring-gray-200/60">
+                        <div className="relative aspect-square overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2 sm:p-2.5">
+                          {discountPercent && discountPercent > 0 ? (
+                            <span className="absolute left-3 top-3 inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-bold text-white shadow-sm">
+                              -{discountPercent}%
+                            </span>
+                          ) : null}
+
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleToggleCompare(product);
+                            }}
+                            className={`absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border bg-white/90 shadow-sm transition ${
+                              compared
+                                ? "border-black bg-black text-white"
+                                : "border-gray-200 text-gray-700 hover:border-black hover:text-black"
+                            }`}
+                            aria-label={compared ? "Remove from compare" : "Add to compare"}
+                            title={compared ? "Remove from compare" : "Add to compare"}
+                          >
+                            <FiShuffle className="h-4 w-4" />
+                          </button>
+
+                          <div className="relative h-full w-full">
                             <ProductImage
                               src={product.images?.[0]}
                               alt={product.title}
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
                             />
                           </div>
-
-                          {/* Category Badge */}
-                          {categoryName && (
-                            <div className="absolute top-2 left-2 sm:top-3 sm:left-3">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1 bg-black text-white text-[10px] sm:text-xs font-semibold rounded-full shadow-sm">
-                                {categoryName}
-                              </span>
-                            </div>
-                          )}
-                          {pricing.hasDiscount ? (
-                            <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-                              <span className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold text-black shadow-sm">
-                                Sale
-                              </span>
-                            </div>
-                          ) : null}
                         </div>
 
                         {/* Product Info */}
-                        <div className="flex flex-col px-3 pb-3 pt-2 sm:px-3.5 sm:pb-3 sm:pt-2.5 flex-1">
-                          <div className="space-y-1">
-                            <h3
-                              className="font-semibold text-black line-clamp-2 text-xs sm:text-sm cursor-pointer hover:text-gray-700 tracking-tight leading-tight"
-                              onClick={() => navigate(`/product/${product._id}`)}
-                            >
-                              {highlightText(product.title, searchTerm)}
-                            </h3>
-                            {vendor?.slug ? (
-                              <button
-                                onClick={() => navigate(`/store/${vendor.slug}`)}
-                                className="self-start text-[10px] sm:text-[11px] text-gray-500 hover:text-black line-clamp-1"
-                              >
-                                {vendorName || "Sold by Vendor"}
-                              </button>
-                            ) : vendorName ? (
-                              <p className="self-start text-[10px] sm:text-[11px] text-gray-500 line-clamp-1">
-                                {vendorName}
-                              </p>
-                            ) : null}
-                            {metaSummary ? (
-                              <p className="text-[10px] sm:text-[11px] text-gray-400 line-clamp-1">
-                                {metaSummary}
-                              </p>
-                            ) : null}
-                            {productMetaLine ? (
-                              <p className="text-[10px] sm:text-[11px] text-gray-500 line-clamp-1">
-                                {productMetaLine}
-                              </p>
-                            ) : null}
-                            {previewColors.length > 0 ? (
-                              <div className="flex items-center gap-1">
-                                {previewColors.map((color, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full border border-gray-600 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]"
-                                    style={{ backgroundColor: color }}
-                                    title={color}
-                                  />
-                                ))}
-                                {hasMoreColors ? (
-                                  <span className="inline-flex items-center justify-center min-w-[1.05rem] h-[1.05rem] sm:min-w-[1.2rem] sm:h-[1.2rem] rounded-full bg-linear-to-br from-black to-gray-700 text-white text-[8px] sm:text-[9px] font-bold shadow-sm">
-                                    4+
-                                  </span>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                              {isPublicStockVisible(product) ? (
+                        <div className="px-3 py-2.5 text-left sm:px-4 sm:py-3">
+                          <h3 className="line-clamp-2 text-[13px] font-semibold text-black sm:text-sm leading-snug">
+                            {highlightText(product.title, searchTerm)}
+                          </h3>
+
+                          {previewColors.length > 0 ? (
+                            <div className="mt-2 flex items-center justify-start gap-1">
+                              {previewColors.map((color, idx) => (
+                                <div
+                                  key={idx}
+                                  className="h-3 w-3 rounded-full border border-gray-600 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] sm:h-3.5 sm:w-3.5"
+                                  style={{ backgroundColor: color }}
+                                  title={color}
+                                />
+                              ))}
+                              {hasMoreColors ? (
+                                <span className="inline-flex items-center justify-center min-w-[1.05rem] h-[1.05rem] sm:min-w-[1.2rem] sm:h-[1.2rem] rounded-full bg-linear-to-br from-black to-gray-700 text-white text-[8px] sm:text-[9px] font-bold shadow-sm">
+                                  4+
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+
+                          {showStockBadge || pricing.isTba ? (
+                            <div className="mt-2 flex flex-wrap items-center justify-start gap-1.5">
+                              {showStockBadge ? (
                                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                  {getPublicStockBadgeText(product)}
+                                  {stockBadgeText}
                                 </span>
                               ) : null}
                               {pricing.isTba ? (
@@ -1191,57 +1105,42 @@ const ProductGrid = () => {
                                 </span>
                               ) : null}
                             </div>
-                          </div>
+                          ) : null}
 
-                          {/* Price & Action */}
-                          <div className="mt-auto pt-2 border-t border-gray-100 flex flex-col gap-2">
-                            <div>
-                              {pricing.isTba ? (
-                                <div className="text-sm sm:text-base font-bold text-black leading-none">
-                                  TBA
-                                </div>
-                              ) : (
-                                <div className="flex items-baseline gap-2">
-                                  {pricing.hasDiscount && (
-                                    <span className="text-xs sm:text-sm text-gray-400 line-through">
-                                      {`${pricing.previousPrice.toFixed(2)} TK`}
-                                    </span>
-                                  )}
-                                  <div className="text-sm sm:text-base font-bold text-black leading-none">
-                                    {`${Number(pricing.currentPrice || 0).toFixed(2)} TK`}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleCompare(product)}
-                                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors ${
-                                  compared
-                                    ? "border-black bg-black text-white"
-                                    : "border-gray-300 text-gray-600 hover:border-black hover:text-black"
-                                }`}
-                                title={compared ? "Remove from compare" : "Add to compare"}
-                              >
-                                <FiShuffle className="text-xs sm:text-sm" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  navigate(`/product/${product._id}`);
-                                  window.scrollTo(0, 0);
-                                }}
-                                className="cursor-pointer flex-1 h-8 px-3 sm:px-3.5 bg-black text-white rounded-full text-[11px] sm:text-xs font-semibold hover:bg-gray-900 transition-colors flex items-center justify-center gap-1 sm:gap-2"
-                              >
-                                <FiEye className="text-xs sm:text-sm" />
-                                <span className="hidden xs:inline">
-                                  View Details
+                          <div className="mt-2 flex items-baseline justify-start gap-2">
+                            {pricing.isTba ? (
+                              <span className="text-base font-black text-gray-950 sm:text-lg">
+                                TBA
+                              </span>
+                            ) : (
+                              <>
+                                {pricing.hasDiscount ? (
+                                  <span className="text-xs text-gray-400 line-through sm:text-sm">
+                                    {Number(pricing.previousPrice || 0).toFixed(2)} Tk
+                                  </span>
+                                ) : null}
+                                <span className="text-base font-black text-gray-950 sm:text-lg">
+                                  {Number(pricing.currentPrice || 0).toFixed(2)}
                                 </span>
-                                <span className="xs:hidden">View</span>
-                              </button>
-                            </div>
+                                <span className="text-xs font-semibold text-gray-600 sm:text-sm">
+                                  Tk
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(`/product/${product._id}`);
+                            if (typeof window !== "undefined") window.scrollTo(0, 0);
+                          }}
+                          className="mt-auto w-full rounded-none bg-gray-900 py-2 text-xs font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 sm:py-2.5 sm:text-sm"
+                        >
+                          View Details
+                        </button>
                       </div>
                     );
                   })}
@@ -1462,11 +1361,11 @@ const ProductGrid = () => {
                                         <div className="flex items-baseline gap-2 whitespace-nowrap">
                                           {pricing.hasDiscount && (
                                             <span className="text-sm text-gray-400 line-through">
-                                              {`${pricing.previousPrice.toFixed(2)} TK`}
+                                              {`${pricing.previousPrice.toFixed(2)} Tk`}
                                             </span>
                                           )}
                                           <div className="text-2xl font-bold text-black">
-                                            {`${Number(pricing.currentPrice || 0).toFixed(2)} TK`}
+                                            {`${Number(pricing.currentPrice || 0).toFixed(2)} Tk`}
                                           </div>
                                         </div>
                                       )}
@@ -1489,9 +1388,11 @@ const ProductGrid = () => {
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             navigate(`/product/${product._id}`);
-                                            window.scrollTo(0, 0);
+                                            if (typeof window !== "undefined") {
+                                              window.scrollTo(0, 0);
+                                            }
                                           }}
-                                          className="w-full lg:w-auto bg-gray-600 text-white py-2 px-6 rounded-xl font-semibold text-sm shadow-lg hover:shadow-xl hover:bg-gray-800 transition-all duration-300 whitespace-nowrap"
+                                          className="inline-flex h-10 w-full items-center justify-center rounded-none bg-gray-900 px-5 text-sm font-semibold text-white transition hover:bg-black lg:w-auto"
                                         >
                                           View Details
                                         </button>
@@ -1530,10 +1431,6 @@ const ProductGrid = () => {
               </>
             )}
 
-            {/* Results Info */}
-            <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200 text-center text-gray-600 text-sm sm:text-base">
-              Showing {filteredProducts.length} of {products.length} products
-            </div>
           </div>
         </div>
       </div>
@@ -1642,8 +1539,8 @@ const ProductGrid = () => {
                   <h4 className="font-semibold text-black mb-3">Price Range</h4>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span>৳{priceRange[0].toFixed(2)}</span>
-                      <span>৳{priceRange[1].toFixed(2)}</span>
+                      <span>{priceRange[0].toFixed(2)} Tk</span>
+                      <span>{priceRange[1].toFixed(2)} Tk</span>
                     </div>
                     <input
                       type="range"

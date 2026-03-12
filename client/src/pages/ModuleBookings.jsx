@@ -125,7 +125,7 @@ const ModuleBookings = () => {
                 </div>
 
                 <div className="xl:col-span-2">
-                  <p className="text-sm text-gray-700">Amount: {booking.total || 0} TK</p>
+                  <p className="text-sm text-gray-700">Amount: {booking.total || 0} Tk</p>
                   <p className="text-sm text-gray-700">Type: {booking.bookingType}</p>
                   <p className="text-sm text-gray-700">Payment: {booking.paymentStatus}</p>
                 </div>

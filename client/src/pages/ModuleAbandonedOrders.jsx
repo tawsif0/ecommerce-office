@@ -291,7 +291,7 @@ const ModuleAbandonedOrders = () => {
                       </p>
                     </td>
                     <td className="py-3 pr-3 font-semibold text-black">
-                      {Number(row.total || 0).toFixed(2)} TK
+                      {Number(row.total || 0).toFixed(2)} Tk
                     </td>
                     <td className="py-3 pr-3">
                       <span

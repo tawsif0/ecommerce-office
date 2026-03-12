@@ -128,9 +128,9 @@ const AdminVendorReports = () => {
       ["Summary"],
       ["Total Vendors", summary.totalVendors || 0],
       ["Total Orders", summary.totalOrders || 0],
-      ["Gross Sales (TK)", Number(summary.grossSales || 0).toFixed(2)],
-      ["Commission (TK)", Number(summary.commissionTotal || 0).toFixed(2)],
-      ["Net Earnings (TK)", Number(summary.netEarnings || 0).toFixed(2)],
+      ["Gross Sales (Tk)", Number(summary.grossSales || 0).toFixed(2)],
+      ["Commission (Tk)", Number(summary.commissionTotal || 0).toFixed(2)],
+      ["Net Earnings (Tk)", Number(summary.netEarnings || 0).toFixed(2)],
       [],
       ["Rows"],
       [
@@ -140,9 +140,9 @@ const AdminVendorReports = () => {
         "Orders",
         "Pending",
         "Delivered",
-        "Gross Sales (TK)",
-        "Commission (TK)",
-        "Net Earnings (TK)",
+        "Gross Sales (Tk)",
+        "Commission (Tk)",
+        "Net Earnings (Tk)",
       ],
       ...reports.map((row) => [
         row.storeName || "",
@@ -191,9 +191,9 @@ const AdminVendorReports = () => {
       body: [
         ["Total Vendors", Number(summary.totalVendors || 0)],
         ["Total Orders", Number(summary.totalOrders || 0)],
-        ["Gross Sales (TK)", Number(summary.grossSales || 0).toFixed(2)],
-        ["Commission (TK)", Number(summary.commissionTotal || 0).toFixed(2)],
-        ["Net Earnings (TK)", Number(summary.netEarnings || 0).toFixed(2)],
+        ["Gross Sales (Tk)", Number(summary.grossSales || 0).toFixed(2)],
+        ["Commission (Tk)", Number(summary.commissionTotal || 0).toFixed(2)],
+        ["Net Earnings (Tk)", Number(summary.netEarnings || 0).toFixed(2)],
       ],
       theme: "grid",
       styles: { fontSize: 9 },
@@ -212,9 +212,9 @@ const AdminVendorReports = () => {
           "Orders",
           "Pending",
           "Delivered",
-          "Gross (TK)",
-          "Commission (TK)",
-          "Net (TK)",
+          "Gross (Tk)",
+          "Commission (Tk)",
+          "Net (Tk)",
         ],
       ],
       body: reports.map((row) => [
@@ -332,19 +332,19 @@ const AdminVendorReports = () => {
           <div className="border border-gray-200 rounded-lg p-3">
             <p className="text-xs text-gray-500">Gross Sales</p>
             <p className="text-xl font-semibold text-black mt-1">
-              {Number(summary.grossSales || 0).toFixed(2)} TK
+              {Number(summary.grossSales || 0).toFixed(2)} Tk
             </p>
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <p className="text-xs text-gray-500">Commission</p>
             <p className="text-xl font-semibold text-black mt-1">
-              {Number(summary.commissionTotal || 0).toFixed(2)} TK
+              {Number(summary.commissionTotal || 0).toFixed(2)} Tk
             </p>
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <p className="text-xs text-gray-500">Vendor Net Earnings</p>
             <p className="text-xl font-semibold text-black mt-1">
-              {Number(summary.netEarnings || 0).toFixed(2)} TK
+              {Number(summary.netEarnings || 0).toFixed(2)} Tk
             </p>
           </div>
         </div>
@@ -402,11 +402,11 @@ const AdminVendorReports = () => {
                     <td className="py-2 pr-3">{row.totalOrders}</td>
                     <td className="py-2 pr-3">{row.pendingOrders}</td>
                     <td className="py-2 pr-3">{row.deliveredOrders}</td>
-                    <td className="py-2 pr-3">{Number(row.grossSales || 0).toFixed(2)} TK</td>
+                    <td className="py-2 pr-3">{Number(row.grossSales || 0).toFixed(2)} Tk</td>
                     <td className="py-2 pr-3">
-                      {Number(row.commissionTotal || 0).toFixed(2)} TK
+                      {Number(row.commissionTotal || 0).toFixed(2)} Tk
                     </td>
-                    <td className="py-2 pr-3">{Number(row.netEarnings || 0).toFixed(2)} TK</td>
+                    <td className="py-2 pr-3">{Number(row.netEarnings || 0).toFixed(2)} Tk</td>
                   </tr>
                 ))}
               </tbody>

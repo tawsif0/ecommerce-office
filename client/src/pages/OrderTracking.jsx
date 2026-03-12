@@ -712,7 +712,7 @@ const OrderTracking = () => {
                           Unit Price: {item.price?.toFixed(2)}
                         </div>
                         <div className="font-semibold">
-                          ৳{item.itemTotal?.toFixed(2)}
+                          Tk {item.itemTotal?.toFixed(2)}
                         </div>
                       </div>
                     </div>
@@ -727,24 +727,24 @@ const OrderTracking = () => {
                   <div className="w-64 space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span>৳{order.subtotal?.toFixed(2)}</span>
+                      <span>Tk {order.subtotal?.toFixed(2)}</span>
                     </div>
                     {order.shippingFee > 0 && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Shipping:</span>
-                        <span>৳{order.shippingFee?.toFixed(2)}</span>
+                        <span>Tk {order.shippingFee?.toFixed(2)}</span>
                       </div>
                     )}
                     {order.discount > 0 && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Discount:</span>
-                        <span>-৳{order.discount?.toFixed(2)}</span>
+                        <span>-Tk {order.discount?.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="border-t pt-3">
                       <div className="flex justify-between font-bold text-lg">
                         <span>Total:</span>
-                        <span>৳{order.total?.toFixed(2)}</span>
+                        <span>Tk {order.total?.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -834,7 +834,7 @@ const OrderTracking = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Total Amount</span>
                   <span className="font-bold text-lg">
-                    ৳{order.total?.toFixed(2)}
+                    Tk {order.total?.toFixed(2)}
                   </span>
                 </div>
               </div>

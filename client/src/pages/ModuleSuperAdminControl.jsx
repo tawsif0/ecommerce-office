@@ -495,7 +495,7 @@ const ModuleSuperAdminControl = ({ onMarketplaceModeChange }) => {
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-[11px] text-gray-500">Delivered Revenue</p>
           <p className="text-xl font-bold text-black mt-1">
-            {Number(activity.totalRevenue || 0).toFixed(2)} TK
+            {Number(activity.totalRevenue || 0).toFixed(2)} Tk
           </p>
         </div>
       </div>
@@ -522,7 +522,7 @@ const ModuleSuperAdminControl = ({ onMarketplaceModeChange }) => {
                     <p className="text-xs text-gray-500 capitalize">{order.status || "-"}</p>
                   </div>
                   <p className="text-xs text-gray-600 mt-1">
-                    {order.customerName || "Guest"} • {Number(order.total || 0).toFixed(2)} TK
+                    {order.customerName || "Guest"} • {Number(order.total || 0).toFixed(2)} Tk
                   </p>
                 </div>
               ))}

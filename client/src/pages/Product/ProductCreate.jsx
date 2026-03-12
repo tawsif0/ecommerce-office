@@ -594,8 +594,8 @@ const ProductCreate = () => {
                   <div className="grid grid-cols-1 gap-3 md:gap-4">
                     <div>
                       <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                        <span className="mr-2 font-semibold">৳</span>
-                        Price (৳) *
+                        <span className="mr-2 font-semibold">Tk</span>
+                        Price (Tk) *
                       </label>
                       <input
                         type="number"
@@ -603,7 +603,7 @@ const ProductCreate = () => {
                         value={form.price}
                         onChange={handleChange}
                         onBlur={() => validateField("price", form.price)}
-                        placeholder="৳ 0.00"
+                        placeholder="Tk 0.00"
                         step="0.01"
                         min="0"
                         className={`w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border ${

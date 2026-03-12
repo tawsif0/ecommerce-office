@@ -132,10 +132,10 @@ const AdminProductReports = () => {
       ["Summary"],
       ["Reported Products", summary.totalProducts || 0],
       ["Quantity Sold", summary.totalQuantitySold || 0],
-      ["Total Revenue (TK)", Number(summary.totalRevenue || 0).toFixed(2)],
+      ["Total Revenue (Tk)", Number(summary.totalRevenue || 0).toFixed(2)],
       [],
       ["Rows"],
-      ["Product", "Vendor", "Qty Sold", "Orders", "Revenue (TK)"],
+      ["Product", "Vendor", "Qty Sold", "Orders", "Revenue (Tk)"],
       ...reports.map((row) => [
         row.title || "",
         row.vendorName || "N/A",
@@ -179,7 +179,7 @@ const AdminProductReports = () => {
       body: [
         ["Reported Products", Number(summary.totalProducts || 0)],
         ["Quantity Sold", Number(summary.totalQuantitySold || 0)],
-        ["Total Revenue (TK)", Number(summary.totalRevenue || 0).toFixed(2)],
+        ["Total Revenue (Tk)", Number(summary.totalRevenue || 0).toFixed(2)],
       ],
       theme: "grid",
       styles: { fontSize: 9 },
@@ -190,7 +190,7 @@ const AdminProductReports = () => {
 
     autoTable(doc, {
       startY: (doc.lastAutoTable?.finalY || 90) + 18,
-      head: [["Product", "Vendor", "Qty Sold", "Orders", "Revenue (TK)"]],
+      head: [["Product", "Vendor", "Qty Sold", "Orders", "Revenue (Tk)"]],
       body: reports.map((row) => [
         row.title || "",
         row.vendorName || "N/A",
@@ -301,7 +301,7 @@ const AdminProductReports = () => {
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Total Revenue</p>
           <p className="text-2xl font-bold text-black mt-1">
-            {Number(summary.totalRevenue || 0).toFixed(2)} TK
+            {Number(summary.totalRevenue || 0).toFixed(2)} Tk
           </p>
         </div>
       </div>
@@ -362,7 +362,7 @@ const AdminProductReports = () => {
                     <td className="py-2 pr-3">{Number(row.quantitySold || 0)}</td>
                     <td className="py-2 pr-3">{Number(row.orderCount || 0)}</td>
                     <td className="py-2 pr-3">
-                      {Number(row.grossRevenue || 0).toFixed(2)} TK
+                      {Number(row.grossRevenue || 0).toFixed(2)} Tk
                     </td>
                   </tr>
                 ))}

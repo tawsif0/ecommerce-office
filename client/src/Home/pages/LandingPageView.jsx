@@ -44,9 +44,9 @@ const getProductPriceLabel = (product) => {
 
   if (priceType === "tba") return "TBA";
   if (priceType === "best" && salePrice > 0 && salePrice < price) {
-    return `${salePrice.toFixed(2)} TK`;
+    return `${salePrice.toFixed(2)} Tk`;
   }
-  return `${price.toFixed(2)} TK`;
+  return `${price.toFixed(2)} Tk`;
 };
 
 const sanitizeInlineScript = (rawCode) =>

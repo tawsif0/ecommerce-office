@@ -274,8 +274,8 @@ const ModuleAuctions = () => {
                 </div>
 
                 <div className="xl:col-span-4">
-                  <p className="text-sm text-gray-700">Current bid: {auction.currentBid || 0} TK</p>
-                  <p className="text-sm text-gray-700">Winning: {auction.winningAmount || 0} TK</p>
+                  <p className="text-sm text-gray-700">Current bid: {auction.currentBid || 0} Tk</p>
+                  <p className="text-sm text-gray-700">Winning: {auction.winningAmount || 0} Tk</p>
                   <p className="text-sm text-gray-700">Total bids: {auction.totalBids || 0}</p>
                 </div>
 

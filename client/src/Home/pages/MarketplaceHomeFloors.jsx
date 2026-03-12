@@ -98,11 +98,11 @@ const ProductMiniCard = ({ product, onClick }) => {
           ) : (
             <div className="flex items-end gap-2">
               <span className="text-lg font-black text-black">
-                {Number(pricing.currentPrice || 0).toFixed(2)} TK
+                {Number(pricing.currentPrice || 0).toFixed(2)} Tk
               </span>
               {pricing.hasDiscount ? (
                 <span className="text-xs text-gray-400 line-through">
-                  {Number(pricing.previousPrice || 0).toFixed(2)} TK
+                  {Number(pricing.previousPrice || 0).toFixed(2)} Tk
                 </span>
               ) : null}
             </div>

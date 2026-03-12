@@ -327,7 +327,7 @@ const AdminCustomerRisk = () => {
                   </div>
                   <div className="rounded border border-gray-200 p-2">
                     <p className="text-gray-500">Revenue</p>
-                    <p className="font-semibold text-black">{Number(row.totalRevenue || 0).toFixed(2)} TK</p>
+                    <p className="font-semibold text-black">{Number(row.totalRevenue || 0).toFixed(2)} Tk</p>
                   </div>
                 </div>
 
@@ -433,10 +433,10 @@ const AdminCustomerRisk = () => {
                   <div className="border border-gray-200 rounded-lg p-3">
                     <p className="text-xs text-gray-500">Total Revenue</p>
                     <p className="text-xl font-bold text-black">
-                      {Number(profileData.metrics?.totalRevenue || 0).toFixed(2)} TK
+                      {Number(profileData.metrics?.totalRevenue || 0).toFixed(2)} Tk
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Value: {Number(profileData.metrics?.totalOrderValue || 0).toFixed(2)} TK
+                      Value: {Number(profileData.metrics?.totalOrderValue || 0).toFixed(2)} Tk
                     </p>
                   </div>
                 </div>
@@ -507,7 +507,7 @@ const AdminCustomerRisk = () => {
                                 {order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A"}
                               </p>
                               <p className="font-semibold text-black">
-                                {Number(order.total || 0).toFixed(2)} TK
+                                {Number(order.total || 0).toFixed(2)} Tk
                               </p>
                             </div>
                           </div>

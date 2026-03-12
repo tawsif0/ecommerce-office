@@ -179,11 +179,11 @@ const ModuleSuppliers = () => {
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Total Due</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalDue || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalDue || 0).toFixed(2)} Tk</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="text-xs text-gray-500">Total Paid</p>
-          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalPaid || 0).toFixed(2)} TK</p>
+          <p className="text-2xl font-bold text-black mt-1">{Number(summary.totalPaid || 0).toFixed(2)} Tk</p>
         </div>
       </div>
 
@@ -315,10 +315,10 @@ const ModuleSuppliers = () => {
                         <p className="text-xs text-gray-500">{supplier.email || "-"}</p>
                       </td>
                       <td className="py-3 pr-3 font-semibold text-black">
-                        {Number(supplier.currentDue || 0).toFixed(2)} TK
+                        {Number(supplier.currentDue || 0).toFixed(2)} Tk
                       </td>
                       <td className="py-3 pr-3">
-                        {Number(supplier.totalPaid || 0).toFixed(2)} TK
+                        {Number(supplier.totalPaid || 0).toFixed(2)} Tk
                       </td>
                       <td className="py-3 pr-3">
                         <div className="flex flex-wrap items-center gap-2">

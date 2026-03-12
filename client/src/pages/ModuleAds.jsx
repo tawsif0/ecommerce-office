@@ -344,7 +344,7 @@ const ModuleAds = () => {
                 </div>
 
                 <div className="xl:col-span-3 text-sm text-gray-700">
-                  <p>Budget: {ad.budget || 0} TK</p>
+                  <p>Budget: {ad.budget || 0} Tk</p>
                   <p>Impressions: {ad.impressions || 0}</p>
                   <p>Clicks: {ad.clicks || 0}</p>
                   <p>

@@ -434,7 +434,7 @@ const AdminAddOrder = () => {
                     <input type="number" min="1" value={entry.quantity} onChange={(e) => setItems((prev) => prev.map((row) => row.productId === entry.productId ? { ...row, quantity: qty(e.target.value) } : row))} className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm" />
                   </div>
                   <div className="md:col-span-2 text-sm font-semibold text-black flex items-center">
-                    {Number(entry.unitPrice || 0).toFixed(2)} TK
+                    {Number(entry.unitPrice || 0).toFixed(2)} Tk
                   </div>
                   <div className="md:col-span-1">
                     <button type="button" onClick={() => setItems((prev) => prev.filter((row) => row.productId !== entry.productId))} className="w-full h-9 border border-red-300 text-red-600 rounded-lg inline-flex items-center justify-center">
@@ -477,8 +477,8 @@ const AdminAddOrder = () => {
           </div>
           <textarea value={meta.adminNotes} onChange={(e) => setMeta((p) => ({ ...p, adminNotes: e.target.value }))} rows={2} placeholder="Admin notes" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" />
           <div className="flex flex-wrap items-center gap-4 text-sm">
-            <p>Subtotal: <span className="font-semibold">{subtotal.toFixed(2)} TK</span></p>
-            <p>Total: <span className="font-bold">{total.toFixed(2)} TK</span></p>
+            <p>Subtotal: <span className="font-semibold">{subtotal.toFixed(2)} Tk</span></p>
+            <p>Total: <span className="font-bold">{total.toFixed(2)} Tk</span></p>
           </div>
           <button type="submit" disabled={submitting || items.length === 0} className="px-6 h-11 bg-black text-white rounded-lg font-semibold disabled:opacity-60">
             {submitting ? "Creating..." : "Create Order"}

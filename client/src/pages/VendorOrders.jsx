@@ -135,11 +135,11 @@ const VendorOrders = () => {
                         {item.product?.title || "Product"}
                       </p>
                       <p className="text-sm text-gray-600">
-                        Qty: {item.quantity} x {Number(item.price || 0).toFixed(2)} TK
+                        Qty: {item.quantity} x {Number(item.price || 0).toFixed(2)} Tk
                       </p>
                     </div>
                     <div className="text-sm font-semibold text-black">
-                      {(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)} TK
+                      {(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)} Tk
                     </div>
                   </div>
                 ))}
@@ -149,19 +149,19 @@ const VendorOrders = () => {
                 <div className="border border-gray-200 rounded-lg p-3">
                   <p className="text-gray-500">Vendor Subtotal</p>
                   <p className="font-semibold text-black mt-1">
-                    {Number(order.vendorSubtotal || 0).toFixed(2)} TK
+                    {Number(order.vendorSubtotal || 0).toFixed(2)} Tk
                   </p>
                 </div>
                 <div className="border border-gray-200 rounded-lg p-3">
                   <p className="text-gray-500">Commission</p>
                   <p className="font-semibold text-black mt-1">
-                    {Number(order.vendorCommission || 0).toFixed(2)} TK
+                    {Number(order.vendorCommission || 0).toFixed(2)} Tk
                   </p>
                 </div>
                 <div className="border border-gray-200 rounded-lg p-3">
                   <p className="text-gray-500">Your Net</p>
                   <p className="font-semibold text-black mt-1">
-                    {Number(order.vendorNet || 0).toFixed(2)} TK
+                    {Number(order.vendorNet || 0).toFixed(2)} Tk
                   </p>
                 </div>
               </div>

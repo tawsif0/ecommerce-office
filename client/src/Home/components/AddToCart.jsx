@@ -389,15 +389,7 @@ const AddToCart = () => {
                     <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
                       {totalUnits} total units
                     </span>
-                    {appliedCoupon?.code ? (
-                      <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
-                        Coupon {appliedCoupon.code} active
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-                        No coupon applied yet
-                      </span>
-                    )}
+                
                   </div>
                 </div>
 

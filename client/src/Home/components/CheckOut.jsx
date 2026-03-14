@@ -1276,10 +1276,8 @@ const CheckOut = () => {
                     address is correct.
                   </span>
                 </label>
-                <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">
-                  <FiShield className="h-4 w-4" />
-                  Protected order submission
-                </div>
+          
+          
               </div>
 
               <button

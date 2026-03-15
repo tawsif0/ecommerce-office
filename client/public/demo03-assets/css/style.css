@@ -3576,29 +3576,46 @@ section.up-sells + section.related {
     color: #000000 !important;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 244, 246, 0.96)) !important;
     border-color: rgba(15, 23, 42, 0.12) !important;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, background-color 0.22s ease, border-color 0.22s ease !important;
+    padding: 0 !important;
+    min-width: 0 !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+    overflow: hidden !important;
 }
 
+.demo03-scope .site-slider .slick-nav .slick-nav-icon,
 .demo03-scope .site-slider .slick-nav svg {
-    display: none !important;
+    display: block !important;
+    width: 1.1rem !important;
+    height: 1.1rem !important;
+    overflow: visible !important;
+    flex: none !important;
+}
+
+.demo03-scope .site-slider .slick-nav .slick-nav-icon path,
+.demo03-scope .site-slider .slick-nav svg path {
+    stroke: currentColor !important;
+    stroke-width: 2.2 !important;
 }
 
 .demo03-scope .site-slider .slick-nav::before {
-    content: "";
-    display: block;
-    width: 0.78rem;
-    height: 0.78rem;
-    background: none !important;
-    border-top: 2.4px solid #000000;
-    border-right: 2.4px solid #000000;
-    border-radius: 1px;
+    content: none !important;
 }
 
-.demo03-scope .site-slider .slick-nav.slick-prev::before {
-    transform: rotate(-135deg);
+.demo03-scope .site-slider .slick-nav:hover,
+.demo03-scope .site-slider .slick-nav:focus-visible {
+    background: #111827 !important;
+    border-color: #111827 !important;
+    box-shadow: 0 20px 42px rgba(15, 23, 42, 0.32) !important;
+    color: #ffffff !important;
 }
 
-.demo03-scope .site-slider .slick-nav.slick-next::before {
-    transform: rotate(45deg);
+.demo03-scope .site-slider .slick-nav:hover .slick-nav-icon path,
+.demo03-scope .site-slider .slick-nav:focus-visible .slick-nav-icon path,
+.demo03-scope .site-slider .slick-nav:hover svg path,
+.demo03-scope .site-slider .slick-nav:focus-visible svg path {
+    stroke: currentColor !important;
 }
 
 .demo03-scope .slick-slider.slider-style .slick-nav {
@@ -3630,9 +3647,18 @@ section.up-sells + section.related {
     transform: translateX(25%) !important;
 }
 
-.demo03-scope .slick-slider.slider-style .slick-nav::before {
-    width: 0.92rem;
-    height: 0.92rem;
-    border-top-width: 2.6px;
-    border-right-width: 2.6px;
+.demo03-scope .slick-slider.slider-style .slick-nav .slick-nav-icon,
+.demo03-scope .slick-slider.slider-style .slick-nav svg {
+    width: 1.2rem !important;
+    height: 1.2rem !important;
+}
+
+.demo03-scope .slick-slider.slider-style .slick-prev:hover,
+.demo03-scope .slick-slider.slider-style .slick-prev:focus-visible {
+    transform: translateX(-125%) translateY(-2px) scale(1.04) !important;
+}
+
+.demo03-scope .slick-slider.slider-style .slick-next:hover,
+.demo03-scope .slick-slider.slider-style .slick-next:focus-visible {
+    transform: translateX(25%) translateY(-2px) scale(1.04) !important;
 }

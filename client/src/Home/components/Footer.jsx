@@ -20,22 +20,6 @@ import { FaMapMarkerAlt } from "react-icons/fa";
 import usePublicSettings from "../../hooks/usePublicSettings";
 import { toPublicAssetUrl } from "../../utils/publicSettings";
 
-const normalizeThemeColor = (value) => {
-  const raw = String(value || "")
-    .trim()
-    .toLowerCase();
-
-  if (/^#[0-9a-f]{3}$/i.test(raw)) {
-    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
-  }
-
-  if (/^#[0-9a-f]{6}$/i.test(raw)) {
-    return raw;
-  }
-
-  return "#000000";
-};
-
 const normalizeLogoMode = (value) =>
   String(value || "")
     .trim()
@@ -124,10 +108,6 @@ const Footer = () => {
 
   const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
   const storefront = useMemo(() => publicSettings?.storefront || {}, [publicSettings]);
-  const brandColor = useMemo(
-    () => normalizeThemeColor(website?.themeColor),
-    [website?.themeColor],
-  );
   const brandLogoMode = useMemo(
     () => normalizeLogoMode(website?.logoMode),
     [website?.logoMode],
@@ -222,21 +202,16 @@ const Footer = () => {
                 >
                   <h2 className="text-3xl font-bold mb-4 hover:opacity-90 transition-opacity flex items-center gap-3">
                     {!hasBrandLogoImage ? (
-                      <span
-                        className="inline-flex min-h-11 items-center rounded-xl px-4 text-lg font-black tracking-[0.08em] text-white"
-                        style={{ backgroundColor: brandColor }}
-                      >
+                      <span className="inline-flex items-center text-lg font-black tracking-[0.08em] text-white">
                         {brandLogoText}
                       </span>
                     ) : (
                       <>
-                        <span className="inline-flex items-cente px-3 py-2">
-                          <img
-                            src={brandLogo}
-                            alt={String(website.storeName || "Store")}
-                            className="block h-10 w-auto max-w-[220px] object-contain"
-                          />
-                        </span>
+                        <img
+                          src={brandLogo}
+                          alt={String(website.storeName || "Store")}
+                          className="block h-10 w-auto max-w-[220px] object-contain"
+                        />
                         <span className="sr-only">
                           {String(website.storeName || "E-Commerce")}
                         </span>

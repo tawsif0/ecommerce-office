@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 
 export const DEMO03_SCOPE_CLASS = "demo03-scope";
 export const DEMO03_THEME_CLASSES = [
@@ -26,6 +26,9 @@ const DEMO03_SCOPED_STYLESHEETS = [
   { id: "demo03-base", href: "/demo03-assets/css/base.css" },
   { id: "demo03-style", href: "/demo03-assets/css/style.css" },
 ];
+
+const DEMO03_STYLE_CACHE_VERSION = "2026-03-15-demo03-v3";
+const DEMO03_STYLE_CACHE_KEY = `demo03-scoped-styles:${DEMO03_STYLE_CACHE_VERSION}`;
 
 const ROOT_AT_RULE_PREFIXES = [
   "@media",
@@ -250,14 +253,68 @@ const rewriteCssUrls = (cssText, stylesheetHref) =>
     }
   });
 
+const readCachedStyles = () => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(DEMO03_STYLE_CACHE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const clearStaleCachedStyles = () => {
+  if (typeof window === "undefined") return;
+
+  try {
+    Object.keys(window.localStorage)
+      .filter(
+        (key) => key.startsWith("demo03-scoped-styles:") && key !== DEMO03_STYLE_CACHE_KEY,
+      )
+      .forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const writeCachedStyles = (stylesheets) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(DEMO03_STYLE_CACHE_KEY, JSON.stringify(stylesheets));
+  } catch {
+    // Ignore storage failures and fall back to runtime injection.
+  }
+};
+
 export default function useDemo03Assets(enabled = true) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!enabled) return undefined;
     if (typeof document === "undefined") return undefined;
 
     let isActive = true;
     const abortController = new AbortController();
     const addedNodes = [];
+
+    const ensureScopedStyle = ({ id, cssText }) => {
+      if (!id || !cssText) return;
+
+      const existingNode = document.getElementById(id);
+      if (existingNode) {
+        if (existingNode.tagName === "STYLE" && existingNode.textContent !== cssText) {
+          existingNode.textContent = cssText;
+        }
+        return;
+      }
+
+      const style = document.createElement("style");
+      style.id = id;
+      style.dataset.demo03 = "true";
+      style.textContent = cssText;
+      document.head.appendChild(style);
+      addedNodes.push(style);
+    };
 
     const ensureFontStyles = () => {
       DEMO03_FONT_STYLESHEETS.forEach(({ id, href }) => {
@@ -270,6 +327,11 @@ export default function useDemo03Assets(enabled = true) {
         document.head.appendChild(link);
         addedNodes.push(link);
       });
+    };
+
+    const applyCachedStyles = () => {
+      const cachedStyles = readCachedStyles();
+      cachedStyles.forEach(ensureScopedStyle);
     };
 
     const loadScopedStyles = async () => {
@@ -290,18 +352,13 @@ export default function useDemo03Assets(enabled = true) {
 
       if (!isActive) return;
 
-      stylesheets.forEach(({ id, cssText }) => {
-        if (document.getElementById(id)) return;
-        const style = document.createElement("style");
-        style.id = id;
-        style.dataset.demo03 = "true";
-        style.textContent = cssText;
-        document.head.appendChild(style);
-        addedNodes.push(style);
-      });
+      stylesheets.forEach(ensureScopedStyle);
+      writeCachedStyles(stylesheets);
     };
 
     ensureFontStyles();
+    clearStaleCachedStyles();
+    applyCachedStyles();
     loadScopedStyles().catch((error) => {
       if (error?.name === "AbortError") return;
       console.error("Failed to load scoped demo03 styles", error);

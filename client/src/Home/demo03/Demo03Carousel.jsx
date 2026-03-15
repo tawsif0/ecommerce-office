@@ -367,19 +367,22 @@ export default function Demo03Carousel({
       borderRadius: "9999px",
       boxShadow: "0 18px 45px rgba(15, 23, 42, 0.24)",
       ...(useBottomDotArrows
-        ? {
-            top: "auto",
-            bottom: showDots ? "4.75rem" : "1.5rem",
-            opacity: 1,
-            visibility: "visible",
-            pointerEvents: "auto",
-            width: "3.25rem",
-            height: "3.25rem",
-            zIndex: 4,
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
-            outline: "1px solid rgba(255,255,255,0.72)",
-          }
+          ? {
+              top: "auto",
+              bottom: showDots ? "4.75rem" : "1.5rem",
+              opacity: 1,
+              visibility: "visible",
+              pointerEvents: "auto",
+              width: "3.25rem",
+              height: "3.25rem",
+              zIndex: 4,
+              padding: 0,
+              lineHeight: 0,
+              minWidth: 0,
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              outline: "1px solid rgba(255,255,255,0.72)",
+            }
         : {}),
     }),
     [arrowStrokeColor, showDots, useBottomDotArrows],
@@ -469,13 +472,14 @@ export default function Demo03Carousel({
         <>
           <button
             type="button"
-            className={`slick-nav slick-prev${disablePrev ? " slick-disabled" : ""}`}
+            className={`slick-nav slick-arrow slick-prev${disablePrev ? " slick-disabled" : ""}`}
             onClick={handlePrev}
             aria-label="Previous"
             disabled={disablePrev}
             style={prevArrowStyle}
           >
             <svg
+              className="slick-nav-icon"
               aria-hidden="true"
               xmlns="http://www.w3.org/2000/svg"
               width="18"
@@ -486,7 +490,7 @@ export default function Demo03Carousel({
             >
               <path
                 d="M15 18l-6-6 6-6"
-                stroke={arrowStrokeColor}
+                stroke="currentColor"
                 strokeWidth="2.1"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -495,13 +499,14 @@ export default function Demo03Carousel({
           </button>
           <button
             type="button"
-            className={`slick-nav slick-next${disableNext ? " slick-disabled" : ""}`}
+            className={`slick-nav slick-arrow slick-next${disableNext ? " slick-disabled" : ""}`}
             onClick={handleNext}
             aria-label="Next"
             disabled={disableNext}
             style={nextArrowStyle}
           >
             <svg
+              className="slick-nav-icon"
               aria-hidden="true"
               xmlns="http://www.w3.org/2000/svg"
               width="18"
@@ -512,7 +517,7 @@ export default function Demo03Carousel({
             >
               <path
                 d="M9 6l6 6-6 6"
-                stroke={arrowStrokeColor}
+                stroke="currentColor"
                 strokeWidth="2.1"
                 strokeLinecap="round"
                 strokeLinejoin="round"

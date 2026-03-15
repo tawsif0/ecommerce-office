@@ -45,16 +45,17 @@ const getReadableTextColor = (backgroundHex) => {
   return luminance > 0.62 ? "#111827" : "#ffffff";
 };
 
+const hexToRgba = (value, alpha) => {
+  const normalized = normalizeThemeColor(value);
+  const r = Number.parseInt(normalized.slice(1, 3), 16);
+  const g = Number.parseInt(normalized.slice(3, 5), 16);
+  const b = Number.parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 
 
 const Navbar = () => {
-  const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
-  const [isShopByCategoriesOpen, setIsShopByCategoriesOpen] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [categoryProductIds, setCategoryProductIds] = useState([]);
-  const [hasCategoryProductIndex, setHasCategoryProductIndex] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -78,15 +79,8 @@ const Navbar = () => {
   const orderSearchTimeoutRef = useRef(null);
   // ====================================================
 
-  // Refs for dropdown containers
-  const categoriesRef = useRef(null);
-  const shopByCategoriesRef = useRef(null);
-  const categoriesTimeoutRef = useRef(null);
-  const shopByCategoriesTimeoutRef = useRef(null);
-
   // Mobile menu state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isMobileCategoriesOpen, setIsMobileCategoriesOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   // Login check state
@@ -96,18 +90,6 @@ const Navbar = () => {
   const { settings: publicSettings } = usePublicSettings();
   const { cartCount } = useCart();
   const compareCount = useSelector((state) => state.compare.items?.length || 0);
-  const categoryIdSet = useMemo(
-    () => new Set(categoryProductIds),
-    [categoryProductIds],
-  );
-  const visibleCategories = useMemo(() => {
-    return categories.filter((category) => {
-      if (hasCategoryProductIndex && !categoryIdSet.has(category._id)) {
-        return false;
-      }
-      return true;
-    });
-  }, [categories, hasCategoryProductIndex, categoryIdSet]);
 
   const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
   const contact = useMemo(() => publicSettings?.contact || {}, [publicSettings]);
@@ -124,6 +106,10 @@ const Navbar = () => {
     const resolved = String(website?.logoText || "").trim();
     return resolved || brandName;
   }, [website?.logoText, brandName]);
+  const brandTagline = useMemo(() => {
+    const resolved = String(website?.tagline || "").trim();
+    return resolved || "Premium marketplace picks with a polished shopping flow.";
+  }, [website?.tagline]);
   const brandLogoUrl = useMemo(
     () =>
       brandLogoMode === "text"
@@ -151,6 +137,48 @@ const Navbar = () => {
     const resolved = String(contact?.email || "").trim();
     return resolved || "support@demo.com";
   }, [contact?.email]);
+  const storefrontTrustBullets = useMemo(() => {
+    const items = Array.isArray(storefront?.trustBullets)
+      ? storefront.trustBullets
+          .map((entry) => String(entry || "").trim())
+          .filter(Boolean)
+      : [];
+
+    return items.length > 0
+      ? items
+      : [
+          "Secure checkout built for fast daily shopping.",
+          "Curated campaigns and arrivals across the marketplace.",
+          "Support is one tap away when you need it.",
+        ];
+  }, [storefront?.trustBullets]);
+  const storefrontQuickLinks = useMemo(() => {
+    const items = Array.isArray(storefront?.navQuickLinks)
+      ? storefront.navQuickLinks
+      : [];
+    const filtered = items.filter((entry) => {
+      const label = String(entry?.label || "").trim();
+      const normalizedLabel = label.toLowerCase();
+      const path = String(entry?.path || "").trim();
+      const normalizedPath = path.toLowerCase();
+
+      if (!label || !path) return false;
+      if (normalizedLabel.includes("categor")) return false;
+      if (normalizedPath.includes("top-categories")) return false;
+
+      return true;
+    });
+
+    return (filtered.length > 0
+      ? filtered
+      : [
+          { label: "Daily Deals", path: "/shop?collection=deals" },
+          { label: "New Arrivals", path: "/shop?collection=new-arrivals" },
+          { label: "Buyer Protection", path: "/faqs#buyer-protection" },
+          { label: "Track Order", path: "/track-order" },
+        ]
+    ).slice(0, 4);
+  }, [storefront?.navQuickLinks]);
   // Helper function to detect if query looks like an order number
   const isOrderNumberQuery = (query) => {
     const trimmed = query?.toString().trim() || "";
@@ -206,53 +234,6 @@ const Navbar = () => {
       window.removeEventListener("userLoggedOut", handleLoggedOut);
     };
   }, []);
-
-  // Fetch categories from API
-  const fetchCategories = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const [categoriesResult, productsResult] = await Promise.allSettled([
-        axios.get(`${baseUrl}/categories/public`),
-        axios.get(`${baseUrl}/products/public`),
-      ]);
-
-      if (
-        categoriesResult.status === "fulfilled" &&
-        categoriesResult.value.data.success
-      ) {
-        setCategories(categoriesResult.value.data.categories);
-      } else {
-        setError("Failed to load categories");
-      }
-
-      if (
-        productsResult.status === "fulfilled" &&
-        productsResult.value.data.success
-      ) {
-        const productsList = productsResult.value.data.products || [];
-        const ids = new Set();
-        productsList.forEach((product) => {
-          if (!product?.category) return;
-          const categoryId =
-            typeof product.category === "string"
-              ? product.category
-              : product.category._id;
-          if (categoryId) ids.add(categoryId);
-        });
-        setCategoryProductIds(Array.from(ids));
-        setHasCategoryProductIndex(true);
-      } else {
-        setHasCategoryProductIndex(false);
-      }
-    } catch (err) {
-      console.error("Error fetching categories:", err);
-      setError("Unable to load categories");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // ============ ADDED: Function to search orders ============
   const searchOrders = async (query) => {
@@ -509,86 +490,10 @@ const Navbar = () => {
     };
   }, []);
 
-  // Initial fetch
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  // Handle category click
-  const handleCategoryClick = (categoryId, categoryName) => {
-    navigate(`/shop?category=${categoryId}`);
-    setIsCategoriesOpen(false);
-    setIsShopByCategoriesOpen(false);
-    setIsMobileCategoriesOpen(false);
-    setIsMobileMenuOpen(false);
-  };
-
   // Handle cart icon click
   const handleCartClick = () => {
     navigate("/added-to-cart");
     setIsMobileMenuOpen(false);
-  };
-
-  // Handle shop by categories mouse enter
-  const handleShopByCategoriesMouseEnter = () => {
-    if (shopByCategoriesTimeoutRef.current) {
-      clearTimeout(shopByCategoriesTimeoutRef.current);
-    }
-    setIsShopByCategoriesOpen(true);
-  };
-
-  // Handle shop by categories mouse leave with delay
-  const handleShopByCategoriesMouseLeave = () => {
-    shopByCategoriesTimeoutRef.current = setTimeout(() => {
-      setIsShopByCategoriesOpen(false);
-    }, 150);
-  };
-
-  // Handle dropdown mouse enter to cancel timeout
-  const handleDropdownMouseEnter = (type) => {
-    if (type === "categories" && categoriesTimeoutRef.current) {
-      clearTimeout(categoriesTimeoutRef.current);
-    }
-    if (type === "shop" && shopByCategoriesTimeoutRef.current) {
-      clearTimeout(shopByCategoriesTimeoutRef.current);
-    }
-  };
-
-  // Function to get badge color based on category type - Black & White theme
-  const getBadgeStyle = (type) => {
-    const typeLower = (type || "General").toLowerCase();
-
-    if (typeLower.includes("hot") || typeLower.includes("deal")) {
-      return {
-        backgroundColor: "#e5e7eb",
-        color: "#000000",
-        border: "1px solid #9ca3af",
-      };
-    } else if (typeLower.includes("popular")) {
-      return {
-        backgroundColor: "#f3f4f6",
-        color: "#000000",
-        border: "1px solid #9ca3af",
-      };
-    } else if (typeLower.includes("best")) {
-      return {
-        backgroundColor: "#f9fafb",
-        color: "#000000",
-        border: "1px solid #9ca3af",
-      };
-    } else if (typeLower.includes("latest")) {
-      return {
-        backgroundColor: "#e5e7eb",
-        color: "#000000",
-        border: "1px solid #9ca3af",
-      };
-    } else {
-      return {
-        backgroundColor: "#f3f4f6",
-        color: "#000000",
-        border: "1px solid #9ca3af",
-      };
-    }
   };
 
   // Handle logout
@@ -683,6 +588,8 @@ const Navbar = () => {
     const target = String(path || "/").trim() || "/";
     navigate(target);
     setIsMobileMenuOpen(false);
+    setIsMobileSearchOpen(false);
+    setShowSuggestions(false);
 
     const hash = target.includes("#") ? target.split("#")[1] : "";
     if (hash) {
@@ -727,17 +634,29 @@ const Navbar = () => {
 
   return (
     <header className="font-sans">
-      {/* Top bar - Hidden on mobile */}
-      <div className="hidden lg:block border-b border-white/10 bg-black py-1.5 text-white/80">
-        <div className="site-shell flex justify-end items-center text-xs">
-          <div className="flex items-center space-x-6">
-            {/* Phone - Clickable */}
+      <div className="hidden lg:block border-b border-black/5 bg-slate-950 text-white">
+        <div className="site-shell flex items-center justify-between gap-6 py-2.5 text-[11px]">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className="inline-flex shrink-0 items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.28em] shadow-lg"
+              style={{
+                backgroundColor: themeColor,
+                color: themeTextColor,
+                boxShadow: `0 16px 30px -18px ${hexToRgba(themeColor, 0.95)}`,
+              }}
+            >
+              Marketplace
+            </span>
+            <p className="truncate text-white/70">{storefrontTrustBullets[0]}</p>
+          </div>
+
+          <div className="flex items-center gap-3 text-white/75">
             <a
               href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
-              className="flex items-center space-x-2 group transition-colors duration-200 hover:text-white"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
             >
               <svg
-                className="w-4 h-4 transition-transform duration-200 group-hover:scale-110"
+                className="h-3.5 w-3.5"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
@@ -747,16 +666,15 @@ const Navbar = () => {
               >
                 <path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
               </svg>
-              <span className="group-hover:underline">{supportPhone}</span>
+              <span>{supportPhone}</span>
             </a>
 
-            {/* Email - Clickable */}
             <a
               href={`mailto:${supportEmail}`}
-              className="flex items-center space-x-2 group transition-colors duration-200 hover:text-white"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
             >
               <svg
-                className="w-4 h-4 transition-transform duration-200 group-hover:scale-110"
+                className="h-3.5 w-3.5"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
@@ -766,48 +684,206 @@ const Navbar = () => {
               >
                 <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              <span className="group-hover:underline">{supportEmail}</span>
+              <span>{supportEmail}</span>
             </a>
           </div>
         </div>
       </div>
 
-      {/* Main Navigation */}
-      <nav className="border-b border-gray-200 bg-white text-black shadow-[0_18px_48px_-36px_rgba(15,23,42,0.45)]">
-        <div className="site-shell">
-          <div className="flex h-20 items-center justify-between gap-4">
-            {/* Logo */}
-            <div className="flex items-center shrink-0">
-              <Link to="/" className="flex items-center gap-2 font-bold text-black">
-                {!hasBrandLogoImage ? (
-                  <span className="text-lg font-black tracking-[0.08em] text-black">
-                    {brandLogoText}
-                  </span>
-                ) : (
-                  <>
-                    <img
-                      src={brandLogoUrl}
-                      alt={brandName}
-                      className="block h-9 w-auto max-w-[190px] object-contain [filter:brightness(0)_saturate(100%)]"
-                    />
-                    <span className="sr-only">{brandName}</span>
-                  </>
-                )}
-              </Link>
-            </div>
+      <nav className="relative overflow-visible border-b border-black/5 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] text-slate-950">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-40 opacity-100"
+          style={{
+            background: `radial-gradient(circle at 12% 12%, ${hexToRgba(themeColor, 0.18)} 0%, transparent 28%), radial-gradient(circle at 88% 8%, rgba(15, 23, 42, 0.08) 0%, transparent 30%)`,
+          }}
+        />
 
-            {/* Desktop Navigation - Center */}
-            <div className="hidden lg:flex lg:min-w-0 lg:flex-1 lg:items-center lg:gap-4 xl:gap-5 lg:pl-4">
-              {/* Categories Dropdown */}
-              <div
-                ref={shopByCategoriesRef}
-                className="relative shrink-0"
-                onMouseEnter={handleShopByCategoriesMouseEnter}
-                onMouseLeave={handleShopByCategoriesMouseLeave}
-              >
-                <button className="inline-flex items-center gap-2 rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-900">
+        <div className="site-shell relative py-3 sm:py-4">
+          <div className="rounded-[30px] border border-white/80 bg-white/80 p-3 shadow-[0_28px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur-xl sm:p-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <Link to="/" className="group flex min-w-0 items-center gap-3">
+                  <div className="min-w-0">
+                    {!hasBrandLogoImage ? (
+                      <span className="block truncate text-base font-black tracking-[0.18em] text-slate-950 sm:text-lg">
+                        {brandLogoText}
+                      </span>
+                    ) : (
+                      <>
+                        <img
+                          src={brandLogoUrl}
+                          alt={brandName}
+                          className="block h-10 w-auto max-w-[210px] object-contain"
+                        />
+                        <span className="sr-only">{brandName}</span>
+                      </>
+                    )}
+                    <p className="mt-0.5 hidden max-w-[24rem] truncate text-xs text-slate-500 sm:block">
+                      {brandTagline}
+                    </p>
+                  </div>
+                </Link>
+              </div>
+
+              <div className="hidden lg:flex min-w-0 flex-1 justify-center px-2">
+                <div className="flex items-center rounded-full border border-black/10 bg-slate-50/90 p-1.5 shadow-inner shadow-slate-200/70">
+                  {primaryNavItems.map(({ label, to }) => {
+                    const isActive = isPrimaryNavActive(to);
+
+                    return (
+                      <Link
+                        key={label}
+                        to={to}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                          isActive
+                            ? "bg-slate-950 text-white shadow-[0_12px_26px_-16px_rgba(15,23,42,0.9)]"
+                            : "text-slate-600 hover:bg-white hover:text-slate-950"
+                        }`}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="hidden lg:flex items-center gap-2.5">
+                {isLoggedIn ? (
+                  <div className="relative group">
+                    <button className="flex items-center gap-3 rounded-full border border-black/10 bg-white/75 px-3 py-2 pr-4 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.55)] transition hover:-translate-y-0.5 hover:border-black/15 hover:bg-white">
+                      <div
+                        className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-black"
+                        style={{ backgroundColor: themeColor, color: themeTextColor }}
+                      >
+                        {userName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="hidden xl:block text-left">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                          Account
+                        </p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {userName}
+                        </p>
+                      </div>
+                      <svg
+                        className="h-4 w-4 text-slate-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+
+                    <div className="absolute right-0 z-50 mt-3 w-60 rounded-[24px] border border-black/10 bg-white/95 p-2 shadow-[0_30px_70px_-36px_rgba(15,23,42,0.45)] opacity-0 invisible transition-all duration-200 group-hover:visible group-hover:opacity-100">
+                      <div className="rounded-[18px] bg-slate-50 px-4 py-3">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {userName}
+                        </p>
+                        <p className="text-xs text-slate-500">Welcome back!</p>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        <Link
+                          to="/dashboard"
+                          className="flex items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                        >
+                          <svg
+                            className="mr-3 h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                            />
+                          </svg>
+                          Dashboard
+                        </Link>
+                        {landingQuickLinks.map((entry) => (
+                          <button
+                            key={entry.tab}
+                            type="button"
+                            onClick={() => openDashboardTab(entry.tab)}
+                            className="flex w-full items-center rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                          >
+                            <span
+                              className="mr-3 inline-block h-1.5 w-1.5 rounded-full"
+                              style={{ backgroundColor: themeColor }}
+                            />
+                            {entry.label}
+                          </button>
+                        ))}
+                        <button
+                          onClick={handleLogout}
+                          className="flex w-full items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                        >
+                          <svg
+                            className="mr-3 h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                            />
+                          </svg>
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to="/login"
+                      className="rounded-full border border-black/10 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      to="/register"
+                      className="rounded-full px-4 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5"
+                      style={{
+                        backgroundColor: themeColor,
+                        color: themeTextColor,
+                        boxShadow: `0 18px 34px -22px ${hexToRgba(themeColor, 0.95)}`,
+                      }}
+                    >
+                      Join now
+                    </Link>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCompareClick}
+                  className="relative rounded-2xl border border-black/10 bg-white/75 p-2.5 text-slate-900 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.55)] transition hover:-translate-y-0.5 hover:border-black/15 hover:bg-white"
+                  aria-label="Open compare products"
+                >
+                  <FiShuffle className="h-5 w-5 text-slate-900" />
+                  {compareCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-950 px-1 text-xs font-bold text-white">
+                      {compareCount > 99 ? "99+" : compareCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleCartClick}
+                  className="relative rounded-2xl border border-black/10 bg-white/75 p-2.5 text-slate-900 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.55)] transition hover:-translate-y-0.5 hover:border-black/15 hover:bg-white"
+                >
                   <svg
-                    className="w-5 h-5"
+                    className="h-6 w-6 text-slate-900"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -816,13 +892,38 @@ const Navbar = () => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="2"
-                      d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
                     />
                   </svg>
-                    <span className="hidden xl:inline font-semibold">SHOP BY CATEGORIES</span>
-                    <span className="xl:hidden font-semibold">Categories</span>
+                  {(cartCount > 0 || !isLoggedIn) && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950 text-xs font-bold text-white">
+                      {cartCount > 99 ? "99+" : cartCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              <div className="ml-auto flex items-center gap-1.5 lg:hidden">
+                <button
+                  onClick={toggleMobileSearch}
+                  aria-label="Toggle mobile search"
+                  className={`rounded-2xl border p-2.5 transition ${
+                    isMobileSearchOpen
+                      ? "border-transparent"
+                      : "border-black/10 bg-white/70 text-slate-900 hover:bg-slate-50"
+                  }`}
+                  style={
+                    isMobileSearchOpen
+                      ? {
+                          backgroundColor: themeColor,
+                          color: themeTextColor,
+                          boxShadow: `0 16px 30px -20px ${hexToRgba(themeColor, 0.92)}`,
+                        }
+                      : undefined
+                  }
+                >
                   <svg
-                    className="w-4 h-4"
+                    className="h-5 w-5"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -831,79 +932,109 @@ const Navbar = () => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="2"
-                      d="M19 9l-7 7-7-7"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                     />
                   </svg>
                 </button>
 
-                {isShopByCategoriesOpen && (
-                  <div
-                    className="absolute top-full left-0 z-40 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white py-2 shadow-xl animate-fadeIn"
-                    onMouseEnter={() => handleDropdownMouseEnter("shop")}
-                    onMouseLeave={handleShopByCategoriesMouseLeave}
-                  >
-                    {loading ? (
-                      <div className="px-4 py-3 text-center text-gray-500">
-                        Loading...
-                      </div>
-                    ) : visibleCategories.length === 0 ? (
-                      <div className="px-4 py-3 text-center text-gray-500">
-                        No categories
-                      </div>
-                    ) : (
-                      <>
-                        <div className="px-4 py-2 border-b border-gray-200">
-                          <h3 className="text-sm font-semibold text-gray-900">
-                            All Categories
-                          </h3>
-                        </div>
-                        <div className="max-h-80 overflow-y-auto">
-                          {visibleCategories.map((category) => (
-                            <button
-                              key={category._id}
-                              className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-100 hover:text-black transition-colors duration-150"
-                              onClick={() =>
-                                handleCategoryClick(category._id, category.name)
-                              }
-                            >
-                              <span className="truncate">{category.name}</span>
-                              <span
-                                className="ml-2 px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap"
-                                style={getBadgeStyle(category.type)}
-                              >
-                                {category.type || "General"}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+                <button
+                  onClick={handleCompareClick}
+                  className="relative rounded-2xl border border-black/10 bg-white/70 p-2.5 text-slate-900 transition hover:bg-slate-50"
+                  aria-label="Open compare products"
+                >
+                  <FiShuffle className="h-5 w-5 text-slate-900" />
+                  {compareCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-950 px-1 text-xs font-bold text-white">
+                      {compareCount > 99 ? "99+" : compareCount}
+                    </span>
+                  )}
+                </button>
 
-              {/* Search Bar */}
-              <div
-                ref={searchRef}
-                className="relative min-w-[260px] flex-1 max-w-[700px]"
-              >
-                <form onSubmit={handleSearchSubmit} className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    onFocus={() => {
-                      if (searchQuery.trim()) {
-                        setShowSuggestions(true);
-                        fetchSearchSuggestions(searchQuery);
-                      }
-                    }}
-                    placeholder="Search for products, brands, or order numbers..."
-                    className="w-full rounded-full border border-gray-200 bg-gray-50 px-4 py-3 pl-12 pr-4 text-sm text-black shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-transparent"
-                  />
-                  <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                <button
+                  onClick={handleCartClick}
+                  className="relative rounded-2xl border border-black/10 bg-white/70 p-2.5 text-slate-900 transition hover:bg-slate-50"
+                >
+                  <svg
+                    className="h-6 w-6 text-slate-900"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                    />
+                  </svg>
+                  {(cartCount > 0 || !isLoggedIn) && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950 text-xs font-bold text-white">
+                      {cartCount > 99 ? "99+" : cartCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  id="mobile-menu-button"
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  aria-label="Toggle mobile menu"
+                  className={`rounded-2xl border p-2.5 transition focus:outline-none ${
+                    isMobileMenuOpen
+                      ? "border-transparent"
+                      : "border-white/10 bg-slate-950 text-white"
+                  }`}
+                  style={
+                    isMobileMenuOpen
+                      ? {
+                          backgroundColor: themeColor,
+                          color: themeTextColor,
+                          boxShadow: `0 16px 30px -20px ${hexToRgba(themeColor, 0.92)}`,
+                        }
+                      : undefined
+                  }
+                >
+                  {isMobileMenuOpen ? (
                     <svg
-                      className="w-4 h-4 text-gray-500"
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M4 6h16M4 12h16M4 18h16"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_auto] lg:items-center">
+              <div ref={searchRef} className="relative min-w-0">
+                <form
+                  onSubmit={handleSearchSubmit}
+                  className="group flex items-center rounded-[24px] border border-white/10 bg-slate-950 px-4 py-2 shadow-[0_24px_48px_-32px_rgba(15,23,42,0.92)]"
+                >
+                  <div className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/65">
+                    <svg
+                      className="h-4 w-4"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -916,21 +1047,49 @@ const Navbar = () => {
                       />
                     </svg>
                   </div>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    onFocus={() => {
+                      if (searchQuery.trim()) {
+                        setShowSuggestions(true);
+                        fetchSearchSuggestions(searchQuery);
+                      }
+                    }}
+                    placeholder="Search products, brands, or order numbers..."
+                    className="h-11 w-full bg-transparent text-sm text-white placeholder:text-white/55 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="ml-2 hidden h-10 shrink-0 items-center rounded-full px-4 text-sm font-semibold transition hover:-translate-y-0.5 sm:inline-flex"
+                    style={{
+                      backgroundColor: themeColor,
+                      color: themeTextColor,
+                      boxShadow: `0 16px 30px -18px ${hexToRgba(themeColor, 0.95)}`,
+                    }}
+                  >
+                    Search
+                  </button>
                 </form>
 
+                <p className="mt-2 pl-1 text-xs text-slate-500">
+                  Search products, brands, or order numbers in one jump.
+                </p>
+
                 {showSuggestions && searchQuery.trim() && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-3 max-h-96 overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl animate-fadeIn">
-                    <div className="p-4 border-b border-gray-200">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-sm font-semibold text-gray-900">
+                  <div className="absolute inset-x-0 top-full z-50 mt-3 max-h-96 overflow-y-auto rounded-[24px] border border-black/10 bg-white/95 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.42)] backdrop-blur-xl animate-fadeIn">
+                    <div className="border-b border-black/5 p-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-slate-900">
                           Results for "{searchQuery}"
                         </h3>
                         <button
                           onClick={() => setShowSuggestions(false)}
-                          className="text-gray-500 hover:text-gray-700"
+                          className="text-slate-500 transition hover:text-slate-900"
                         >
                           <svg
-                            className="w-4 h-4"
+                            className="h-4 w-4"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -948,19 +1107,16 @@ const Navbar = () => {
 
                     {isFetchingSuggestions || searchingOrders ? (
                       <div className="p-8 text-center">
-                        <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-black"></div>
-                        <p className="text-sm text-gray-600 mt-2">
-                          Searching...
-                        </p>
+                        <div className="inline-block h-6 w-6 animate-spin rounded-full border-b-2 border-slate-900"></div>
+                        <p className="mt-2 text-sm text-slate-600">Searching...</p>
                       </div>
                     ) : orderSearchResults.length > 0 &&
                       isOrderNumberQuery(searchQuery) ? (
-                      // SHOW ONLY ORDER RESULTS (when query looks like an order number)
-                      <div className="divide-y divide-gray-200">
-                        <div className="p-3 bg-gray-50">
+                      <div className="divide-y divide-black/5">
+                        <div className="bg-slate-50/80 p-3">
                           <div className="flex items-center gap-2">
-                            <FiPackage className="w-4 h-4 text-gray-600" />
-                            <span className="text-xs font-medium text-gray-700">
+                            <FiPackage className="h-4 w-4 text-slate-600" />
+                            <span className="text-xs font-medium text-slate-700">
                               Order Tracking
                             </span>
                           </div>
@@ -968,25 +1124,25 @@ const Navbar = () => {
                         {orderSearchResults.slice(0, 5).map((order, index) => (
                           <div
                             key={`order-${order._id}-${index}`}
-                            className="p-4 hover:bg-gray-50 cursor-pointer transition-colors duration-150"
+                            className="cursor-pointer p-4 transition-colors duration-150 hover:bg-slate-50"
                             onClick={() =>
                               handleOrderResultClick(order.orderNumber)
                             }
                           >
                             <div className="flex items-center">
-                              <div className="p-2 rounded-lg bg-blue-100">
-                                <FiPackage className="w-5 h-5 text-blue-700" />
+                              <div className="rounded-2xl bg-blue-100 p-2">
+                                <FiPackage className="h-5 w-5 text-blue-700" />
                               </div>
                               <div className="ml-4 flex-1">
-                                <div className="text-sm font-medium text-gray-900">
+                                <div className="text-sm font-medium text-slate-900">
                                   Order #{order.orderNumber}
                                 </div>
-                                <div className="text-xs text-gray-600 mt-1">
+                                <div className="mt-1 text-xs text-slate-600">
                                   <div>Customer: {order.customerName}</div>
                                   <div>Product: {order.productName}</div>
-                                  <div className="flex items-center gap-2 mt-1">
+                                  <div className="mt-1 flex items-center gap-2">
                                     <span
-                                      className={`px-2 py-0.5 rounded text-xs ${
+                                      className={`rounded px-2 py-0.5 text-xs ${
                                         order.status === "delivered"
                                           ? "bg-green-100 text-green-700"
                                           : order.status === "confirmed"
@@ -999,20 +1155,18 @@ const Navbar = () => {
                                             ? "bg-yellow-100 text-yellow-700"
                                             : order.status === "returned"
                                               ? "bg-orange-100 text-orange-700"
-                                            : "bg-red-100 text-red-700"
+                                              : "bg-red-100 text-red-700"
                                       }`}
                                     >
                                       {order.status}
                                     </span>
-                                    <span className="text-gray-500 text-xs">
-                                      {new Date(
-                                        order.date,
-                                      ).toLocaleDateString()}
+                                    <span className="text-xs text-slate-500">
+                                      {new Date(order.date).toLocaleDateString()}
                                     </span>
                                   </div>
                                 </div>
                               </div>
-                              <div className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                              <div className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
                                 TRACK
                               </div>
                             </div>
@@ -1020,12 +1174,11 @@ const Navbar = () => {
                         ))}
                       </div>
                     ) : searchSuggestions.length > 0 ? (
-                      // SHOW ONLY PRODUCT/CATEGORY RESULTS (if no orders found or query doesn't look like order number)
-                      <div className="divide-y divide-gray-200">
-                        <div className="p-3 bg-gray-50">
+                      <div className="divide-y divide-black/5">
+                        <div className="bg-slate-50/80 p-3">
                           <div className="flex items-center gap-2">
                             <svg
-                              className="w-4 h-4 text-gray-600"
+                              className="h-4 w-4 text-slate-600"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -1037,96 +1190,91 @@ const Navbar = () => {
                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                               />
                             </svg>
-                            <span className="text-xs font-medium text-gray-700">
+                            <span className="text-xs font-medium text-slate-700">
                               Products & Categories
                             </span>
                           </div>
                         </div>
-                        {searchSuggestions
-                          .slice(0, 5)
-                          .map((suggestion, index) => (
-                            <div
-                              key={`${suggestion.type}-${suggestion._id}-${index}`}
-                              className="p-4 hover:bg-gray-50 cursor-pointer transition-colors duration-150"
-                              onClick={() => handleSuggestionClick(suggestion)}
-                            >
-                              <div className="flex items-center">
-                                <div
-                                  className={`p-2 rounded-lg ${
-                                    suggestion.type === "product"
-                                      ? "bg-gray-100"
-                                      : "bg-gray-200"
-                                  }`}
-                                >
-                                  {suggestion.type === "product" ? (
-                                    <svg
-                                      className="w-5 h-5 text-gray-700"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-                                      />
-                                    </svg>
-                                  ) : (
-                                    <svg
-                                      className="w-5 h-5 text-gray-700"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                                      />
-                                    </svg>
-                                  )}
-                                </div>
-                                <div className="ml-4 flex-1">
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {suggestion.type === "product"
-                                      ? suggestion.title
-                                      : suggestion.name}
-                                  </div>
-                                  <div className="text-xs text-gray-600 mt-1">
-                                    {suggestion.type === "product"
-                                      ? suggestion.brand || "Product"
-                                      : "Category"}
-                                    {suggestion.type === "product" &&
-                                      (suggestion.priceType === "tba" ? (
-                                        <span className="ml-2 font-medium">TBA</span>
-                                      ) : suggestion.price !== null &&
-                                        suggestion.price !== undefined ? (
-                                        <span className="ml-2 font-medium">
-                                          Tk {Number(suggestion.price).toFixed(2)}
-                                        </span>
-                                      ) : null)}
-                                  </div>
-                                </div>
-                                <div
-                                  className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                    suggestion.type === "product"
-                                      ? "bg-gray-100 text-gray-800"
-                                      : "bg-gray-200 text-gray-800"
-                                  }`}
-                                >
+                        {searchSuggestions.slice(0, 5).map((suggestion, index) => (
+                          <div
+                            key={`${suggestion.type}-${suggestion._id}-${index}`}
+                            className="cursor-pointer p-4 transition-colors duration-150 hover:bg-slate-50"
+                            onClick={() => handleSuggestionClick(suggestion)}
+                          >
+                            <div className="flex items-center">
+                              <div
+                                className={`rounded-2xl p-2 ${
+                                  suggestion.type === "product"
+                                    ? "bg-slate-100"
+                                    : "bg-slate-200"
+                                }`}
+                              >
+                                {suggestion.type === "product" ? (
+                                  <svg
+                                    className="h-5 w-5 text-slate-700"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                                    />
+                                  </svg>
+                                ) : (
+                                  <svg
+                                    className="h-5 w-5 text-slate-700"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                                    />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="ml-4 flex-1">
+                                <div className="text-sm font-medium text-slate-900">
                                   {suggestion.type === "product"
-                                    ? "VIEW"
-                                    : "BROWSE"}
+                                    ? suggestion.title
+                                    : suggestion.name}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-600">
+                                  {suggestion.type === "product"
+                                    ? suggestion.brand || "Product"
+                                    : "Category"}
+                                  {suggestion.type === "product" &&
+                                    (suggestion.priceType === "tba" ? (
+                                      <span className="ml-2 font-medium">TBA</span>
+                                    ) : suggestion.price !== null &&
+                                      suggestion.price !== undefined ? (
+                                      <span className="ml-2 font-medium">
+                                        Tk {Number(suggestion.price).toFixed(2)}
+                                      </span>
+                                    ) : null)}
                                 </div>
                               </div>
+                              <div
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                  suggestion.type === "product"
+                                    ? "bg-slate-100 text-slate-800"
+                                    : "bg-slate-200 text-slate-800"
+                                }`}
+                              >
+                                {suggestion.type === "product" ? "VIEW" : "BROWSE"}
+                              </div>
                             </div>
-                          ))}
+                          </div>
+                        ))}
                       </div>
                     ) : (
-                      // NO RESULTS AT ALL
-                      <div className="p-8 text-center text-gray-600">
+                      <div className="p-8 text-center text-slate-600">
                         No results found for "{searchQuery}"
                       </div>
                     )}
@@ -1134,678 +1282,409 @@ const Navbar = () => {
                 )}
               </div>
 
-              {/* Desktop primary links (merged from old bottom bar) */}
-              <div className="hidden xl:flex items-center gap-5 shrink-0">
-                {primaryNavItems.map(({ label, to }) => {
-                  const isActive = isPrimaryNavActive(to);
-                  return (
-                    <Link
-                      key={label}
-                      to={to}
-                      className={`-mb-px border-b-2 px-1 py-2 text-sm font-semibold transition-colors ${
-                        isActive
-                          ? "border-black text-black"
-                          : "border-transparent text-gray-500 hover:border-black/35 hover:text-black"
-                      }`}
-                    >
-                      {label}
-                    </Link>
-                  );
-                })}
+              <div className="hidden lg:flex flex-wrap items-center justify-end gap-2">
+                {storefrontQuickLinks.map((entry, index) => (
+                  <button
+                    key={`${entry.label}-${entry.path}`}
+                    type="button"
+                    onClick={() => navigateStorefrontLink(entry.path)}
+                    className={`rounded-full border px-3.5 py-2 text-xs font-semibold transition ${
+                      index === 0
+                        ? "border-transparent"
+                        : "border-black/10 bg-white/70 text-slate-700 hover:border-black/20 hover:bg-slate-50 hover:text-slate-950"
+                    }`}
+                    style={
+                      index === 0
+                        ? {
+                            backgroundColor: themeColor,
+                            color: themeTextColor,
+                            boxShadow: `0 18px 34px -22px ${hexToRgba(themeColor, 0.95)}`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {entry.label}
+                  </button>
+                ))}
+
+                {storefrontTrustBullets[1] ? (
+                  <span className="ml-1 inline-flex items-center gap-2 rounded-full border border-black/10 bg-slate-50/90 px-3.5 py-2 text-xs font-medium text-slate-600">
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: themeColor }}
+                    />
+                    {storefrontTrustBullets[1]}
+                  </span>
+                ) : null}
               </div>
             </div>
 
-            {/* Desktop Navigation - Right */}
-            <div className="hidden lg:flex lg:items-center lg:gap-2 xl:gap-3 shrink-0">
-              {/* User Menu */}
-              {isLoggedIn ? (
-                <div className="relative group">
-                  <button className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-sm transition hover:border-gray-300 hover:bg-gray-50">
-                    <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                      {userName.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="hidden xl:inline text-sm font-medium text-gray-900">
-                      {userName}
-                    </span>
-                    <svg
-                      className="w-4 h-4 text-gray-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </button>
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-900">
-                        {userName}
-                      </p>
-                      <p className="text-xs text-gray-600">Welcome back!</p>
-                    </div>
-                    <Link
-                      to="/dashboard"
-                      className="flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 hover:text-black transition-colors duration-150"
-                    >
-                      <svg
-                        className="w-4 h-4 mr-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                        />
-                      </svg>
-                      Dashboard
-                    </Link>
-                    {landingQuickLinks.map((entry) => (
-                      <button
-                        key={entry.tab}
-                        type="button"
-                        onClick={() => openDashboardTab(entry.tab)}
-                        className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 hover:text-black transition-colors duration-150 text-left"
-                      >
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-500 mr-3" />
-                        {entry.label}
-                      </button>
-                    ))}
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 transition-colors duration-150"
-                    >
-                      <svg
-                        className="w-4 h-4 mr-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                        />
-                      </svg>
-                      Logout
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <Link
-                    to="/login"
-                    className="rounded-full px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100 hover:text-black transition-colors duration-200"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-900"
-                  >
-                    Register
-                  </Link>
-                </div>
-              )}
-
-              {/* Cart */}
-              <button
-                onClick={handleCompareClick}
-                className="relative rounded-full border border-gray-200 bg-white p-2.5 text-gray-900 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
-                aria-label="Open compare products"
-              >
-                <FiShuffle className="w-5 h-5 text-gray-900" />
-                {compareCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
-                    {compareCount > 99 ? "99+" : compareCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={handleCartClick}
-                className="relative rounded-full border border-gray-200 bg-white p-2.5 text-gray-900 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
-              >
-                <svg
-                  className="w-6 h-6 text-gray-900"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
-                </svg>
-                {(cartCount > 0 || !isLoggedIn) && (
-                  <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {cartCount > 99 ? "99+" : cartCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* Mobile menu button */}
-            <div className="flex items-center lg:hidden space-x-4">
-              {/* Mobile Search Button */}
-              <button
-                onClick={toggleMobileSearch}
-                className="rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100"
-              >
-                <svg
-                  className="w-6 h-6 text-gray-900"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </button>
-
-              {/* Mobile Cart */}
-              <button
-                onClick={handleCompareClick}
-                className="relative rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100"
-                aria-label="Open compare products"
-              >
-                <FiShuffle className="w-5 h-5 text-gray-900" />
-                {compareCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
-                    {compareCount > 99 ? "99+" : compareCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={handleCartClick}
-                className="relative rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100"
-              >
-                <svg
-                  className="w-6 h-6 text-gray-900"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
-                </svg>
-                {(cartCount > 0 || !isLoggedIn) && (
-                  <span className="absolute -top-1 -right-1 bg-black text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {cartCount > 99 ? "99+" : cartCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                id="mobile-menu-button"
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="rounded-full p-2 text-gray-900 transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-black/10"
-              >
-                <svg
-                  className="w-6 h-6 text-gray-900"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                </svg>
-              </button>
-            </div>
           </div>
         </div>
 
-        {/* Mobile Search Bar */}
         {isMobileSearchOpen && (
-          <div className="lg:hidden border-t border-gray-200 bg-white px-4 py-3">
-            <form onSubmit={handleSearchSubmit} className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={handleSearchChange}
-                onFocus={() => {
-                  if (searchQuery.trim()) {
-                    setShowSuggestions(true);
-                    fetchSearchSuggestions(searchQuery);
-                  }
-                }}
-                placeholder="Search products or order numbers..."
-                className="w-full pl-12 pr-12 py-3.5 text-sm bg-gray-50 text-black border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-transparent"
-              />
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center h-5 pointer-events-none">
-                <svg
-                  className="w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-            </form>
+          <div className="site-shell pb-4 lg:hidden">
+            <div className="rounded-[28px] border border-white/80 bg-white/92 p-4 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.45)] backdrop-blur-xl">
+              <form
+                onSubmit={handleSearchSubmit}
+                className="flex items-center rounded-[22px] border border-white/10 bg-slate-950 px-4 py-2 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.9)]"
+              >
+                <div className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/65">
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onFocus={() => {
+                    if (searchQuery.trim()) {
+                      setShowSuggestions(true);
+                      fetchSearchSuggestions(searchQuery);
+                    }
+                  }}
+                  placeholder="Search products or order numbers..."
+                  className="h-11 w-full bg-transparent text-sm text-white placeholder:text-white/55 focus:outline-none"
+                />
+              </form>
 
-            {/* ============ FIXED: Mobile Search Suggestions ============ */}
-            {showSuggestions && searchQuery.trim() && (
-              <div className="mt-3 bg-white rounded-lg shadow border border-gray-200 max-h-60 overflow-y-auto">
-                <div className="p-2 bg-gray-50 border-b">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium">Search Results</span>
-                    <button
-                      onClick={() => setShowSuggestions(false)}
-                      className="text-xs text-gray-600 hover:text-gray-800"
+              {showSuggestions && searchQuery.trim() && (
+                <div className="mt-3 max-h-60 overflow-y-auto rounded-[20px] border border-black/10 bg-white shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
+                  <div className="border-b border-black/5 bg-slate-50/80 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-700">
+                        Search Results
+                      </span>
+                      <button
+                        onClick={() => setShowSuggestions(false)}
+                        className="text-xs text-slate-500 hover:text-slate-900"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+
+                  {isFetchingSuggestions || searchingOrders ? (
+                    <div className="p-4 text-center">
+                      <div className="inline-block h-4 w-4 animate-spin rounded-full border-b-2 border-slate-400"></div>
+                      <span className="ml-2 text-xs text-slate-600">
+                        Searching...
+                      </span>
+                    </div>
+                  ) : orderSearchResults.length > 0 &&
+                    isOrderNumberQuery(searchQuery) ? (
+                    <div className="divide-y divide-black/5">
+                      {orderSearchResults.slice(0, 3).map((order, index) => (
+                        <div
+                          key={`mobile-order-${index}`}
+                          className="cursor-pointer p-3 hover:bg-slate-50"
+                          onClick={() =>
+                            handleOrderResultClick(order.orderNumber)
+                          }
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-xl bg-blue-100 p-1.5">
+                              <FiPackage className="h-3 w-3 text-blue-700" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-xs font-medium text-slate-900">
+                                Order #{order.orderNumber}
+                              </div>
+                              <div className="truncate text-xs text-slate-500">
+                                {order.customerName}
+                              </div>
+                              <div className="mt-1 flex items-center gap-1">
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-xs ${
+                                    order.status === "delivered"
+                                      ? "bg-green-100 text-green-700"
+                                      : order.status === "confirmed"
+                                        ? "bg-cyan-100 text-cyan-700"
+                                      : order.status === "shipped"
+                                        ? "bg-purple-100 text-purple-700"
+                                        : order.status === "processing"
+                                          ? "bg-blue-100 text-blue-700"
+                                          : order.status === "pending"
+                                            ? "bg-yellow-100 text-yellow-700"
+                                            : order.status === "returned"
+                                              ? "bg-orange-100 text-orange-700"
+                                              : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {order.status}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                              TRACK
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : searchSuggestions.length > 0 ? (
+                    <div className="divide-y divide-black/5">
+                      {searchSuggestions.slice(0, 3).map((suggestion, index) => (
+                        <div
+                          key={`mobile-${suggestion.type}-${index}`}
+                          className="cursor-pointer p-3 hover:bg-slate-50"
+                          onClick={() => handleSuggestionClick(suggestion)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`rounded-xl p-1.5 ${
+                                suggestion.type === "product"
+                                  ? "bg-slate-100"
+                                  : "bg-slate-200"
+                              }`}
+                            >
+                              {suggestion.type === "product" ? (
+                                <svg
+                                  className="h-3 w-3 text-slate-700"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                                  />
+                                </svg>
+                              ) : (
+                                <svg
+                                  className="h-3 w-3 text-slate-700"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                                  />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="truncate text-xs font-medium text-slate-900">
+                                {suggestion.type === "product"
+                                  ? suggestion.title
+                                  : suggestion.name}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {suggestion.type === "product"
+                                  ? "Product"
+                                  : "Category"}
+                                {suggestion.type === "product" &&
+                                  (suggestion.priceType === "tba" ? (
+                                    <span className="ml-1 font-medium">- TBA</span>
+                                  ) : suggestion.price !== null &&
+                                    suggestion.price !== undefined ? (
+                                    <span className="ml-1 font-medium">
+                                      - Tk {Number(suggestion.price).toFixed(2)}
+                                    </span>
+                                  ) : null)}
+                              </div>
+                            </div>
+                            <div
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                suggestion.type === "product"
+                                  ? "bg-slate-100 text-slate-800"
+                                  : "bg-slate-200 text-slate-800"
+                              }`}
+                            >
+                              {suggestion.type === "product" ? "VIEW" : "BROWSE"}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-xs text-slate-600">
+                      No results found for "{searchQuery}"
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {isMobileMenuOpen && (
+          <div className="site-shell pb-4 lg:hidden">
+            <div
+              id="mobile-menu"
+              className="overflow-hidden rounded-[28px] border border-white/80 bg-white/92 p-4 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.45)] backdrop-blur-xl"
+            >
+              <div className="space-y-4">
+                <div className="rounded-[24px] bg-slate-950 p-4 text-white shadow-[0_22px_48px_-30px_rgba(15,23,42,0.95)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">
+                        {isLoggedIn ? "Your Space" : "Discover Faster"}
+                      </p>
+                      <p className="mt-2 text-lg font-semibold">
+                        {isLoggedIn ? `Hi, ${userName}` : "Fresh deals, fast checkout."}
+                      </p>
+                      <p className="mt-1 text-sm text-white/65">
+                        {storefrontTrustBullets[0]}
+                      </p>
+                    </div>
+                    <span
+                      className="inline-flex shrink-0 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.28em]"
+                      style={{ backgroundColor: themeColor, color: themeTextColor }}
                     >
-                      Close
-                    </button>
+                      Live
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    {isLoggedIn ? (
+                      <Link
+                        to="/dashboard"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="inline-flex flex-1 items-center justify-center rounded-full bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+                      >
+                        Dashboard
+                      </Link>
+                    ) : (
+                      <>
+                        <Link
+                          to="/login"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="inline-flex flex-1 items-center justify-center rounded-full bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+                        >
+                          Login
+                        </Link>
+                        <Link
+                          to="/register"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="inline-flex flex-1 items-center justify-center rounded-full px-4 py-3 text-sm font-semibold transition"
+                          style={{ backgroundColor: themeColor, color: themeTextColor }}
+                        >
+                          Join now
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {isFetchingSuggestions || searchingOrders ? (
-                  <div className="p-4 text-center">
-                    <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                    <span className="text-xs text-gray-600 ml-2">
-                      Searching...
-                    </span>
+                {isLoggedIn ? (
+                  <div className="rounded-[22px] border border-black/10 bg-slate-50/90 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                      Dashboard Quick Links
+                    </p>
+                    <div className="mt-3 grid gap-2">
+                      {landingQuickLinks.map((entry) => (
+                        <button
+                          key={entry.tab}
+                          type="button"
+                          onClick={() => openDashboardTab(entry.tab)}
+                          className="flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 hover:text-slate-950"
+                        >
+                          <span>{entry.label}</span>
+                          <span
+                            className="inline-block h-2 w-2 rounded-full"
+                            style={{ backgroundColor: themeColor }}
+                          />
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                ) : orderSearchResults.length > 0 &&
-                  isOrderNumberQuery(searchQuery) ? (
-                  // SHOW ONLY ORDERS ON MOBILE (when query looks like an order number)
-                  <div className="divide-y divide-gray-100">
-                    {orderSearchResults.slice(0, 3).map((order, index) => (
-                      <div
-                        key={`mobile-order-${index}`}
-                        className="p-3 hover:bg-gray-50 cursor-pointer"
-                        onClick={() =>
-                          handleOrderResultClick(order.orderNumber)
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-2">
+                  {primaryNavItems.map(({ label, to }) => {
+                    const isActive = isPrimaryNavActive(to);
+
+                    return (
+                      <Link
+                        key={label}
+                        to={to}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                          isActive
+                            ? "bg-slate-950 text-white shadow-[0_18px_34px_-22px_rgba(15,23,42,0.9)]"
+                            : "border border-black/10 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                        }`}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-[22px] border border-black/10 bg-white p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    Quick Jumps
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {storefrontQuickLinks.map((entry, index) => (
+                      <button
+                        key={`${entry.label}-${entry.path}-mobile`}
+                        type="button"
+                        onClick={() => navigateStorefrontLink(entry.path)}
+                        className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+                          index === 0
+                            ? ""
+                            : "border border-black/10 bg-slate-50 text-slate-700 hover:border-black/20 hover:bg-slate-100"
+                        }`}
+                        style={
+                          index === 0
+                            ? {
+                                backgroundColor: themeColor,
+                                color: themeTextColor,
+                              }
+                            : undefined
                         }
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="p-1.5 rounded bg-blue-100">
-                            <FiPackage className="w-3 h-3 text-blue-700" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-xs font-medium">
-                              Order #{order.orderNumber}
-                            </div>
-                            <div className="text-xs text-gray-500 truncate">
-                              {order.customerName}
-                            </div>
-                            <div className="flex items-center gap-1 mt-1">
-                              <span
-                                className={`text-xs px-1.5 py-0.5 rounded ${
-                                  order.status === "delivered"
-                                    ? "bg-green-100 text-green-700"
-                                    : order.status === "confirmed"
-                                      ? "bg-cyan-100 text-cyan-700"
-                                    : order.status === "shipped"
-                                      ? "bg-purple-100 text-purple-700"
-                                      : order.status === "processing"
-                                        ? "bg-blue-100 text-blue-700"
-                                        : order.status === "pending"
-                                          ? "bg-yellow-100 text-yellow-700"
-                                          : order.status === "returned"
-                                            ? "bg-orange-100 text-orange-700"
-                                          : "bg-red-100 text-red-700"
-                                }`}
-                              >
-                                {order.status}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                            TRACK
-                          </div>
-                        </div>
-                      </div>
+                        {entry.label}
+                      </button>
                     ))}
                   </div>
-                ) : searchSuggestions.length > 0 ? (
-                  // SHOW ONLY PRODUCTS/CATEGORIES ON MOBILE (if no orders or query doesn't look like order number)
-                  <div className="divide-y divide-gray-100">
-                    {searchSuggestions.slice(0, 3).map((suggestion, index) => (
-                      <div
-                        key={`mobile-${suggestion.type}-${index}`}
-                        className="p-3 hover:bg-gray-50 cursor-pointer"
-                        onClick={() => handleSuggestionClick(suggestion)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`p-1.5 rounded ${
-                              suggestion.type === "product"
-                                ? "bg-gray-100"
-                                : "bg-gray-200"
-                            }`}
-                          >
-                            {suggestion.type === "product" ? (
-                              <svg
-                                className="w-3 h-3 text-gray-700"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-                                />
-                              </svg>
-                            ) : (
-                              <svg
-                                className="w-3 h-3 text-gray-700"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                                />
-                              </svg>
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-xs font-medium truncate">
-                              {suggestion.type === "product"
-                                ? suggestion.title
-                                : suggestion.name}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {suggestion.type === "product"
-                                ? "Product"
-                                : "Category"}
-                              {suggestion.type === "product" &&
-                                (suggestion.priceType === "tba" ? (
-                                  <span className="ml-1 font-medium">- TBA</span>
-                                ) : suggestion.price !== null &&
-                                  suggestion.price !== undefined ? (
-                                  <span className="ml-1 font-medium">
-                                    - Tk {Number(suggestion.price).toFixed(2)}
-                                  </span>
-                                ) : null)}
-                            </div>
-                          </div>
-                          <div
-                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              suggestion.type === "product"
-                                ? "bg-gray-100 text-gray-800"
-                                : "bg-gray-200 text-gray-800"
-                            }`}
-                          >
-                            {suggestion.type === "product" ? "VIEW" : "BROWSE"}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  // NO RESULTS
-                  <div className="p-4 text-center text-gray-600 text-xs">
-                    No results found for "{searchQuery}"
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        {/* Mobile Menu */}
-        {isMobileMenuOpen && (
-          <div
-            id="mobile-menu"
-            className="lg:hidden bg-white border-t border-gray-200 shadow-lg"
-          >
-            <div className="px-4 py-3 space-y-1">
-              {/* Dashboard Link (mobile) */}
-              {isLoggedIn && (
-                <>
-                  <Link
-                    to="/dashboard"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 hover:text-black rounded-lg transition-colors duration-150"
-                  >
-                    <svg
-                      className="w-5 h-5 mr-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                </div>
+
+                <div className="rounded-[22px] border border-black/10 bg-white p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    Support
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    <a
+                      href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+                      className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                      />
-                    </svg>
-                    Dashboard
-                  </Link>
-
-                  {landingQuickLinks.map((entry) => (
-                    <button
-                      key={entry.tab}
-                      type="button"
-                      onClick={() => openDashboardTab(entry.tab)}
-                      className="w-full flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 hover:text-black rounded-lg transition-colors duration-150 text-left"
+                      <span>{supportPhone}</span>
+                      <span className="text-xs text-slate-400">Call</span>
+                    </a>
+                    <a
+                      href={`mailto:${supportEmail}`}
+                      className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
                     >
-                      <span className="inline-block w-2 h-2 rounded-full bg-gray-500 mr-3" />
-                      {entry.label}
-                    </button>
-                  ))}
-                </>
-              )}
-
-              {/* Categories Dropdown (mobile) */}
-              <div className="space-y-1">
-                <button
-                  onClick={() =>
-                    setIsMobileCategoriesOpen(!isMobileCategoriesOpen)
-                  }
-                  className="w-full flex items-center justify-between px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-150"
-                >
-                  <div className="flex items-center">
-                    <svg
-                      className="w-5 h-5 mr-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M4 6h16M4 12h16M4 18h16"
-                      />
-                    </svg>
-                    Categories
+                      <span className="truncate">{supportEmail}</span>
+                      <span className="text-xs text-slate-400">Email</span>
+                    </a>
                   </div>
-                  <svg
-                    className={`w-4 h-4 transition-transform duration-200 ${isMobileCategoriesOpen ? "transform rotate-180" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
+                </div>
 
-                {isMobileCategoriesOpen && (
-                  <div className="pl-12 space-y-1">
-                    {loading ? (
-                      <div className="px-4 py-2 text-gray-600">Loading...</div>
-                    ) : visibleCategories.length === 0 ? (
-                      <div className="px-4 py-2 text-gray-600">
-                        No categories
-                      </div>
-                    ) : (
-                      visibleCategories.map((category) => (
-                        <button
-                          key={category._id}
-                          onClick={() =>
-                            handleCategoryClick(category._id, category.name)
-                          }
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-black rounded transition-colors duration-150 flex items-center justify-between"
-                        >
-                          <span>{category.name}</span>
-                          <span
-                            className="px-2 py-1 text-xs rounded-full border"
-                            style={getBadgeStyle(category.type)}
-                          >
-                            {category.type || "General"}
-                          </span>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Navigation Links (mobile) */}
-              {["Home", "Shop", "About", "Contact", "FAQs"].map((item) => {
-                const to =
-                  item === "Home"
-                    ? "/"
-                    : item === "Shop"
-                      ? "/shop"
-                      : item === "About"
-                        ? "/about"
-                        : item === "Contact"
-                          ? "/contact"
-                          : "/faqs";
-
-                return (
-                  <Link
-                    key={item}
-                    to={to}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 hover:text-black rounded-lg transition-colors duration-150"
-                  >
-                    {item === "Home" && (
-                      <svg
-                        className="w-5 h-5 mr-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                        />
-                      </svg>
-                    )}
-                    {item === "Shop" && (
-                      <svg
-                        className="w-5 h-5 mr-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-                        />
-                      </svg>
-                    )}
-                    {item}
-                  </Link>
-                );
-              })}
-
-            
-
-              {/* ============================================================ */}
-
-              {/* Auth Links (mobile) */}
-              <div className="pt-4 border-t border-gray-200">
                 {isLoggedIn ? (
-                  <>
-                    <div className="px-4 py-3">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">
-                          {userName.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {userName}
-                          </p>
-                          <p className="text-xs text-gray-600">Welcome back!</p>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-150"
-                    >
-                      <svg
-                        className="w-5 h-5 mr-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                        />
-                      </svg>
-                      Logout
-                    </button>
-                  </>
-                ) : (
-                  <Link
-                    to="/login"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex items-center px-4 py-3 text-base font-medium text-gray-800 hover:bg-gray-100 hover:text-black rounded-lg transition-colors duration-150"
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center justify-center rounded-full border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
                   >
-                    <svg
-                      className="w-5 h-5 mr-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
-                      />
-                    </svg>
-                    Login / Register
-                  </Link>
-                )}
+                    Logout
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

@@ -202,7 +202,6 @@ const PopularCategory = () => {
         price: product.price || 0,
         salePrice: product.salePrice ?? null,
         priceType: product.priceType || "single",
-        showStockToPublic: product.showStockToPublic === true,
         stock: Number(product.stock || 0),
         image:
           product.images && product.images.length > 0

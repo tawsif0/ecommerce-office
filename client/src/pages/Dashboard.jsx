@@ -59,13 +59,13 @@ const ModuleInventoryCenter = React.lazy(() => import("./ModuleInventoryCenter")
 const ModuleAccounts = React.lazy(() => import("./ModuleAccounts"));
 const ModuleBrands = React.lazy(() => import("./ModuleBrands"));
 const ModuleVendorPayouts = React.lazy(() => import("./ModuleVendorPayouts"));
-const ModuleLandingPages = React.lazy(() => import("./ModuleLandingPages"));
 const ModuleVoiceAssistant = React.lazy(() => import("./ModuleVoiceAssistant"));
 const ModuleBusinessReports = React.lazy(() => import("./ModuleBusinessReports"));
 const ModuleWebsiteSetup = React.lazy(() => import("./ModuleWebsiteSetup"));
 const ModuleCampaignOffers = React.lazy(() => import("./ModuleCampaignOffers"));
 const ModuleAdminUsers = React.lazy(() => import("./ModuleAdminUsers"));
 const ModuleSuperAdminControl = React.lazy(() => import("./ModuleSuperAdminControl"));
+const AdminContactedUsers = React.lazy(() => import("./AdminContactedUsers"));
 
 const TabLoadingFallback = () => (
   <div className="app-panel-soft flex min-h-[260px] items-center justify-center">
@@ -226,10 +226,6 @@ const TabContent = React.memo(({
       ) : null;
     case "module-vendor-payouts":
       return user?.userType === "admin" ? <ModuleVendorPayouts /> : null;
-    case "module-landing-pages":
-      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
-        <ModuleLandingPages />
-      ) : null;
     case "module-campaign-offers":
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleCampaignOffers onOpenTab={onTabChange} />
@@ -253,6 +249,8 @@ const TabContent = React.memo(({
       ) : null;
     case "module-website-setup":
       return user?.userType === "admin" ? <ModuleWebsiteSetup /> : null;
+    case "contacted-list":
+      return user?.userType === "admin" ? <AdminContactedUsers /> : null;
     default:
       return <DashboardHome user={user} onTabChange={onTabChange} />;
   }

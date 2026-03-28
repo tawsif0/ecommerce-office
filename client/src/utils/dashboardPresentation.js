@@ -204,11 +204,6 @@ const TAB_META = {
     title: "Vendor Payouts",
     description: "Review and process seller earnings and payout schedules.",
   },
-  "module-landing-pages": {
-    section: "Growth & Marketing",
-    title: "Ecommerce Landing",
-    description: "Manage campaign landing content and storefront merchandising blocks.",
-  },
   "module-campaign-offers": {
     section: "Growth & Marketing",
     title: "Campaign Center",
@@ -233,6 +228,11 @@ const TAB_META = {
     section: "Reports & Insights",
     title: "Business Reports",
     description: "Review revenue, operations, and commerce performance metrics.",
+  },
+  "contacted-list": {
+    section: "Support",
+    title: "Contacted Users",
+    description: "Review public contact submissions, follow-up status, and saved admin notes.",
   },
   "module-website-setup": {
     section: "Brand & Storefront",

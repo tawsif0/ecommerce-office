@@ -5,6 +5,7 @@ import compareReducer from "./compareSlice";
 import publicSettingsReducer from "./publicSettingsSlice";
 import recentlyViewedReducer from "./recentlyViewedSlice";
 import voiceAssistantReducer from "./voiceAssistantSlice";
+import wishlistReducer from "./wishlistSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     publicSettings: publicSettingsReducer,
     recentlyViewed: recentlyViewedReducer,
     voiceAssistant: voiceAssistantReducer,
+    wishlist: wishlistReducer,
   },
 });
 

@@ -1,24 +1,38 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { FiArrowRight } from "react-icons/fi";
 import {
-  FaTruckFast,
   FaArrowRotateLeft,
+  FaChevronRight,
+  FaEnvelope,
+  FaFacebookF,
   FaGift,
   FaHeadset,
-  FaFacebookF,
-  FaWhatsapp,
-  FaCcVisa,
-  FaCcMastercard,
-  FaCcAmex,
-  FaCcDiscover,
-  FaCcPaypal,
+  FaInstagram,
   FaPhone,
-  FaEnvelope,
-  FaChevronRight,
+  FaTruckFast,
+  FaWhatsapp,
+  FaYoutube,
 } from "react-icons/fa6";
 import { FaMapMarkerAlt } from "react-icons/fa";
 import usePublicSettings from "../../hooks/usePublicSettings";
 import { toPublicAssetUrl } from "../../utils/publicSettings";
+
+const quickLinks = [
+  { name: "Home", path: "/" },
+  { name: "Shop", path: "/shop" },
+  { name: "About Us", path: "/about" },
+  { name: "Contact", path: "/contact" },
+  { name: "FAQs", path: "/faqs" },
+];
+
+const policyLinks = [
+  { name: "Shipment Policy", path: "/policy/shipment" },
+  { name: "Delivery Policy", path: "/policy/delivery" },
+  { name: "Terms & Conditions", path: "/policy/terms" },
+  { name: "Return Policy", path: "/policy/return" },
+  { name: "Privacy Policy", path: "/policy/privacy" },
+];
 
 const normalizeLogoMode = (value) =>
   String(value || "")
@@ -27,6 +41,20 @@ const normalizeLogoMode = (value) =>
     ? "text"
     : "image";
 
+const withProtocol = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("mailto:") ||
+    trimmed.startsWith("tel:")
+  ) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+};
+
 const Footer = () => {
   const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
@@ -34,14 +62,81 @@ const Footer = () => {
   const [scrollDir, setScrollDir] = useState("down");
   const [isAtTop, setIsAtTop] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(false);
-  const { settings: publicSettings } = usePublicSettings();
+  const { settings } = usePublicSettings();
 
-  // Function to handle navigation with scroll to top
+  const website = useMemo(() => settings?.website || {}, [settings]);
+  const contact = useMemo(() => settings?.contact || {}, [settings]);
+  const social = useMemo(() => settings?.social || {}, [settings]);
+  const storefront = useMemo(() => settings?.storefront || {}, [settings]);
+
+  const brandName = String(website?.storeName || "E-Commerce").trim() || "E-Commerce";
+  const brandLogoMode = normalizeLogoMode(website?.logoMode);
+  const brandLogo = brandLogoMode === "image" ? toPublicAssetUrl(website?.logoUrl || "") : "";
+  const hasBrandLogoImage = Boolean(brandLogo);
+  const brandLogoText =
+    String(website?.logoText || "").trim() || String(website?.storeName || "E-Commerce").trim();
+
+  const socialLinks = [
+    {
+      label: "Facebook",
+      href: withProtocol(social?.facebook),
+      subtitle: "Follow our page",
+      icon: <FaFacebookF className="text-xl text-blue-400 group-hover:text-white" />,
+      iconWrap:
+        "flex h-12 w-12 items-center justify-center rounded-full bg-blue-600/20 transition-colors duration-300 group-hover:bg-blue-500",
+      hoverBorder: "hover:border-blue-500",
+    },
+    {
+      label: "WhatsApp",
+      href: withProtocol(social?.whatsapp),
+      subtitle: "Chat with us",
+      icon: <FaWhatsapp className="text-xl text-green-400 group-hover:text-white" />,
+      iconWrap:
+        "flex h-12 w-12 items-center justify-center rounded-full bg-green-600/20 transition-colors duration-300 group-hover:bg-green-500",
+      hoverBorder: "hover:border-green-500",
+    },
+    {
+      label: "Instagram",
+      href: withProtocol(social?.instagram),
+      subtitle: "See latest updates",
+      icon: <FaInstagram className="text-xl text-pink-400 group-hover:text-white" />,
+      iconWrap:
+        "flex h-12 w-12 items-center justify-center rounded-full bg-pink-600/20 transition-colors duration-300 group-hover:bg-pink-500",
+      hoverBorder: "hover:border-pink-500",
+    },
+    {
+      label: "YouTube",
+      href: withProtocol(social?.youtube),
+      subtitle: "Watch our content",
+      icon: <FaYoutube className="text-xl text-red-400 group-hover:text-white" />,
+      iconWrap:
+        "flex h-12 w-12 items-center justify-center rounded-full bg-red-600/20 transition-colors duration-300 group-hover:bg-red-500",
+      hoverBorder: "hover:border-red-500",
+    },
+  ].filter((item) => item.href);
+
+  const contactInfo = {
+    address:
+      String(contact?.address || "").trim() ||
+      "Shop 12, Level 3, Bashundhara City, Panthapath, Dhaka 1215, Bangladesh",
+    addressLink:
+      withProtocol(contact?.addressLink) ||
+      `https://maps.google.com/?q=${encodeURIComponent(
+        String(contact?.address || "Bashundhara City Panthapath Dhaka Bangladesh").trim(),
+      )}`,
+    phone1: String(contact?.phone1 || "+880 1700-000000").trim(),
+    phone2: String(contact?.phone2 || "").trim(),
+    email: String(contact?.email || "support@marketplace.com.bd").trim(),
+  };
+
+  const footerCaption =
+    String(storefront?.footerCaption || "").trim() || "Built for Bangladesh marketplace operations";
+  const footerDescription =
+    String(website?.tagline || "").trim() ||
+    "Multi-vendor ecommerce platform for Bangladesh with trusted sellers, secure checkout, and nationwide delivery.";
+
   const handleNavigation = (path) => {
-    // Navigate to the page
     navigate(path);
-
-    // Scroll to top of the page
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -68,120 +163,48 @@ const Footer = () => {
     updateScrollState();
     window.addEventListener("scroll", updateScrollState, { passive: true });
     window.addEventListener("resize", updateScrollState);
+
     return () => {
       window.removeEventListener("scroll", updateScrollState);
       window.removeEventListener("resize", updateScrollState);
     };
   }, []);
 
-  const socialLinks = useMemo(() => {
-    const social = publicSettings?.social || {};
-    return {
-      facebook: String(social.facebook || "https://www.facebook.com/").trim(),
-      whatsapp: String(social.whatsapp || "https://wa.me/8801700000000").trim(),
-    };
-  }, [publicSettings]);
-
-  const contactInfo = useMemo(() => {
-    const contact = publicSettings?.contact || {};
-    const phone1 = String(contact.phone1 || "+880 1700-000000").trim();
-    const phone2 = String(contact.phone2 || "+880 1800-000000").trim();
-    const email = String(contact.email || "support@marketplace.com.bd").trim();
-
-    const normalizePhoneForTel = (value) => String(value || "").replace(/[^\d+]/g, "");
-
-    return {
-      address:
-        String(contact.address || "").trim() ||
-        "Shop 12, Level 3, Bashundhara City, Panthapath, Dhaka 1215, Bangladesh",
-      addressLink:
-        String(contact.addressLink || "").trim() ||
-        "https://maps.google.com/?q=Bashundhara+City+Panthapath+Dhaka+1215+Bangladesh",
-      phone1,
-      phone1Link: `tel:${normalizePhoneForTel(phone1)}`,
-      phone2,
-      phone2Link: `tel:${normalizePhoneForTel(phone2)}`,
-      email,
-      emailLink: `mailto:${email}`,
-    };
-  }, [publicSettings]);
-
-  const website = useMemo(() => publicSettings?.website || {}, [publicSettings]);
-  const storefront = useMemo(() => publicSettings?.storefront || {}, [publicSettings]);
-  const brandLogoMode = useMemo(
-    () => normalizeLogoMode(website?.logoMode),
-    [website?.logoMode],
-  );
-  const brandLogoText = useMemo(() => {
-    const resolved = String(website?.logoText || "").trim();
-    return resolved || String(website?.storeName || "E-Commerce").trim() || "E-Commerce";
-  }, [website?.logoText, website?.storeName]);
-  const brandLogo = useMemo(
-    () =>
-      brandLogoMode === "text"
-        ? ""
-        : toPublicAssetUrl(website?.logoUrl || ""),
-    [brandLogoMode, website?.logoUrl],
-  );
-  const hasBrandLogoImage = useMemo(
-    () => brandLogoMode === "image" && Boolean(brandLogo),
-    [brandLogoMode, brandLogo],
-  );
-  const footerCaption = useMemo(() => {
-    const resolved = String(storefront?.footerCaption || "").trim();
-    return resolved || "Built for Bangladesh marketplace operations";
-  }, [storefront?.footerCaption]);
-
-  // Quick links configuration
-  const quickLinks = [
-    { name: "Home", path: "/" },
-    { name: "Shop", path: "/shop" },
-    { name: "About Us", path: "/about" },
-    { name: "Contact", path: "/contact" },
-    { name: "FAQs", path: "/faqs" },
-    { name: "Shipment Policy", path: "/policy/shipment" },
-    { name: "Delivery Policy", path: "/policy/delivery" },
-    { name: "Terms & Conditions", path: "/policy/terms" },
-    { name: "Return Policy", path: "/policy/return" },
-    { name: "Privacy Policy", path: "/policy/privacy" },
-  ];
-
   return (
-    <footer className="bg-black text-white">
-      {/* TOP FEATURES */}
-      <div className="border-b border-gray-800 py-8 md:py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    <footer className="bg-white text-slate-900">
+      <div className="border-b border-slate-200 py-8 md:py-10">
+        <div className="site-shell">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[
               {
                 icon: <FaTruckFast className="text-xl" />,
-                title: "All Bangladesh Delivery",
-                text: "Fast courier across Bangladesh",
+                title: "Fast Shipping",
+                text: "Smooth delivery flow",
               },
               {
                 icon: <FaArrowRotateLeft className="text-xl" />,
-                title: "Money Back Guarantee",
-                text: "Return request within 7 days",
+                title: "Easy Returns",
+                text: "Simple return support",
               },
               {
                 icon: <FaGift className="text-xl" />,
                 title: "Offers And Discounts",
-                text: "Regular campaign and coupons",
+                text: "Fresh deals for shoppers",
               },
               {
                 icon: <FaHeadset className="text-xl" />,
-                title: "24/7 Support Services",
-                text: "Phone and WhatsApp support",
+                title: "Customer Support",
+                text: "Help when you need it",
               },
-            ].map((feature, idx) => (
+            ].map((feature) => (
               <div
-                key={idx}
-                className="flex items-center gap-4 p-4 hover:bg-gray-900/50 rounded-xl transition-all duration-300"
+                key={feature.title}
+                className="flex items-center gap-4 rounded-xl p-4 transition-all duration-300 hover:bg-slate-100"
               >
-                <div className="p-3 bg-gray-900 rounded-lg">{feature.icon}</div>
+                <div className="rounded-lg bg-slate-100 p-3">{feature.icon}</div>
                 <div>
-                  <h3 className="font-semibold text-white">{feature.title}</h3>
-                  <p className="text-sm text-gray-400 mt-1">{feature.text}</p>
+                  <h3 className="font-semibold text-slate-900">{feature.title}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{feature.text}</p>
                 </div>
               </div>
             ))}
@@ -189,100 +212,88 @@ const Footer = () => {
         </div>
       </div>
 
-      {/* MAIN FOOTER CONTENT */}
       <div className="py-12 md:py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-            {/* CONTACT INFO */}
+        <div className="site-shell">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
             <div className="lg:col-span-5">
               <div className="mb-8">
                 <button
                   onClick={() => handleNavigation("/")}
-                  className="inline-block cursor-pointer"
+                  className="inline-flex max-w-full cursor-pointer items-center text-left"
                 >
-                  <h2 className="text-3xl font-bold mb-4 hover:opacity-90 transition-opacity flex items-center gap-3">
-                    {!hasBrandLogoImage ? (
-                      <span className="inline-flex items-center text-lg font-black tracking-[0.08em] text-white">
-                        {brandLogoText}
-                      </span>
-                    ) : (
-                      <>
-                        <img
-                          src={brandLogo}
-                          alt={String(website.storeName || "Store")}
-                          className="block h-10 w-auto max-w-[220px] object-contain"
-                        />
-                        <span className="sr-only">
-                          {String(website.storeName || "E-Commerce")}
-                        </span>
-                      </>
-                    )}
-                  </h2>
+                  {hasBrandLogoImage ? (
+                    <img
+                      src={brandLogo}
+                      alt={brandName}
+                      className="h-14 w-auto max-w-[220px] object-contain"
+                    />
+                  ) : (
+                    <h2 className="text-3xl font-bold transition-opacity hover:opacity-90">
+                      <span className="text-slate-900">{brandLogoText}</span>
+                    </h2>
+                  )}
                 </button>
-                <p className="text-gray-400 leading-relaxed">
-                  {String(website.tagline || "").trim() ||
-                    "Multi-vendor ecommerce platform for Bangladesh with trusted sellers, secure checkout, and nationwide delivery."}
-                </p>
+                <div className="mt-4 space-y-3 text-slate-600">
+                  <p>{footerDescription}</p>
+                </div>
               </div>
 
               <div className="space-y-4">
-                {/* Address - Clickable Google Maps Link */}
                 <a
                   href={contactInfo.addressLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-start gap-3 hover:text-white transition-colors duration-200 group"
+                  className="group flex items-start gap-3 transition-colors duration-200 hover:text-slate-950"
                 >
-                  <FaMapMarkerAlt className="text-gray-400 mt-1 shrink-0 group-hover:text-white" />
+                  <FaMapMarkerAlt className="mt-1 shrink-0 text-slate-500 group-hover:text-slate-900" />
                   <div>
-                    <p className="font-medium text-gray-300 group-hover:text-white">
+                    <p className="font-medium text-slate-800 group-hover:text-slate-950">
                       Address
                     </p>
-                    <p className="text-sm text-gray-400 group-hover:text-gray-300">
+                    <p className="text-sm text-slate-600 group-hover:text-slate-700">
                       {contactInfo.address}
                     </p>
                   </div>
                 </a>
 
-                {/* Phone Numbers - Clickable */}
-                <div className="space-y-2">
+                <a
+                  href={`tel:${contactInfo.phone1.replace(/[^\d+]/g, "")}`}
+                  className="group flex items-center gap-3 transition-colors duration-200 hover:text-slate-950"
+                >
+                  <FaPhone className="shrink-0 text-slate-500 group-hover:text-slate-900" />
+                  <div>
+                    <p className="font-medium text-slate-800 group-hover:text-slate-950">
+                      Phone
+                    </p>
+                    <p className="text-sm text-slate-600 group-hover:text-slate-700">
+                      {contactInfo.phone1}
+                    </p>
+                  </div>
+                </a>
+
+                {contactInfo.phone2 ? (
                   <a
-                    href={contactInfo.phone1Link}
-                    className="flex items-center gap-3 hover:text-white transition-colors duration-200 group"
-                  >
-                    <FaPhone className="text-gray-400 shrink-0 group-hover:text-white" />
-                    <div>
-                      <p className="font-medium text-gray-300 group-hover:text-white">
-                        Phone
-                      </p>
-                      <p className="text-sm text-gray-400 group-hover:text-gray-300">
-                        {contactInfo.phone1}
-                      </p>
-                    </div>
-                  </a>
-                  <a
-                    href={contactInfo.phone2Link}
-                    className="flex items-center gap-3 hover:text-white transition-colors duration-200 group ml-8"
+                    href={`tel:${contactInfo.phone2.replace(/[^\d+]/g, "")}`}
+                    className="group ml-8 flex items-center gap-3 transition-colors duration-200 hover:text-slate-950"
                   >
                     <div>
-                      <p className="text-sm text-gray-400 group-hover:text-gray-300">
+                      <p className="text-sm text-slate-600 group-hover:text-slate-700">
                         {contactInfo.phone2}
                       </p>
                     </div>
                   </a>
-                </div>
+                ) : null}
 
-                {/* Email - Clickable */}
                 <a
-                  href={contactInfo.emailLink}
-                  className="flex items-center gap-3 hover:text-white transition-colors duration-200 group"
+                  href={`mailto:${contactInfo.email}`}
+                  className="group flex items-center gap-3 transition-colors duration-200 hover:text-slate-950"
                 >
-                  <FaEnvelope className="text-gray-400 shrink-0 group-hover:text-white" />
+                  <FaEnvelope className="shrink-0 text-slate-500 group-hover:text-slate-900" />
                   <div>
-                    <p className="font-medium text-gray-300 group-hover:text-white">
+                    <p className="font-medium text-slate-800 group-hover:text-slate-950">
                       Email
                     </p>
-                    <p className="text-sm text-gray-400 group-hover:text-gray-300">
+                    <p className="text-sm text-slate-600 group-hover:text-slate-700">
                       {contactInfo.email}
                     </p>
                   </div>
@@ -290,9 +301,8 @@ const Footer = () => {
               </div>
             </div>
 
-            {/* QUICK LINKS - Using custom handler for scroll to top */}
             <div className="lg:col-span-3">
-              <h4 className="font-bold text-lg mb-6 pb-2 border-b border-gray-800">
+              <h4 className="mb-6 border-b border-slate-200 pb-2 text-lg font-bold text-slate-900">
                 Quick Links
               </h4>
               <ul className="space-y-3">
@@ -300,9 +310,9 @@ const Footer = () => {
                   <li key={link.name}>
                     <button
                       onClick={() => handleNavigation(link.path)}
-                      className="text-gray-400 hover:text-white flex items-center gap-2 transition-colors duration-200 group w-full text-left"
+                      className="group flex w-full items-center gap-2 text-left text-slate-600 transition-colors duration-200 hover:text-slate-950"
                     >
-                      <FaChevronRight className="text-xs opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <FaChevronRight className="text-xs opacity-0 transition-opacity group-hover:opacity-100" />
                       {link.name}
                     </button>
                   </li>
@@ -310,69 +320,66 @@ const Footer = () => {
               </ul>
             </div>
 
-            {/* SOCIAL MEDIA - External links open in new tab */}
             <div className="lg:col-span-4">
-              <h4 className="font-bold text-lg mb-6 pb-2 border-b border-gray-800">
+              <h4 className="mb-6 border-b border-slate-200 pb-2 text-lg font-bold text-slate-900">
                 Connect With Us
               </h4>
 
               <div className="space-y-4">
-                {/* Facebook Link */}
-                <a
-                  href={socialLinks.facebook}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-4 p-4 rounded-xl bg-linear-to-br from-gray-900 to-gray-800 border border-gray-800 hover:border-blue-500 transition-all duration-300 group block"
-                >
-                  <div className="w-12 h-12 rounded-full bg-blue-600/20 flex items-center justify-center group-hover:bg-blue-500 transition-colors duration-300">
-                    <FaFacebookF className="text-xl text-blue-400 group-hover:text-white" />
+                {socialLinks.length > 0 ? (
+                  socialLinks.map((item) => (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`group block rounded-xl border border-slate-200 bg-linear-to-br from-white to-slate-50 p-4 transition-all duration-300 hover:shadow-md ${item.hoverBorder}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={item.iconWrap}>{item.icon}</div>
+                        <div>
+                          <p className="font-medium text-slate-900">{item.label}</p>
+                          <p className="text-sm text-slate-600">{item.subtitle}</p>
+                        </div>
+                      </div>
+                    </a>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                    Add your social links from Dashboard settings.
                   </div>
-                  <div>
-                    <p className="font-medium text-white">Facebook</p>
-                    <p className="text-sm text-gray-400">Follow our page</p>
-                  </div>
-                </a>
-
-                {/* WhatsApp Link */}
-                <a
-                  href={socialLinks.whatsapp}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-4 p-4 rounded-xl bg-linear-to-br from-gray-900 to-gray-800 border border-gray-800 hover:border-green-500 transition-all duration-300 group block"
-                >
-                  <div className="w-12 h-12 rounded-full bg-green-600/20 flex items-center justify-center group-hover:bg-green-500 transition-colors duration-300">
-                    <FaWhatsapp className="text-xl text-green-400 group-hover:text-white" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-white">WhatsApp</p>
-                    <p className="text-sm text-gray-400">Chat with us</p>
-                  </div>
-                </a>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* BOTTOM BAR */}
-      <div className="border-t border-gray-900 py-6 md:py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="border-t border-slate-200 py-6 md:py-8">
+        <div className="site-shell">
           <div className="flex flex-col items-center">
-            {/* COPYRIGHT - CENTERED */}
             <div className="text-center">
-              <p className="text-gray-400 text-sm">
-                Copyright {currentYear} {String(website.storeName || "E-Commerce Store")}. All rights reserved.
+              <p className="text-sm text-slate-600">
+                Copyright {currentYear} {brandName}. All rights reserved.
               </p>
-              <p className="text-gray-500 text-xs mt-1">
-                {footerCaption}
-              </p>
+              <p className="mt-1 text-xs text-slate-500">{footerCaption}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-sm text-slate-600">
+                {policyLinks.map((link) => (
+                  <button
+                    key={link.name}
+                    onClick={() => handleNavigation(link.path)}
+                    className="underline underline-offset-4 transition-colors hover:text-slate-950"
+                  >
+                    {link.name}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* SCROLL DIRECTION BUTTON */}
-      {!isAtTop && !isAtBottom && (
+      {!isAtTop && !isAtBottom ? (
         <button
           onClick={() => {
             if (scrollDir === "down") {
@@ -383,29 +390,16 @@ const Footer = () => {
               window.scrollTo({ top: 0, behavior: "smooth" });
             }
           }}
-          className="fixed bottom-6 right-6 w-12 h-12 bg-white text-black rounded-full shadow-xl hover:shadow-2xl hover:scale-110 transition-all duration-300 flex items-center justify-center z-50 group border border-gray-300"
+          className="group fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-gray-300 bg-white text-black shadow-xl transition-all duration-300 hover:scale-110 hover:shadow-2xl"
           aria-label={scrollDir === "down" ? "Go to bottom" : "Back to top"}
-          title={scrollDir === "down" ? "Go to bottom" : "Back to top"}
         >
-          <svg
-            className={`w-5 h-5 transition-transform duration-200 ${
-              scrollDir === "down"
-                ? "rotate-180 group-hover:translate-y-0.5"
-                : "group-hover:-translate-y-0.5"
+          <FiArrowRight
+            className={`h-5 w-5 transition-transform duration-300 ${
+              scrollDir === "down" ? "rotate-90" : "-rotate-90"
             }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M5 15l7-7 7 7"
-            />
-          </svg>
+          />
         </button>
-      )}
+      ) : null}
     </footer>
   );
 };

@@ -13,7 +13,6 @@ export const createProductSnapshot = (product) => {
     price: product.price ?? 0,
     salePrice: product.salePrice ?? null,
     priceType: normalizeEmbeddedValue(product.priceType, "single"),
-    showStockToPublic: Boolean(product.showStockToPublic),
     stock: Number(product.stock || 0),
     colors: Array.isArray(product.colors) ? product.colors.filter(Boolean) : [],
     marketplaceType: normalizeEmbeddedValue(product.marketplaceType, "simple"),

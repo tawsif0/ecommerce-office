@@ -92,11 +92,6 @@ const MODULE_COMMANDS = [
     aliases: ["support", "support tickets", "tickets", "help desk"],
   },
   {
-    tab: "module-landing-pages",
-    successMessage: "Opened landing pages",
-    aliases: ["landing pages", "landing page", "campaign pages"],
-  },
-  {
     tab: "module-ads",
     successMessage: "Opened ads",
     aliases: ["ads", "advertisements", "ad management"],
@@ -179,12 +174,6 @@ const RESOURCE_TAB_MAP = {
   },
   support_ticket: {
     listTab: "module-support",
-  },
-  landingpage: {
-    listTab: "module-landing-pages",
-  },
-  landing_page: {
-    listTab: "module-landing-pages",
   },
 };
 

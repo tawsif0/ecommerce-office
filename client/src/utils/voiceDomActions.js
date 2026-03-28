@@ -239,7 +239,6 @@ const FIELD_ALIASES = {
   sku: ["sku", "code", "product code", "à¦à¦¸à¦•à§‡à¦‡à¦‰"],
   priceType: ["price type", "pricing type", "à¦¦à¦¾à¦®à§‡à¦° à¦§à¦°à¦¨", "à¦ªà§à¦°à¦¾à¦‡à¦¸ à¦Ÿà¦¾à¦‡à¦ª"],
   marketplaceType: ["marketplace type", "product mode", "à¦®à¦¾à¦°à§à¦•à§‡à¦Ÿà¦ªà§à¦²à§‡à¦¸ à¦Ÿà¦¾à¦‡à¦ª"],
-  showStockToPublic: ["show stock publicly", "public stock", "show stock", "à¦ªà¦¾à¦¬à¦²à¦¿à¦• à¦¸à§à¦Ÿà¦•"],
   allowBackorder: ["allow backorder", "backorder", "à¦¬à§à¦¯à¦¾à¦•à¦…à¦°à§à¦¡à¦¾à¦°"],
 };
 
@@ -281,7 +280,6 @@ const NAME_BY_FIELD = {
   sku: "sku",
   priceType: "priceType",
   marketplaceType: "marketplaceType",
-  showStockToPublic: "showStockToPublic",
   allowBackorder: "allowBackorder",
 };
 
@@ -405,7 +403,7 @@ const setFieldValue = (fieldKey, rawValue) => {
   const fieldName = NAME_BY_FIELD[fieldKey];
   if (!fieldName) return false;
 
-  if (fieldKey === "showStockToPublic" || fieldKey === "allowBackorder") {
+  if (fieldKey === "allowBackorder") {
     const checkbox = findInputByNames([fieldName]);
     const onOff = parseOnOff(rawValue);
     if (!checkbox || onOff === null) return false;
@@ -729,23 +727,6 @@ export const executeVoiceDomCommand = ({ rawText, setAction, voiceDataset }) => 
     }
     applyAction("Submit button was not found on this page.");
     return { handled: true };
-  }
-
-  if (
-    normalized.includes("show stock") ||
-    normalized.includes("public stock") ||
-    normalized.includes("à¦ªà¦¾à¦¬à¦²à¦¿à¦• à¦¸à§à¦Ÿà¦•")
-  ) {
-    const checked = parseOnOff(normalized);
-    if (checked === null) {
-      applyAction("Say on or off for stock visibility.");
-      return { handled: true };
-    }
-    const success = setFieldValue("showStockToPublic", checked ? "on" : "off");
-    if (success) {
-      applyAction(`Stock visibility turned ${checked ? "on" : "off"}.`);
-      return { handled: true };
-    }
   }
 
   if (normalized.includes("backorder") || normalized.includes("à¦¬à§à¦¯à¦¾à¦•à¦…à¦°à§à¦¡à¦¾à¦°")) {

@@ -5,6 +5,17 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const baseUrl = import.meta.env.VITE_API_URL || "";
 
+const normalizeLink = (link) => {
+  const normalized = String(link || "").trim();
+  if (!normalized || normalized === "#") return "";
+  return normalized;
+};
+
+const isExternalLink = (link) =>
+  /^https?:\/\//i.test(link) ||
+  String(link || "").startsWith("mailto:") ||
+  String(link || "").startsWith("tel:");
+
 const getFullImageUrl = (imagePath) => {
   if (!imagePath) return null;
   if (
@@ -117,10 +128,24 @@ const Banner = () => {
   const slideDurationMs = 5000;
   const navigate = useNavigate();
 
+  const openLink = useCallback(
+    (link) => {
+      const target = normalizeLink(link);
+      if (!target) return;
+
+      if (isExternalLink(target)) {
+        window.location.href = target;
+      } else {
+        navigate(target);
+      }
+    },
+    [navigate],
+  );
+
   const fetchBanners = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${baseUrl}/banners/public`);
+      const response = await fetch(`${baseUrl}/banners/public?type=hero&page=home`);
       const data = await response.json();
 
       let bannersData = [];
@@ -213,9 +238,9 @@ const Banner = () => {
 
   const handleBannerClick = useCallback(
     (banner) => {
-      if (banner.link) navigate(banner.link);
+      openLink(banner?.link);
     },
-    [navigate],
+    [openLink],
   );
 
   useEffect(() => {
@@ -347,7 +372,7 @@ const Banner = () => {
 
       {/* Content */}
       <div className="relative h-full flex items-center">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-4 sm:py-0">
+        <div className="site-shell w-full py-4 sm:py-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={`content-${activeIndex}`}
@@ -355,7 +380,7 @@ const Banner = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -26 }}
               transition={{ duration: 0.7, delay: 0.18 }}
-              className="w-full pl-8 pr-14 sm:pl-0 sm:pr-0"
+              className="w-full max-w-lg pl-8 pr-14 sm:max-w-xl sm:pl-0 sm:pr-0 lg:max-w-2xl"
             >
               {currentBanner.subtitle && (
                 <motion.span
@@ -373,7 +398,7 @@ const Banner = () => {
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 }}
-                  className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-white mb-2 sm:mb-3 leading-snug sm:leading-tight tracking-tight"
+                  className="text-xl sm:text-2xl lg:text-4xl xl:text-5xl font-bold text-white mb-2 sm:mb-3 leading-snug sm:leading-tight tracking-tight"
                 >
                   {currentBanner.title}
                 </motion.h1>
@@ -384,7 +409,7 @@ const Banner = () => {
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5 }}
-                  className="text-xs sm:text-sm md:text-base lg:text-lg text-white/80 mb-4 sm:mb-5 max-w-lg sm:max-w-xl leading-relaxed line-clamp-2 sm:line-clamp-3"
+                  className="text-xs sm:text-sm lg:text-lg text-white/80 mb-4 sm:mb-5 max-w-lg sm:max-w-xl leading-relaxed line-clamp-2 sm:line-clamp-3"
                 >
                   {currentBanner.description}
                 </motion.p>
@@ -436,12 +461,12 @@ const Banner = () => {
           <button
             onClick={handlePrev}
             disabled={isTransitioning}
-            className="absolute left-2 top-1/2 -translate-y-1/2 group z-10 sm:left-4 md:left-6"
+            className="absolute left-2 top-1/2 -translate-y-1/2 group z-10 sm:left-4 lg:left-6"
             aria-label="Previous"
           >
-            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center bg-black/20 backdrop-blur-md border border-white/10 rounded-full transition-all duration-300 group-hover:bg-white/10 group-hover:border-white/20 group-hover:scale-105">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/20 backdrop-blur-md transition-all duration-300 group-hover:scale-105 group-hover:border-white/20 group-hover:bg-white/10 sm:h-10 sm:w-10 lg:h-12 lg:w-12">
               <svg
-                className="w-4 h-4 sm:w-5 sm:h-5 text-white/80 group-hover:text-white transition-colors"
+                className="h-4 w-4 text-white/80 transition-colors group-hover:text-white sm:h-5 sm:w-5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -459,12 +484,12 @@ const Banner = () => {
           <button
             onClick={handleNext}
             disabled={isTransitioning}
-            className="absolute right-2 top-1/2 -translate-y-1/2 group z-10 sm:right-4 md:right-6"
+            className="absolute right-2 top-1/2 -translate-y-1/2 group z-10 sm:right-4 lg:right-6"
             aria-label="Next"
           >
-            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center bg-black/20 backdrop-blur-md border border-white/10 rounded-full transition-all duration-300 group-hover:bg-white/10 group-hover:border-white/20 group-hover:scale-105">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/20 backdrop-blur-md transition-all duration-300 group-hover:scale-105 group-hover:border-white/20 group-hover:bg-white/10 sm:h-10 sm:w-10 lg:h-12 lg:w-12">
               <svg
-                className="w-4 h-4 sm:w-5 sm:h-5 text-white/80 group-hover:text-white transition-colors"
+                className="h-4 w-4 text-white/80 transition-colors group-hover:text-white sm:h-5 sm:w-5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

@@ -111,6 +111,24 @@ const normalizeStringList = (value) => {
   return Array.from(uniqueValues);
 };
 
+const normalizeIdList = (value) => {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[\n,]+/)
+      : [];
+
+  const uniqueValues = new Set();
+  source.forEach((entry) => {
+    const normalized = String(entry || "").trim();
+    if (normalized) {
+      uniqueValues.add(normalized);
+    }
+  });
+
+  return Array.from(uniqueValues);
+};
+
 const MAX_ADDRESS_BOOK_ITEMS = 10;
 
 const normalizeAddressBookEntry = (value = {}) => {
@@ -501,16 +519,21 @@ const buildPublicSettingsPayload = (settings = {}, { isInitialSetup = false } = 
   const locations = settings?.locations || {};
   const storefront = settings?.storefront || {};
   const control = readMarketplaceControl(settings);
+  const publicStockCategoryIds = normalizeIdList(
+    settings?.publicStockCategoryIds || settings?.marketplace?.publicStockCategoryIds || [],
+  );
 
   return {
     isInitialSetup: Boolean(isInitialSetup),
     marketplaceMode: control.marketplaceMode,
     vendorRegistrationEnabled: control.vendorRegistrationEnabled,
     publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+    publicStockCategoryIds,
     marketplace: {
       marketplaceMode: control.marketplaceMode,
       vendorRegistrationEnabled: control.vendorRegistrationEnabled,
       publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+      publicStockCategoryIds,
     },
     website: {
       storeName: String(website.storeName || "E-Commerce").trim(),
@@ -1436,17 +1459,22 @@ exports.getSettings = async (req, res) => {
     const marketplace = isPlainObject(primarySettings?.marketplace)
       ? primarySettings.marketplace
       : {};
+    const publicStockCategoryIds = normalizeIdList(
+      primarySettings?.publicStockCategoryIds || marketplace?.publicStockCategoryIds || [],
+    );
 
     return res.json({
       ...primarySettings,
       marketplaceMode: control.marketplaceMode,
       vendorRegistrationEnabled: control.vendorRegistrationEnabled,
       publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+      publicStockCategoryIds,
       marketplace: {
         ...marketplace,
         marketplaceMode: control.marketplaceMode,
         vendorRegistrationEnabled: control.vendorRegistrationEnabled,
         publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+        publicStockCategoryIds,
       },
     });
   } catch (error) {
@@ -1527,6 +1555,15 @@ exports.updateSettings = async (req, res) => {
       requestedPublicStockSummaryInput === undefined
         ? currentControl.publicStockSummaryEnabled
         : Boolean(requestedPublicStockSummaryInput);
+    const requestedPublicStockCategoryIds = normalizeIdList(
+      incoming.publicStockCategoryIds !== undefined
+        ? incoming.publicStockCategoryIds
+        : incomingMarketplace.publicStockCategoryIds !== undefined
+          ? incomingMarketplace.publicStockCategoryIds
+          : currentSettings?.publicStockCategoryIds ||
+              currentSettings?.marketplace?.publicStockCategoryIds ||
+              [],
+    );
 
     const nextSettings = {
       ...currentSettings,
@@ -1542,6 +1579,7 @@ exports.updateSettings = async (req, res) => {
       storefront: normalizeStorefrontSettings({
         ...mergeSettingsSection(currentSettings, incoming, "storefront"),
       }),
+      publicStockCategoryIds: requestedPublicStockCategoryIds,
       marketplaceMode: requestedMode,
       vendorRegistrationEnabled: requestedVendorRegistration,
       publicStockSummaryEnabled: requestedPublicStockSummary,
@@ -1551,6 +1589,7 @@ exports.updateSettings = async (req, res) => {
         marketplaceMode: requestedMode,
         vendorRegistrationEnabled: requestedVendorRegistration,
         publicStockSummaryEnabled: requestedPublicStockSummary,
+        publicStockCategoryIds: requestedPublicStockCategoryIds,
       },
     };
 
@@ -1567,11 +1606,13 @@ exports.updateSettings = async (req, res) => {
         marketplaceMode: control.marketplaceMode,
         vendorRegistrationEnabled: control.vendorRegistrationEnabled,
         publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+        publicStockCategoryIds: requestedPublicStockCategoryIds,
         marketplace: {
           ...(isPlainObject(nextSettings.marketplace) ? nextSettings.marketplace : {}),
           marketplaceMode: control.marketplaceMode,
           vendorRegistrationEnabled: control.vendorRegistrationEnabled,
           publicStockSummaryEnabled: control.publicStockSummaryEnabled,
+          publicStockCategoryIds: requestedPublicStockCategoryIds,
         },
       },
     });

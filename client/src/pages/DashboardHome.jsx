@@ -430,7 +430,6 @@ const DashboardHome = ({ user, onTabChange }) => {
                   { label: "Customer Risk", tab: "customer-risk", icon: ShieldCheckIcon },
                   { label: "Abandoned Orders", tab: "module-abandoned", icon: TicketIcon },
                   { label: "Campaign Center", tab: "module-campaign-offers", icon: TicketIcon },
-                  { label: "Landing Pages", tab: "module-landing-pages", icon: ArrowRightIcon },
                   { label: "Business Reports", tab: "module-business-reports", icon: ArrowRightIcon },
                   { label: "Website Setup", tab: "module-website-setup", icon: ArrowRightIcon },
                   { label: "Super Admin", tab: "module-super-admin", icon: ShieldCheckIcon },

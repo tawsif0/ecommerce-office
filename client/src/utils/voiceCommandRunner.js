@@ -51,13 +51,14 @@ const KEYWORDS = {
   customerRisk: ["customer risk", "high risk", "risky", "ঝুঁকি", "রিস্ক"],
   wishlist: ["wishlist", "favorite", "favourite", "ইচ্ছা তালিকা", "পছন্দ"],
   logout: ["logout", "sign out", "log out", "লগআউট", "সাইন আউট"],
+  websiteSetup: ["website setup", "site settings", "tracking settings", "pixel setup", "analytics setup", "facebook pixel", "google analytics", "gtm"],
 };
 
 const DASHBOARD_HINTS = [
   "open dashboard",
   "go to product page",
   "open support tickets",
-  "open landing pages",
+  "open website setup",
   "open purchases",
   "open inventory center",
   "open suppliers",
@@ -262,8 +263,8 @@ export const executeVoiceCommand = ({
 
   if (hasAnyKeyword(text, KEYWORDS.dashboard)) return openTab("dashboard", "Opened dashboard");
   if (hasAnyKeyword(text, KEYWORDS.support)) return openTab("module-support", "Opened support tickets");
-  if (hasAnyKeyword(text, KEYWORDS.landingPages)) {
-    return openTab("module-landing-pages", "Opened landing pages");
+  if (hasAnyKeyword(text, KEYWORDS.websiteSetup)) {
+    return openTab("module-website-setup", "Opened website setup");
   }
   if (hasAnyKeyword(text, KEYWORDS.suppliers)) return openTab("module-suppliers", "Opened suppliers");
   if (hasAnyKeyword(text, KEYWORDS.purchases)) return openTab("module-purchases", "Opened purchases");

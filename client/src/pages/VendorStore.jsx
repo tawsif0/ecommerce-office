@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import {
@@ -14,31 +14,12 @@ import {
 } from "react-icons/fi";
 import { FaFacebookF, FaTwitter, FaWhatsapp, FaPaperPlane } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth";
-import { getProductPricingDisplay } from "../utils/productPricing";
-import {
-  getPublicStockBadgeText,
-  isPublicStockVisible,
-} from "../utils/publicProduct";
+import StorefrontProductCard from "../Home/components/StorefrontProductCard";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
 const fallbackBanner =
   "https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=1200&q=80";
-
-const getFullImageUrl = (imagePath) => {
-  if (!imagePath) return null;
-  if (
-    imagePath.startsWith("http://") ||
-    imagePath.startsWith("https://") ||
-    imagePath.startsWith("data:")
-  ) {
-    return imagePath;
-  }
-  if (imagePath.startsWith("/")) {
-    return `${baseUrl}${imagePath}`;
-  }
-  return `${baseUrl}/uploads/products/${imagePath}`;
-};
 
 const getFullVendorMediaUrl = (mediaPath) => {
   if (!mediaPath) return null;
@@ -67,10 +48,9 @@ const renderStars = (rating = 0) =>
     />
   ));
 
-const formatCurrency = (value) => `${Number(value || 0).toFixed(2)} Tk`;
-
 const VendorStore = () => {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -305,6 +285,11 @@ const VendorStore = () => {
     window.location.href = "/dashboard";
   };
 
+  const handleOpenProduct = (productId) => {
+    navigate(`/product/${productId}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4 py-12">
@@ -345,7 +330,7 @@ const VendorStore = () => {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.2)_0%,rgba(0,0,0,0.75)_100%)]" />
       </div>
 
-      <div className="relative z-10 mx-auto -mt-16 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="site-shell relative z-10 -mt-16">
         <div className="mb-6">
           <Link
             to="/shop"
@@ -509,7 +494,7 @@ const VendorStore = () => {
                 Browse the full vendor catalog
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Compact marketplace cards with pricing, colors, and direct product access.
+                The vendor shelf now uses the same storefront card style as shop, home, wishlist, and related products.
               </p>
             </div>
             <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">
@@ -522,86 +507,16 @@ const VendorStore = () => {
               <p className="text-sm text-gray-600">No products are available in this store yet.</p>
             </div>
           ) : (
-            <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-              {products.map((product) => {
-                const previewColors = Array.isArray(product.colors)
-                  ? product.colors.slice(0, 4)
-                  : [];
-                const hasMoreColors =
-                  Array.isArray(product.colors) && product.colors.length > 4;
-                const pricing = getProductPricingDisplay(product);
-
-                return (
-                  <Link
-                    key={product._id}
-                    to={`/product/${product._id}`}
-                    className="group flex h-[332px] flex-col overflow-hidden rounded-[24px] border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
-                  >
-                    <div className="relative aspect-square bg-gray-100">
-                      {product.images?.[0] ? (
-                        <img
-                          src={getFullImageUrl(product.images[0]?.data || product.images[0])}
-                          alt={product.title}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                        />
-                      ) : null}
-                      {isPublicStockVisible(product) ? (
-                        <span className="absolute left-3 top-3 rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white">
-                          {getPublicStockBadgeText(product)}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <div className="flex flex-1 flex-col p-3">
-                      <div>
-                        <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-gray-900">
-                          {product.title}
-                        </h3>
-                        {previewColors.length > 0 ? (
-                          <div className="mt-3 flex items-center gap-1.5">
-                            {previewColors.map((color, idx) => (
-                              <div
-                                key={idx}
-                                className="h-3.5 w-3.5 rounded-full border border-gray-300"
-                                style={{ backgroundColor: color }}
-                                title={color}
-                              />
-                            ))}
-                            {hasMoreColors ? (
-                              <span className="inline-flex h-[1.2rem] min-w-[1.2rem] items-center justify-center rounded-full bg-gradient-to-br from-black to-gray-700 px-1 text-[8px] font-bold text-white shadow-sm">
-                                4+
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-auto pt-4">
-                        {pricing.isTba ? (
-                          <p className="text-base font-bold text-black">TBA</p>
-                        ) : pricing.hasDiscount ? (
-                          <div className="flex items-end gap-2">
-                            <span className="text-xs font-medium text-gray-400 line-through">
-                              {formatCurrency(pricing.previousPrice)}
-                            </span>
-                            <span className="text-lg font-bold text-black">
-                              {formatCurrency(pricing.currentPrice)}
-                            </span>
-                          </div>
-                        ) : (
-                          <p className="text-lg font-bold text-black">
-                            {formatCurrency(pricing.currentPrice)}
-                          </p>
-                        )}
-
-                        <div className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white transition group-hover:bg-gray-900">
-                          View Product
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
+            <div className="storefront-card-grid mt-5">
+              {products.map((product) => (
+                <div key={product._id} className="storefront-card-grid__item">
+                  <StorefrontProductCard
+                    product={product}
+                    className="!w-full"
+                    onViewDetails={() => handleOpenProduct(product._id)}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </div>

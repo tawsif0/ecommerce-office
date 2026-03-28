@@ -48,5 +48,3 @@ export const getProductPricingDisplay = (product) => {
   };
 };
 
-export const shouldShowPublicStock = (product) =>
-  Boolean(product?.showStockToPublic);

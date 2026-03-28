@@ -5,7 +5,6 @@ import {
   FiAlertTriangle,
   FiBox,
   FiEdit3,
-  FiEye,
   FiPackage,
   FiRefreshCw,
   FiSearch,
@@ -100,7 +99,6 @@ const ModuleInventoryCenter = () => {
         acc.totalStock += stock;
         if (status.key === "low") acc.lowStock += 1;
         if (status.key === "out") acc.outOfStock += 1;
-        if (product?.showStockToPublic === true) acc.publicStock += 1;
         return acc;
       },
       {
@@ -108,7 +106,6 @@ const ModuleInventoryCenter = () => {
         totalStock: 0,
         lowStock: 0,
         outOfStock: 0,
-        publicStock: 0,
       },
     );
   }, [products]);
@@ -120,7 +117,6 @@ const ModuleInventoryCenter = () => {
         const status = getStockStatus(product);
         if (filter === "low" && status.key !== "low") return false;
         if (filter === "out" && status.key !== "out") return false;
-        if (filter === "public" && product?.showStockToPublic !== true) return false;
         if (!query) return true;
 
         const haystack = [
@@ -184,7 +180,6 @@ const ModuleInventoryCenter = () => {
               { label: "Products", value: summary.totalProducts, icon: FiBox },
               { label: "Stock Units", value: summary.totalStock, icon: FiPackage },
               { label: "Low Stock", value: summary.lowStock, icon: FiAlertTriangle },
-              { label: "Public Stock", value: summary.publicStock, icon: FiEye },
             ].map((item) => {
               const Icon = item.icon;
               return (
@@ -223,7 +218,6 @@ const ModuleInventoryCenter = () => {
               ["all", "All Stock"],
               ["low", "Low Stock"],
               ["out", "Out of Stock"],
-              ["public", "Public Stock"],
             ].map(([key, label]) => (
               <button
                 key={key}
@@ -320,7 +314,6 @@ const ModuleInventoryCenter = () => {
                       {status.label}
                     </span>
                     <div className="text-xs text-gray-500">
-                      <p>Public stock: {product?.showStockToPublic ? "Visible" : "Hidden"}</p>
                       <p>Backorder: {product?.allowBackorder ? "Allowed" : "Off"}</p>
                       <p>Price type: {String(product?.priceType || "single")}</p>
                     </div>

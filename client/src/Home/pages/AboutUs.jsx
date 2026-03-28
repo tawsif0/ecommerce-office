@@ -443,100 +443,65 @@ const AboutUs = () => {
     },
   ];
 
-  const commerceStats = [
-    { label: "Marketplace ready", value: "Multi-flow" },
-    { label: "Checkout support", value: "Guest + User" },
-    { label: "Bangladesh focus", value: "Local ops" },
-  ];
-
   return (
-    <section className="min-h-screen bg-[radial-gradient(circle_at_top,#ffffff_0%,#f6f8fb_42%,#edf2f7_100%)] py-14 md:py-18">
-      <div className="site-shell space-y-8">
-        <div className="site-card overflow-hidden p-6 md:p-8">
-          <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+    <section className="min-h-screen bg-white">
+      <div className="site-container py-16 md:py-20">
+        <div className="mb-20 grid grid-cols-1 gap-12 lg:grid-cols-2">
+          <div>
+            <h2 className="mb-6 text-3xl font-bold text-black md:text-4xl">
+              Our Story
+            </h2>
             <div className="space-y-6">
-              <div>
-                <p className="site-kicker">About the marketplace</p>
-                <h1 className="site-title mt-3">
-                  {storeName} is built to feel like a modern ecommerce operation, not a basic catalog.
-                </h1>
-                <p className="site-copy mt-4 max-w-3xl text-base">
-                  {tagline ||
-                    `${storeName} combines marketplace discovery, reliable checkout, seller-ready operations, and Bangladesh-focused commerce flows in one connected system.`}
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                {commerceStats.map((item) => (
-                  <div key={item.label} className="site-metric text-left">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                      {item.label}
-                    </p>
-                    <p className="mt-2 text-lg font-black text-black">{item.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="site-card-muted p-5">
-                  <p className="site-kicker">Our story</p>
-                  <p className="site-copy mt-3 text-sm">
-                    We designed this platform around the gap between ordinary online shops and real operational ecommerce. The focus is not only selling products, but also managing inventory, offers, vendors, support, and storefront control from one clean system.
-                  </p>
-                </div>
-                <div className="site-card-muted p-5">
-                  <p className="site-kicker">Our promise</p>
-                  <p className="site-copy mt-3 text-sm">
-                    Buyers get a cleaner shopping experience, sellers get structured tools, and operators get one control layer for stock, pricing, content, coupons, orders, and branded storefront updates.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="site-card-dark overflow-hidden p-4 md:p-5">
-              <p className="site-kicker !text-white/58">Delivery and operations</p>
-              <h2 className="mt-3 text-2xl font-black text-white md:text-3xl">
-                Built for fast fulfilment and marketplace-scale movement
-              </h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/72">
-                The storefront, checkout, order flow, and operations dashboard are aligned so promotions, stock, and customer orders stay visible across the system.
+              <p className="text-lg leading-relaxed text-gray-700">
+                {tagline ||
+                  `${storeName} was shaped to close the gap between a basic online catalog and a serious ecommerce operation with stronger discovery, cleaner checkout, and tighter inventory-aware storefront control.`}
               </p>
-              <div className="mt-5">
-                <DeliveryScene />
-              </div>
+              <p className="text-lg leading-relaxed text-gray-700">
+                The platform now brings products, banners, categories, support,
+                compare flows, wishlist behavior, and branded landing content
+                into one office ecommerce system that feels much closer to a
+                full marketplace experience.
+              </p>
+              <p className="text-lg leading-relaxed text-gray-700">
+                Our mission is simple: give shoppers a more polished buying
+                journey while giving operators a stronger control layer for
+                stock, pricing, orders, and storefront presentation.
+              </p>
             </div>
           </div>
+
+          <DeliveryScene />
         </div>
 
-        <div className="site-card p-6 md:p-8">
+        <div className="mb-10">
           <div className="mb-12 text-center">
-            <p className="site-kicker justify-center">Customer confidence</p>
-            <h2 className="mt-3 text-3xl font-black text-black md:text-4xl">
+            <h2 className="mb-4 text-3xl font-bold text-black md:text-4xl">
               Shop With Confidence
             </h2>
-            <p className="site-copy mx-auto mt-3 max-w-2xl text-base">
-              Every major buyer touchpoint is designed to feel structured, trustworthy, and easy to navigate.
+            <p className="mx-auto max-w-2xl text-lg text-gray-600">
+              We&apos;ve built the storefront around trust, clarity, and
+              smoother customer decisions.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
             {features.map((feature, index) => (
               <div
                 key={index}
-                className="site-card-soft group p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+                className="group rounded-xl border border-gray-200 bg-white p-6 transition-all duration-300 hover:border-black hover:shadow-xl"
               >
                 <div
-                  className={`w-12 h-12 rounded-lg bg-linear-to-br ${feature.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}
+                  className={`mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-linear-to-br ${feature.color} transition-transform duration-300 group-hover:scale-110`}
                 >
                   <div className="text-white">{feature.icon}</div>
                 </div>
-                <div className="text-2xl font-bold text-black mb-2">
+                <div className="mb-2 text-2xl font-bold text-black">
                   {feature.stat}
                 </div>
-                <h3 className="text-lg font-bold text-black mb-2">
+                <h3 className="mb-2 text-lg font-bold text-black">
                   {feature.title}
                 </h3>
-                <p className="text-gray-600 text-sm">{feature.description}</p>
+                <p className="text-sm text-gray-600">{feature.description}</p>
               </div>
             ))}
           </div>

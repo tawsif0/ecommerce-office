@@ -29,25 +29,62 @@ const landingPageRoutes = require("./routes/landingPageRoutes");
 const abandonedOrderRoutes = require("./routes/abandonedOrderRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const brandRoutes = require("./routes/brandRoutes");
+const contactRoutes = require("./routes/contactRoutes");
 const path = require("path");
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
 app.disable("x-powered-by");
 
-// Configure CORS properly
-const allowedOrigins = [
-  process.env.FRONTEND_URL, // Primary frontend URL
-  "http://localhost:5173", // Local development
-];
+const LOCAL_DEV_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+const normalizeOrigin = (value) => String(value || "").trim().replace(/\/+$/, "");
+
+const isAllowedLocalDevOrigin = (origin) => {
+  if (!origin || isProduction) return false;
+
+  try {
+    const parsed = new URL(origin);
+    return LOCAL_DEV_HOSTS.has(parsed.hostname);
+  } catch (_error) {
+    return false;
+  }
+};
+
+const allowedOrigins = new Set(
+  [
+    process.env.FRONTEND_URL,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+  ]
+    .map(normalizeOrigin)
+    .filter(Boolean),
+);
+
+const resolveCorsOrigin = (origin) => {
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  if (!normalizedOrigin) {
+    return null;
+  }
+
+  if (allowedOrigins.has(normalizedOrigin) || isAllowedLocalDevOrigin(normalizedOrigin)) {
+    return normalizedOrigin;
+  }
+
+  return null;
+};
 
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, curl, postman)
     if (!origin) return callback(null, true);
 
-    // Check if the origin is in the allowed list
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    const resolvedOrigin = resolveCorsOrigin(origin);
+
+    if (resolvedOrigin) {
       callback(null, true);
     } else {
       console.log(`CORS blocked for origin: ${origin}`);
@@ -83,11 +120,12 @@ app.use(
     maxAge: isProduction ? "7d" : 0,
   }),
   (req, res, next) => {
-    res.setHeader(
-      "Access-Control-Allow-Origin",
-      process.env.FRONTEND_URL || "http://localhost:5173",
-    );
-    res.setHeader("Access-Control-Allow-Credentials", "true");
+    const requestOrigin = resolveCorsOrigin(req.headers.origin);
+    if (requestOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Vary", "Origin");
+    }
     next();
   },
 );
@@ -99,11 +137,12 @@ app.use(
     maxAge: isProduction ? "7d" : 0,
   }),
   (req, res, next) => {
-    res.setHeader(
-      "Access-Control-Allow-Origin",
-      process.env.FRONTEND_URL || "http://localhost:5173",
-    );
-    res.setHeader("Access-Control-Allow-Credentials", "true");
+    const requestOrigin = resolveCorsOrigin(req.headers.origin);
+    if (requestOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Vary", "Origin");
+    }
     next();
   },
 );
@@ -115,11 +154,12 @@ app.use(
     maxAge: isProduction ? "7d" : 0,
   }),
   (req, res, next) => {
-    res.setHeader(
-      "Access-Control-Allow-Origin",
-      process.env.FRONTEND_URL || "http://localhost:5173",
-    );
-    res.setHeader("Access-Control-Allow-Credentials", "true");
+    const requestOrigin = resolveCorsOrigin(req.headers.origin);
+    if (requestOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Vary", "Origin");
+    }
     next();
   },
 );
@@ -150,6 +190,7 @@ app.use("/api/landing-pages", landingPageRoutes);
 app.use("/api/abandoned-orders", abandonedOrderRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/brands", brandRoutes);
+app.use("/api/contact-submissions", contactRoutes);
 // Error handling middleware
 app.use(errorHandler);
 

@@ -78,11 +78,6 @@ const MODULE_CHILDREN = [
     tab: "module-campaign-offers",
   },
   {
-    name: "Ecommerce Landing",
-    icon: FiGlobe,
-    tab: "module-landing-pages",
-  },
-  {
     name: "Ads",
     icon: FiGlobe,
     tab: "module-ads",
@@ -301,11 +296,6 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
         title: "Growth & Marketing",
         items: [
           {
-            name: "Ecommerce Landing",
-            icon: FiGlobe,
-            tab: "module-landing-pages",
-          },
-          {
             name: "Campaign Center",
             icon: FiTag,
             tab: "module-campaign-offers",
@@ -394,6 +384,11 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
             name: "Website Setup",
             icon: FiSettings,
             tab: "module-website-setup",
+          },
+          {
+            name: "Contacted Users",
+            icon: FiMail,
+            tab: "contacted-list",
           },
         ],
       },
@@ -499,11 +494,6 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
         title: "Growth & Marketing",
         items: [
           {
-            name: "Ecommerce Landing",
-            icon: FiGlobe,
-            tab: "module-landing-pages",
-          },
-          {
             name: "Campaign Center",
             icon: FiTag,
             tab: "module-campaign-offers",
@@ -593,11 +583,6 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
             name: "Campaign Center",
             icon: FiTag,
             tab: "module-campaign-offers",
-          },
-          {
-            name: "Ecommerce Landing",
-            icon: FiGlobe,
-            tab: "module-landing-pages",
           },
           {
             name: "Sales Report",

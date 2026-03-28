@@ -8,6 +8,7 @@ import {
   FiFilter,
   FiX,
   FiEye,
+  FiHeart,
   FiGrid,
   FiList,
   FiShuffle,
@@ -19,11 +20,16 @@ import { motion } from "framer-motion";
 import usePublicSettings from "../../hooks/usePublicSettings";
 import { getDefaultPublicSettings } from "../../utils/publicSettings";
 import {
+  selectWishlistPendingIds,
+  toggleWishlistItem,
+} from "../../store/wishlistSlice";
+import {
   getPublicStockBadgeText,
   isPublicStockVisible,
 } from "../../utils/publicProduct";
 import { toggleCompareItem } from "../../store/compareSlice";
 import { createProductSnapshot } from "../../utils/productSnapshot";
+import StorefrontProductCard from "../components/StorefrontProductCard";
 const INITIAL_DISPLAY_LIMIT = 20;
 
 const DEFAULT_STOREFRONT = getDefaultPublicSettings().storefront;
@@ -46,12 +52,15 @@ const ProductGrid = () => {
   const location = useLocation();
   const dispatch = useDispatch();
   const compareItems = useSelector((state) => state.compare.items || []);
+  const wishlistItems = useSelector((state) => state.wishlist.items || []);
+  const wishlistPendingIds = useSelector(selectWishlistPendingIds);
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedCategoryType, setSelectedCategoryType] = useState("all");
+  const [selectedBrand, setSelectedBrand] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [collectionType, setCollectionType] = useState("all");
@@ -192,11 +201,24 @@ const ProductGrid = () => {
     [compareItems],
   );
 
+  const isProductWishlisted = React.useCallback(
+    (productId) =>
+      wishlistItems.some((item) => String(item?._id || "") === String(productId || "")),
+    [wishlistItems],
+  );
+
   const handleToggleCompare = React.useCallback(
     (product) => {
       const snapshot = createProductSnapshot(product);
       if (!snapshot) return;
       dispatch(toggleCompareItem(snapshot));
+    },
+    [dispatch],
+  );
+
+  const handleToggleWishlist = React.useCallback(
+    async (product) => {
+      await dispatch(toggleWishlistItem(product));
     },
     [dispatch],
   );
@@ -216,6 +238,7 @@ const ProductGrid = () => {
     const params = new URLSearchParams(location.search);
     const categoryParam = params.get("category");
     const typeParam = params.get("type");
+    const brandParam = params.get("brand");
     const searchParam = params.get("search");
     const collectionParam = String(params.get("collection") || "all").trim().toLowerCase();
     const sortParam = String(params.get("sort") || "").trim().toLowerCase();
@@ -230,6 +253,12 @@ const ProductGrid = () => {
       setSelectedCategoryType(typeParam);
     } else {
       setSelectedCategoryType("all");
+    }
+
+    if (brandParam) {
+      setSelectedBrand(String(brandParam).trim());
+    } else {
+      setSelectedBrand("");
     }
 
     if (searchParam) {
@@ -266,6 +295,8 @@ const ProductGrid = () => {
     products,
     selectedCategory,
     selectedCategoryType,
+    selectedBrand,
+    searchTerm,
     collectionType,
     categories,
     sortBy,
@@ -277,7 +308,15 @@ const ProductGrid = () => {
     if (!allProductsVisible) {
       setDisplayLimit(INITIAL_DISPLAY_LIMIT);
     }
-  }, [selectedCategory, selectedCategoryType, collectionType, priceRange, sortBy]);
+  }, [
+    selectedCategory,
+    selectedCategoryType,
+    selectedBrand,
+    searchTerm,
+    collectionType,
+    priceRange,
+    sortBy,
+  ]);
   const fetchProducts = async () => {
     try {
       setLoading(true);
@@ -370,6 +409,13 @@ const ProductGrid = () => {
 
         return category && category.type === selectedCategoryType;
       });
+    }
+
+    const normalizedBrand = String(selectedBrand || "").trim().toLowerCase();
+    if (normalizedBrand) {
+      filtered = filtered.filter(
+        (product) => String(product?.brand || "").trim().toLowerCase() === normalizedBrand,
+      );
     }
 
     // Filter by search term
@@ -527,6 +573,7 @@ const ProductGrid = () => {
   const resetFilters = () => {
     setSelectedCategory("all");
     setSelectedCategoryType("all");
+    setSelectedBrand("");
     setCategoryName("");
     setSearchTerm("");
     setSortBy("featured");
@@ -620,11 +667,11 @@ const ProductGrid = () => {
 
           {/* Products Grid Skeleton */}
           <div className="lg:col-span-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
+            <div className="storefront-card-grid">
               {[...Array(6)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-gray-100 animate-pulse rounded-2xl h-64 sm:h-72 md:h-80"
+                  className="storefront-card-grid__item bg-gray-100 animate-pulse rounded-2xl h-64 sm:h-72 md:h-80"
                 ></div>
               ))}
             </div>
@@ -684,6 +731,8 @@ const ProductGrid = () => {
                 <h3 className="text-lg font-bold text-black">Filters</h3>
                 {(selectedCategory !== "all" ||
                   selectedCategoryType !== "all" ||
+                  selectedBrand ||
+                  searchTerm ||
                   sortBy !== "featured" ||
                   priceRange[1] <
                     Math.max(
@@ -859,7 +908,8 @@ const ProductGrid = () => {
                 >
                   <FiFilter /> Filters
                   {(selectedCategory !== "all" ||
-                    selectedCategoryType !== "all") && (
+                    selectedCategoryType !== "all" ||
+                    selectedBrand) && (
                     <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs text-black">
                       !
                     </span>
@@ -918,6 +968,8 @@ const ProductGrid = () => {
                 <h2 className="text-xl xs:text-2xl font-black tracking-tight text-gray-950">
                   {collectionLabel
                     ? collectionLabel
+                    : selectedBrand
+                      ? `${selectedBrand} Products`
                     : selectedCategory !== "all" && categoryName
                       ? `${categoryName} Products`
                       : "All Products"}
@@ -929,6 +981,12 @@ const ProductGrid = () => {
                   <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                     Search:
                     <span className="ml-1 text-amber-900">{searchTerm}</span>
+                  </span>
+                ) : null}
+                {selectedBrand ? (
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                    Brand:
+                    <span className="ml-1 text-slate-950">{selectedBrand}</span>
                   </span>
                 ) : null}
               </div>
@@ -978,7 +1036,11 @@ const ProductGrid = () => {
                   No Products Found
                 </h3>
                 <p className="text-gray-600 mb-6 text-sm sm:text-base">
-                  {selectedCategory !== "all" || selectedCategoryType !== "all"
+                  {selectedCategory !== "all" ||
+                  selectedCategoryType !== "all" ||
+                  selectedBrand ||
+                  searchTerm ||
+                  collectionType !== "all"
                     ? "No products found with the current filters"
                     : "Try adjusting your filters or check back later for new arrivals"}
                 </p>
@@ -992,158 +1054,21 @@ const ProductGrid = () => {
             ) : viewMode === "grid" ? (
               /* Grid View */
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
-                  {filteredProducts.slice(0, displayLimit).map((product) => {
-                    const pricing = getProductPricing(product);
-                    const previewColors = Array.isArray(product.colors)
-                      ? product.colors.slice(0, 4)
-                      : [];
-                    const hasMoreColors =
-                      Array.isArray(product.colors) && product.colors.length > 4;
-                    const compared = isProductCompared(product._id);
-                    const discountPercent =
-                      pricing.hasDiscount &&
-                      Number.isFinite(pricing.previousPrice) &&
-                      Number(pricing.previousPrice || 0) > 0
-                        ? Math.round(
-                            ((Number(pricing.previousPrice || 0) -
-                              Number(pricing.currentPrice || 0)) /
-                              Number(pricing.previousPrice || 0)) *
-                              100,
-                          )
-                        : null;
-                    const stockBadgeText = getPublicStockBadgeText(product);
-                    const showStockBadge =
-                      Boolean(stockBadgeText) && isPublicStockVisible(product);
-
-                    return (
-                      <div
-                        key={product._id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
+                <div className="storefront-card-grid">
+                  {filteredProducts.slice(0, displayLimit).map((product) => (
+                    <div key={product._id} className="storefront-card-grid__item">
+                      <StorefrontProductCard
+                        product={product}
+                        title={highlightText(product.title, searchTerm)}
+                        metaLine={getProductCardMetaLine(product)}
+                        className="!w-full"
+                        onViewDetails={() => {
                           navigate(`/product/${product._id}`);
                           if (typeof window !== "undefined") window.scrollTo(0, 0);
                         }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            navigate(`/product/${product._id}`);
-                            if (typeof window !== "undefined") window.scrollTo(0, 0);
-                          }
-                        }}
-                        className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-gray-300 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-black/40"
-                      >
-                        {/* Product Image */}
-                        <div className="relative aspect-square overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2 sm:p-2.5">
-                          {discountPercent && discountPercent > 0 ? (
-                            <span className="absolute left-3 top-3 inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-bold text-white shadow-sm">
-                              -{discountPercent}%
-                            </span>
-                          ) : null}
-
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleToggleCompare(product);
-                            }}
-                            className={`absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border bg-white/90 shadow-sm transition ${
-                              compared
-                                ? "border-black bg-black text-white"
-                                : "border-gray-200 text-gray-700 hover:border-black hover:text-black"
-                            }`}
-                            aria-label={compared ? "Remove from compare" : "Add to compare"}
-                            title={compared ? "Remove from compare" : "Add to compare"}
-                          >
-                            <FiShuffle className="h-4 w-4" />
-                          </button>
-
-                          <div className="relative h-full w-full">
-                            <ProductImage
-                              src={product.images?.[0]}
-                              alt={product.title}
-                              className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Product Info */}
-                        <div className="px-3 py-2.5 text-left sm:px-4 sm:py-3">
-                          <h3 className="line-clamp-2 text-[13px] font-semibold text-black sm:text-sm leading-snug">
-                            {highlightText(product.title, searchTerm)}
-                          </h3>
-
-                          {previewColors.length > 0 ? (
-                            <div className="mt-2 flex items-center justify-start gap-1">
-                              {previewColors.map((color, idx) => (
-                                <div
-                                  key={idx}
-                                  className="h-3 w-3 rounded-full border border-gray-600 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] sm:h-3.5 sm:w-3.5"
-                                  style={{ backgroundColor: color }}
-                                  title={color}
-                                />
-                              ))}
-                              {hasMoreColors ? (
-                                <span className="inline-flex items-center justify-center min-w-[1.05rem] h-[1.05rem] sm:min-w-[1.2rem] sm:h-[1.2rem] rounded-full bg-linear-to-br from-black to-gray-700 text-white text-[8px] sm:text-[9px] font-bold shadow-sm">
-                                  4+
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-
-                          {showStockBadge || pricing.isTba ? (
-                            <div className="mt-2 flex flex-wrap items-center justify-start gap-1.5">
-                              {showStockBadge ? (
-                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                  {stockBadgeText}
-                                </span>
-                              ) : null}
-                              {pricing.isTba ? (
-                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                  TBA
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-
-                          <div className="mt-2 flex items-baseline justify-start gap-2">
-                            {pricing.isTba ? (
-                              <span className="text-base font-black text-gray-950 sm:text-lg">
-                                TBA
-                              </span>
-                            ) : (
-                              <>
-                                {pricing.hasDiscount ? (
-                                  <span className="text-xs text-gray-400 line-through sm:text-sm">
-                                    {Number(pricing.previousPrice || 0).toFixed(2)} Tk
-                                  </span>
-                                ) : null}
-                                <span className="text-base font-black text-gray-950 sm:text-lg">
-                                  {Number(pricing.currentPrice || 0).toFixed(2)}
-                                </span>
-                                <span className="text-xs font-semibold text-gray-600 sm:text-sm">
-                                  Tk
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            navigate(`/product/${product._id}`);
-                            if (typeof window !== "undefined") window.scrollTo(0, 0);
-                          }}
-                          className="mt-auto w-full rounded-none bg-gray-900 py-2 text-xs font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 sm:py-2.5 sm:text-sm"
-                        >
-                          View Details
-                        </button>
-                      </div>
-                    );
-                  })}
+                      />
+                    </div>
+                  ))}
                 </div>
                 {filteredProducts.length > INITIAL_DISPLAY_LIMIT && (
                   <div className="text-center mt-8">
@@ -1283,9 +1208,9 @@ const ProductGrid = () => {
                                             {product.marketplaceType}
                                           </span>
                                         )}
-                                        {isPublicStockVisible(product) && (
+                                        {isPublicStockVisible(product, settings) && (
                                           <span className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">
-                                            {getPublicStockBadgeText(product)}
+                                            {getPublicStockBadgeText(product, null, settings)}
                                           </span>
                                         )}
 
@@ -1383,6 +1308,25 @@ const ProductGrid = () => {
                                           }`}
                                         >
                                           <FiShuffle className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            await handleToggleWishlist(product);
+                                          }}
+                                          disabled={wishlistPendingIds.includes(String(product._id || ""))}
+                                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors disabled:opacity-60 ${
+                                            isProductWishlisted(product._id)
+                                              ? "border-red-200 bg-red-50 text-red-600"
+                                              : "border-gray-300 text-gray-600 hover:border-black hover:text-black"
+                                          }`}
+                                        >
+                                          <FiHeart
+                                            className={`h-4 w-4 ${
+                                              isProductWishlisted(product._id) ? "fill-current" : ""
+                                            }`}
+                                          />
                                         </button>
                                         <button
                                           onClick={(e) => {

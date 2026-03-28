@@ -25,8 +25,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../hooks/useAuth";
+import usePublicSettings from "../../hooks/usePublicSettings";
 import { toggleCompareItem } from "../../store/compareSlice";
 import { addRecentlyViewedItem } from "../../store/recentlyViewedSlice";
+import {
+  selectWishlistPendingIds,
+  toggleWishlistItem,
+} from "../../store/wishlistSlice";
 import {
   buildDataLayerItem,
   getDataLayerCurrency,
@@ -37,6 +42,7 @@ import {
   getPublicStockBadgeText,
   isPublicStockVisible,
 } from "../../utils/publicProduct";
+import StorefrontProductCard from "../components/StorefrontProductCard";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -152,8 +158,6 @@ const ProductDetails = () => {
   const [product, setProduct] = useState(null);
   const [productLoading, setProductLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isWishlisted, setIsWishlisted] = useState(false);
-  const [wishlistLoading, setWishlistLoading] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [reviews, setReviews] = useState([]);
@@ -179,8 +183,11 @@ const ProductDetails = () => {
   });
   const { addToCart, isLoading: cartLoading } = useCart();
   const { user } = useAuth();
+  const { settings } = usePublicSettings();
   const dispatch = useDispatch();
   const compareItems = useSelector((state) => state.compare.items || []);
+  const wishlistItems = useSelector((state) => state.wishlist.items || []);
+  const wishlistPendingIds = useSelector(selectWishlistPendingIds);
   const navigate = useNavigate();
   const productTopRef = useRef(null);
   const verticalThumbsRef = useRef(null);
@@ -194,6 +201,10 @@ const ProductDetails = () => {
   const isCompared = compareItems.some(
     (item) => String(item?._id || "") === String(product?._id || ""),
   );
+  const isWishlisted = wishlistItems.some(
+    (item) => String(item?._id || "") === String(product?._id || ""),
+  );
+  const wishlistLoading = wishlistPendingIds.includes(String(product?._id || ""));
   const liveViewingCount = (() => {
     const seed = String(product?._id || id || "");
     let hash = 0;
@@ -533,26 +544,6 @@ const ProductDetails = () => {
   }, [product?._id, product?.category, product?.productType]);
 
   useEffect(() => {
-    if (!id || !isLoggedIn) {
-      setIsWishlisted(false);
-      return;
-    }
-
-    const checkWishlist = async () => {
-      try {
-        const response = await axios.get(`${baseUrl}/wishlist/check/${id}`, {
-          headers: getAuthHeaders(),
-        });
-        setIsWishlisted(Boolean(response.data?.isWishlisted));
-      } catch (_error) {
-        setIsWishlisted(false);
-      }
-    };
-
-    checkWishlist();
-  }, [id, isLoggedIn]);
-
-  useEffect(() => {
     if (!product?._id) return;
 
     const resolvedPrice =
@@ -592,7 +583,7 @@ const ProductDetails = () => {
   const priceType = String(product?.priceType || "single");
   const isTbaPrice = priceType === "tba";
   const isRecurringProduct = Boolean(product?.isRecurring);
-  const showPublicStock = isPublicStockVisible(product);
+  const showPublicStock = isPublicStockVisible(product, settings);
   const selectedVariation =
     marketplaceType === "variable"
       ? (product?.variations || []).find(
@@ -768,35 +759,13 @@ const ProductDetails = () => {
   };
 
   const handleToggleWishlist = async () => {
-    if (!isLoggedIn) {
-      toast.error("Please login to use wishlist");
-      navigate("/login");
-      return;
-    }
-
-    if (!id) return;
+    if (!product?._id) return;
 
     try {
-      setWishlistLoading(true);
-      if (isWishlisted) {
-        await axios.delete(`${baseUrl}/wishlist/${id}`, {
-          headers: getAuthHeaders(),
-        });
-        setIsWishlisted(false);
-        toast.success("Removed from wishlist");
-      } else {
-        await axios.post(
-          `${baseUrl}/wishlist`,
-          { productId: id },
-          { headers: getAuthHeaders() },
-        );
-        setIsWishlisted(true);
-        toast.success("Added to wishlist");
-      }
+      await dispatch(toggleWishlistItem(product)).unwrap();
+      toast.success(isWishlisted ? "Removed from wishlist" : "Added to wishlist");
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update wishlist");
-    } finally {
-      setWishlistLoading(false);
+      toast.error(error || "Failed to update wishlist");
     }
   };
 
@@ -966,27 +935,18 @@ const ProductDetails = () => {
     };
   };
 
-  const handleRelatedWishlist = async (event, relatedProductId) => {
-    event.stopPropagation();
+  const handleRelatedWishlist = async (entry) => {
+    if (!entry?._id) return;
 
-    if (!isLoggedIn) {
-      toast.error("Please login to use wishlist");
-      navigate("/login");
-      return;
-    }
-
-    const productId = String(relatedProductId || "").trim();
-    if (!productId) return;
+    const alreadyWishlisted = wishlistItems.some(
+      (item) => String(item?._id || "") === String(entry._id || ""),
+    );
 
     try {
-      await axios.post(
-        `${baseUrl}/wishlist`,
-        { productId },
-        { headers: getAuthHeaders() },
-      );
-      toast.success("Added to wishlist");
+      await dispatch(toggleWishlistItem(entry)).unwrap();
+      toast.success(alreadyWishlisted ? "Removed from wishlist" : "Added to wishlist");
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update wishlist");
+      toast.error(error || "Failed to update wishlist");
     }
   };
 
@@ -1252,7 +1212,9 @@ const ProductDetails = () => {
   const quantityStatusText = product?.allowBackorder
     ? "Backorders allowed"
     : currentStock > 0
-      ? `${currentStock} available`
+      ? showPublicStock
+        ? `${currentStock} available`
+        : "In stock"
       : "Out of stock";
   const additionalInfoRows = (() => {
 	    const rows = [];
@@ -2521,142 +2483,18 @@ const ProductDetails = () => {
                         </div>
                       </div>
                     ))
-                  : relatedProducts.map((entry) => {
-                      const primaryImage = entry?.images?.[0];
-                      const pricing = getRelatedProductPricing(entry);
-                      const discountPercent =
-                        pricing.hasDiscount &&
-                        Number.isFinite(pricing.previousValue) &&
-                        Number.isFinite(pricing.currentValue) &&
-                        Number(pricing.previousValue || 0) > 0
-                          ? Math.round(
-                              ((Number(pricing.previousValue) - Number(pricing.currentValue)) /
-                                Number(pricing.previousValue)) *
-                                100,
-                            )
-                          : null;
-                      const rawColorLabel = Array.isArray(entry?.colors)
-                        ? entry.colors[0]
-                        : "";
-                      const colorLabelText = (() => {
-                        const raw = String(rawColorLabel || "").trim();
-                        if (!raw) return "";
-                        if (/^#([0-9a-f]{3}){1,2}$/i.test(raw)) return "";
-                        if (/^rgb\(/i.test(raw) || /^hsl\(/i.test(raw)) return "";
-                        return raw.length > 22 ? `${raw.slice(0, 22)}...` : raw;
-                      })();
-                      const relatedCategoryName =
-                        typeof entry?.category === "object"
-                          ? String(entry?.category?.name || "").trim()
-                          : String(entry?.category || "").trim();
-                      const relatedStockText = isPublicStockVisible(entry)
-                        ? getPublicStockBadgeText(entry)
-                        : "";
-                      const previewColors = Array.isArray(entry?.colors)
-                        ? entry.colors.slice(0, 4)
-                        : [];
-                      const hasMoreColors =
-                        Array.isArray(entry?.colors) && entry.colors.length > 4;
-
-                      return (
-                        <div
-                          key={entry._id}
-                          className="snap-start shrink-0 w-[48%] sm:w-[31%] md:w-[23%] lg:w-[18.5%] xl:w-[15.5%]"
-                        >
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => handleNavigateToProduct(entry._id)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                handleNavigateToProduct(entry._id);
-                              }
-                            }}
-                            className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-gray-300 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-black/40"
-                          >
-                            <div className="relative aspect-square overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2 sm:p-2.5">
-                              {discountPercent && discountPercent > 0 ? (
-                                <span className="absolute left-3 top-3 inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-bold text-white shadow-sm">
-                                  -{discountPercent}%
-                                </span>
-                              ) : null}
-
-                              {colorLabelText ? (
-                                <span className="absolute bottom-3 right-3 text-xs font-semibold text-gray-700">
-                                  {colorLabelText}
-                                </span>
-                              ) : null}
-
-                              <div className="relative h-full w-full">
-                                <ProductImage
-                                  src={primaryImage}
-                                  alt={entry.title}
-                                  className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="px-3 py-2.5 text-left sm:px-4 sm:py-3">
-                              {relatedCategoryName ? (
-                                <p className="line-clamp-1 text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500">
-                                  {relatedCategoryName}
-                                </p>
-                              ) : null}
-                              <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-black sm:text-sm">
-                                {entry.title}
-                              </h3>
-                              {previewColors.length > 0 ? (
-                                <div className="mt-2 flex items-center justify-start gap-1">
-                                  {previewColors.map((color, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="h-3 w-3 rounded-full border border-gray-600 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] sm:h-3.5 sm:w-3.5"
-                                      style={{ backgroundColor: color }}
-                                      title={color}
-                                    />
-                                  ))}
-                                  {hasMoreColors ? (
-                                    <span className="inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-linear-to-br from-black to-gray-700 text-[8px] font-bold text-white shadow-sm sm:h-[1.2rem] sm:min-w-[1.2rem] sm:text-[9px]">
-                                      4+
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                              {relatedStockText ? (
-                                <div className="mt-2 flex flex-wrap items-center justify-start gap-1.5">
-                                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                    {relatedStockText}
-                                  </span>
-                                </div>
-                              ) : null}
-                              <div className="mt-2 flex items-baseline justify-start gap-2">
-                                {pricing.previousText ? (
-                                  <span className="text-xs text-gray-400 line-through sm:text-sm">
-                                    {pricing.previousText}
-                                  </span>
-                                ) : null}
-                                <span className="text-sm font-black text-black sm:text-base">
-                                  {pricing.currentText}
-                                </span>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              data-no-scroll-top
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleNavigateToProduct(entry._id);
-                              }}
-                              className="mt-auto w-full rounded-none bg-gray-900 py-2 text-xs font-semibold text-white transition hover:bg-black sm:py-2.5 sm:text-sm"
-                            >
-                              View Details
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  : relatedProducts.map((entry) => (
+                      <div
+                        key={entry._id}
+                        className="snap-start shrink-0 w-[48%] sm:w-[31%] md:w-[23%] lg:w-[18.5%] xl:w-[15.5%]"
+                      >
+                        <StorefrontProductCard
+                          product={entry}
+                          className="!w-full"
+                          onViewDetails={() => handleNavigateToProduct(entry._id)}
+                        />
+                      </div>
+                    ))}
               </div>
 
               {!relatedProductsLoading && relatedCarouselHasOverflow ? (

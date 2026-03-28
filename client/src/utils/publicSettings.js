@@ -29,6 +29,26 @@ const DEFAULT_STOREFRONT_TRUST_BULLETS = [
   "Orders and purchases already sync inventory",
 ];
 
+const normalizeIdList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean)
+      .filter((entry, index, list) => list.indexOf(entry) === index);
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeIdList(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
 const cloneNavLinks = (links = DEFAULT_STOREFRONT_NAV_LINKS) =>
   links.map((entry) => ({
     label: String(entry?.label || "").trim(),
@@ -95,10 +115,12 @@ const DEFAULT_SETTINGS = {
   marketplaceMode: "multi",
   vendorRegistrationEnabled: true,
   publicStockSummaryEnabled: false,
+  publicStockCategoryIds: [],
   marketplace: {
     marketplaceMode: "multi",
     vendorRegistrationEnabled: true,
     publicStockSummaryEnabled: false,
+    publicStockCategoryIds: [],
   },
   website: {
     storeName: "E-Commerce",
@@ -242,6 +264,11 @@ const mergeSettings = (incoming = {}) => {
       ? incoming?.marketplace?.publicStockSummaryEnabled
       : incoming.publicStockSummaryEnabled;
   const publicStockSummaryEnabled = Boolean(publicStockSummarySource);
+  const publicStockCategoryIds = normalizeIdList(
+    incoming?.publicStockCategoryIds !== undefined
+      ? incoming.publicStockCategoryIds
+      : incoming?.marketplace?.publicStockCategoryIds,
+  );
 
   return {
     ...DEFAULT_SETTINGS,
@@ -250,12 +277,14 @@ const mergeSettings = (incoming = {}) => {
     marketplaceMode: normalizedMarketplaceMode,
     vendorRegistrationEnabled,
     publicStockSummaryEnabled,
+    publicStockCategoryIds,
     marketplace: {
       ...DEFAULT_SETTINGS.marketplace,
       ...(incoming.marketplace || {}),
       marketplaceMode: normalizedMarketplaceMode,
       vendorRegistrationEnabled,
       publicStockSummaryEnabled,
+      publicStockCategoryIds,
     },
     website: {
       ...DEFAULT_SETTINGS.website,

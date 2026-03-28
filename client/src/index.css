@@ -1,8 +1,14 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 :root {
   --brand-theme-color: #000000;
-  --brand-font-family: inherit;
+  --brand-font-family:
+    "Space Grotesk",
+    "Sora",
+    system-ui,
+    -apple-system,
+    sans-serif;
   --app-surface: #ffffff;
   --app-surface-soft: #f8fafc;
   --app-surface-muted: #f3f4f6;
@@ -19,9 +25,7 @@
 body {
   font-family: var(--brand-font-family, inherit);
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, rgba(15, 23, 42, 0.04), transparent 34%),
-    linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
+  background: #ffffff;
   color: #0f172a;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -400,6 +404,89 @@ button[data-global-loading="true"]::after {
 @media (min-width: 640px) {
   .site-shell {
     width: min(1520px, calc(100% - 3rem));
+  }
+}
+
+.site-container {
+  width: min(1280px, calc(100% - 1.5rem));
+  margin-inline: auto;
+}
+
+@media (min-width: 640px) {
+  .site-container {
+    width: min(1280px, calc(100% - 3rem));
+  }
+}
+
+.product-rail-shell {
+  width: min(1240px, calc(100% - 1.5rem));
+  margin-inline: auto;
+}
+
+@media (min-width: 640px) {
+  .product-rail-shell {
+    width: min(1240px, calc(100% - 3rem));
+  }
+}
+
+.storefront-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+  align-items: stretch;
+  overflow: visible;
+  padding-block: 0.35rem 0.6rem;
+}
+
+.storefront-card-grid--start {
+  justify-items: start;
+}
+
+.storefront-card-grid__item {
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .storefront-card-grid {
+    gap: 0.9rem;
+    padding-block: 0.45rem 0.8rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .storefront-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .storefront-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.1rem;
+  }
+}
+
+.storefront-product-card {
+  min-height: 20rem;
+}
+
+@media (min-width: 640px) {
+  .storefront-product-card {
+    min-height: 21.75rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .storefront-product-card {
+    min-height: 23rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .storefront-product-card {
+    min-height: 24.25rem;
   }
 }
 

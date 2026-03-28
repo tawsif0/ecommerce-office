@@ -4,6 +4,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { FiArrowLeft, FiShuffle, FiTrash2 } from "react-icons/fi";
 import { clearCompareItems, removeCompareItem } from "../store/compareSlice";
 import { getProductPricingDisplay } from "../utils/productPricing";
+import usePublicSettings from "../hooks/usePublicSettings";
+import { getPublicStockBadgeText, isPublicStockVisible } from "../utils/publicProduct";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -39,6 +41,7 @@ const CompareProducts = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const items = useSelector((state) => state.compare.items || []);
+  const { settings } = usePublicSettings();
 
   const rows = [
     {
@@ -89,7 +92,9 @@ const CompareProducts = () => {
     {
       label: "Public Stock",
       render: (item) =>
-        item?.showStockToPublic ? `${Number(item?.stock || 0)} units` : "Hidden",
+        isPublicStockVisible(item, settings)
+          ? getPublicStockBadgeText(item, null, settings)
+          : "Hidden",
     },
     {
       label: "Delivery Window",

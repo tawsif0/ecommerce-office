@@ -18,13 +18,19 @@ export default defineConfig({
     },
   },
   server: {
+    host: "127.0.0.1",
+    port: 5174,
     proxy: {
       "/api": {
-        target: "https://api-ecommerce.arbeitonline.top/api",
+        target: "http://localhost:5000",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, "/api"),
       },
     },
+  },
+  preview: {
+    host: "127.0.0.1",
+    port: 4174,
   },
 });

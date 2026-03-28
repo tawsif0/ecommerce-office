@@ -88,7 +88,6 @@ const ADMIN_ALLOWED_TABS = new Set([
   "modify-banner",
   "module-brands",
   "module-campaign-offers",
-  "module-landing-pages",
   "module-ads",
   "module-suppliers",
   "module-inventory",
@@ -98,6 +97,7 @@ const ADMIN_ALLOWED_TABS = new Set([
   "product-reports",
   "module-business-reports",
   "customer-risk",
+  "contacted-list",
   "module-website-setup",
   "module-vendor-payouts",
   "module-admin-users",
@@ -126,7 +126,6 @@ const VENDOR_ALLOWED_TABS = new Set([
   "modify-product",
   "coupons",
   "module-campaign-offers",
-  "module-landing-pages",
   "module-suppliers",
   "module-inventory",
   "module-purchases",
@@ -150,7 +149,6 @@ const STAFF_ALLOWED_TABS = new Set([
   "home",
   "vendor-messages",
   "module-campaign-offers",
-  "module-landing-pages",
   "module-suppliers",
   "module-purchases",
   "module-accounts",
@@ -204,9 +202,9 @@ const ADMIN_TAB_PERMISSION_MAP = {
   "create-banner": "manageWebsite",
   "modify-banner": "manageWebsite",
   "module-campaign-offers": "manageWebsite",
-  "module-landing-pages": "manageWebsite",
   "module-ads": "manageWebsite",
   "module-website-setup": "manageWebsite",
+  "contacted-list": "manageWebsite",
 };
 
 export const canAccessDashboardTab = ({

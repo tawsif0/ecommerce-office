@@ -61,7 +61,6 @@ function ProductModify({ initialMode = "list" }) {
     stock: "",
     lowStockThreshold: "5",
     allowBackorder: false,
-    showStockToPublic: false,
     deliveryMinDays: "2",
     deliveryMaxDays: "5",
     downloadUrl: "",
@@ -427,7 +426,6 @@ function ProductModify({ initialMode = "list" }) {
       stock: "",
       lowStockThreshold: "5",
       allowBackorder: false,
-      showStockToPublic: false,
       deliveryMinDays: "2",
       deliveryMaxDays: "5",
       downloadUrl: "",
@@ -521,7 +519,6 @@ function ProductModify({ initialMode = "list" }) {
             ? String(productData.lowStockThreshold)
             : "5",
         allowBackorder: Boolean(productData.allowBackorder),
-        showStockToPublic: Boolean(productData.showStockToPublic),
         deliveryMinDays:
           productData.deliveryMinDays !== undefined &&
           productData.deliveryMinDays !== null
@@ -1007,10 +1004,6 @@ function ProductModify({ initialMode = "list" }) {
           normalizedPriceType === "tba" ? false : Boolean(form.allowBackorder),
         ),
       );
-      formData.append(
-        "showStockToPublic",
-        String(Boolean(form.showStockToPublic)),
-      );
       formData.append("deliveryMinDays", form.deliveryMinDays || "2");
       formData.append("deliveryMaxDays", form.deliveryMaxDays || "5");
       formData.append("downloadUrl", form.downloadUrl.trim());
@@ -1492,17 +1485,6 @@ function ProductModify({ initialMode = "list" }) {
                             disabled={form.priceType === "tba"}
                           />
                           Allow Backorder
-                        </label>
-                      </div>
-                      <div className="flex items-end">
-                        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            name="showStockToPublic"
-                            checked={form.showStockToPublic}
-                            onChange={handleChange}
-                          />
-                          Show Stock Publicly
                         </label>
                       </div>
                     </div>

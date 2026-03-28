@@ -18,6 +18,7 @@ import Footer from "./Home/components/Footer";
 import { pushDataLayerEvent } from "./utils/marketingDataLayer";
 import GlobalVoiceAssistant from "./components/GlobalVoiceAssistant";
 import { loadPublicSettings } from "./store/publicSettingsSlice";
+import { loadWishlist } from "./store/wishlistSlice";
 
 const normalizeThemeColor = (value) => {
   const raw = String(value || "")
@@ -37,7 +38,9 @@ const normalizeThemeColor = (value) => {
 
 const normalizeFontFamily = (value) => {
   const raw = String(value || "").trim();
-  if (!raw || raw.toLowerCase() === "inherit") return "inherit";
+  if (!raw || raw.toLowerCase() === "inherit") {
+    return '"Space Grotesk", "Sora", system-ui, -apple-system, sans-serif';
+  }
   return raw;
 };
 
@@ -46,6 +49,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Registration"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const EcomArcHome = lazy(() => import("./Home/pages/EcomArcHome"));
 const Demo03Home = lazy(() => import("./Home/pages/Demo03Home"));
 const MarketplaceHomeFloors = lazy(() => import("./Home/pages/MarketplaceHomeFloors"));
 const FAQ = lazy(() => import("./Home/pages/FAQ"));
@@ -61,11 +65,10 @@ const VendorStore = lazy(() => import("./pages/VendorStore"));
 const LandingPageView = lazy(() => import("./Home/pages/LandingPageView"));
 const PolicyPage = lazy(() => import("./Home/pages/PolicyPage"));
 const CompareProducts = lazy(() => import("./pages/CompareProducts"));
+const MyWishlist = lazy(() => import("./pages/MyWishlist"));
 
 function HomePage() {
-  return (
-    <Demo03Home />
-  );
+  return <EcomArcHome />;
 }
 
 function RouteLoadingFallback() {
@@ -127,6 +130,7 @@ function PublicLayout() {
             <Route path="/shop" element={<ProductGrid />} />
             <Route path="/products" element={<Navigate to="/shop" replace />} />
             <Route path="/compare" element={<CompareProducts />} />
+            <Route path="/wishlist" element={<MyWishlist />} />
 
             {/* Single product */}
             <Route path="/product/:id" element={<ProductDetails />} />
@@ -148,11 +152,6 @@ function PublicLayout() {
             <Route path="/store/:slug" element={<VendorStore />} />
             <Route path="/lp/:slug" element={<LandingPageView />} />
             <Route path="/policy/:policyType" element={<PolicyPage />} />
-            <Route
-              path="/wishlist"
-              element={<DashboardTabRedirect tab="wishlist" />}
-            />
-
             {/* Cart / checkout */}
             <Route path="/cart" element={<AddToCart />} />
             <Route path="/added-to-cart" element={<AddToCart />} />
@@ -195,15 +194,28 @@ function App() {
   const { settings } = usePublicSettings();
 
   useEffect(() => {
+    dispatch(loadWishlist());
+  }, [dispatch]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
     const handleSettingsUpdated = () => {
       dispatch(loadPublicSettings({ force: true }));
     };
+    const handleWishlistSync = () => {
+      dispatch(loadWishlist());
+    };
 
     window.addEventListener("publicSettingsUpdated", handleSettingsUpdated);
+    window.addEventListener("userLoggedIn", handleWishlistSync);
+    window.addEventListener("userLoggedOut", handleWishlistSync);
+    window.addEventListener("wishlistUpdated", handleWishlistSync);
     return () => {
       window.removeEventListener("publicSettingsUpdated", handleSettingsUpdated);
+      window.removeEventListener("userLoggedIn", handleWishlistSync);
+      window.removeEventListener("userLoggedOut", handleWishlistSync);
+      window.removeEventListener("wishlistUpdated", handleWishlistSync);
     };
   }, [dispatch]);
 
@@ -219,19 +231,54 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
-    const appendScriptOnce = (id, src, options = {}) => {
-      if (document.getElementById(id)) return;
+    const syncExternalScript = (id, src, options = {}) => {
+      if (typeof document === "undefined") return;
+
+      const normalizedSrc = String(src || "").trim();
+      const existing = document.getElementById(id);
+      if (!normalizedSrc) {
+        existing?.remove();
+        return;
+      }
+
+      if (existing instanceof HTMLScriptElement && existing.src === normalizedSrc) {
+        existing.async = options.async !== undefined ? options.async : true;
+        existing.defer = Boolean(options.defer);
+        return;
+      }
+
+      existing?.remove();
+
       const script = document.createElement("script");
       script.id = id;
-      script.src = src;
+      script.src = normalizedSrc;
       script.async = options.async !== undefined ? options.async : true;
-      if (options.defer) script.defer = true;
+      script.defer = Boolean(options.defer);
       document.head.appendChild(script);
     };
 
-    const appendInlineScriptOnce = (id, scriptBody) => {
+    const syncInlineScript = (id, scriptBody) => {
+      if (typeof document === "undefined") return;
+
       const code = String(scriptBody || "").trim();
-      if (!code || document.getElementById(id)) return;
+      const existing = document.getElementById(id);
+
+      if (!code) {
+        existing?.remove();
+        return;
+      }
+
+      const currentCode =
+        existing instanceof HTMLScriptElement
+          ? String(existing.text || existing.textContent || "").trim()
+          : "";
+
+      if (currentCode === code) {
+        return;
+      }
+
+      existing?.remove();
+
       const script = document.createElement("script");
       script.id = id;
       script.text = code;
@@ -253,30 +300,35 @@ function App() {
     );
 
     if (gaId) {
-      appendScriptOnce("ga-script-src", `https://www.googletagmanager.com/gtag/js?id=${gaId}`);
-      appendInlineScriptOnce(
+      syncExternalScript("ga-script-src", `https://www.googletagmanager.com/gtag/js?id=${gaId}`);
+      syncInlineScript(
         "ga-script-inline",
         `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', '${gaId}');`,
       );
+    } else {
+      syncExternalScript("ga-script-src", "");
+      syncInlineScript("ga-script-inline", "");
     }
 
     if (gtmId) {
-      appendInlineScriptOnce(
+      syncInlineScript(
         "gtm-script-inline",
         `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');`,
       );
+    } else {
+      syncInlineScript("gtm-script-inline", "");
     }
 
     if (fbPixelId) {
-      appendInlineScriptOnce(
+      syncInlineScript(
         "fb-pixel-inline",
         `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init', '${fbPixelId}');fbq('track', 'PageView');`,
       );
+    } else {
+      syncInlineScript("fb-pixel-inline", "");
     }
 
-    if (customTrackingCode) {
-      appendInlineScriptOnce("custom-tracking-inline", customTrackingCode);
-    }
+    syncInlineScript("custom-tracking-inline", customTrackingCode);
   }, [settings]);
 
   if (isLoading) {

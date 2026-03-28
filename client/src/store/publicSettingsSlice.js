@@ -115,6 +115,14 @@ const publicSettingsSlice = createSlice({
     setAdminSettingsDraft(state, action) {
       state.adminDraft = normalizePublicSettingsPayload(action.payload || {});
     },
+    updateAdminField(state, action) {
+      const { key, value } = action.payload || {};
+      if (!key) return;
+      state.adminDraft = {
+        ...state.adminDraft,
+        [key]: value,
+      };
+    },
     updateAdminNestedField(state, action) {
       const { section, key, value } = action.payload || {};
       if (!section || !key) return;
@@ -248,6 +256,7 @@ const publicSettingsSlice = createSlice({
 
 export const {
   setAdminSettingsDraft,
+  updateAdminField,
   updateAdminNestedField,
   setMarketplaceMode,
   setPublicStockSummaryEnabled,

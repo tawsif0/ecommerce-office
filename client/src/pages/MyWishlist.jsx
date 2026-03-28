@@ -1,175 +1,108 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { FiHeart, FiTrash2, FiExternalLink } from "react-icons/fi";
-import { Link } from "react-router-dom";
-import axios from "axios";
+import React, { useEffect, useMemo } from "react";
+import { FiHeart, FiTrash2 } from "react-icons/fi";
+import { FaHeart } from "react-icons/fa6";
+import { useDispatch, useSelector } from "react-redux";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
-import { getProductPricingDisplay } from "../utils/productPricing";
-
-const baseUrl = import.meta.env.VITE_API_URL;
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
-const getFullImageUrl = (imagePath) => {
-  if (!imagePath) return null;
-
-  if (
-    imagePath.startsWith("http://") ||
-    imagePath.startsWith("https://") ||
-    imagePath.startsWith("data:")
-  ) {
-    return imagePath;
-  }
-
-  if (imagePath.startsWith("/")) {
-    return baseUrl ? `${baseUrl}${imagePath}` : imagePath;
-  }
-
-  return baseUrl
-    ? `${baseUrl}/uploads/products/${imagePath}`
-    : `/uploads/products/${imagePath}`;
-};
-
-const toProductPrice = (product) => {
-  const pricing = getProductPricingDisplay(product);
-  return pricing;
-};
+import { clearWishlist, loadWishlist } from "../store/wishlistSlice";
+import StorefrontProductCard from "../Home/components/StorefrontProductCard";
 
 export default function MyWishlist() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [removingId, setRemovingId] = useState("");
-
-  const fetchWishlist = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${baseUrl}/wishlist`, {
-        headers: getAuthHeaders(),
-      });
-      setItems(response.data?.wishlist?.items || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to load wishlist");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const items = useSelector((state) => state.wishlist.items || []);
+  const status = useSelector((state) => state.wishlist.status);
+  const source = useSelector((state) => state.wishlist.source || "guest");
+  const clearStatus = useSelector((state) => state.wishlist.clearStatus);
+  const loading = status === "loading" && items.length === 0;
+  const clearing = clearStatus === "loading";
 
   useEffect(() => {
-    fetchWishlist();
-  }, [fetchWishlist]);
+    dispatch(loadWishlist());
+  }, [dispatch]);
 
-  const handleRemove = async (productId) => {
+  const sourceLabel = useMemo(
+    () => (source === "auth" ? "Saved to your account" : "Saved on this device"),
+    [source],
+  );
+
+  const handleClear = async () => {
     try {
-      setRemovingId(productId);
-      await axios.delete(`${baseUrl}/wishlist/${productId}`, {
-        headers: getAuthHeaders(),
-      });
-      setItems((prev) =>
-        prev.filter(
-          (entry) => String(entry?.product?._id || entry?.product || "") !== String(productId),
-        ),
-      );
-      toast.success("Removed from wishlist");
+      await dispatch(clearWishlist()).unwrap();
+      toast.success("Wishlist cleared");
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove item");
-    } finally {
-      setRemovingId("");
+      toast.error(error || "Failed to clear wishlist");
     }
   };
 
   return (
-    <div className="w-full p-1 md:p-2">
-      {loading ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-600">
-          Loading wishlist...
-        </div>
-      ) : items.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-          <FiHeart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600">Your wishlist is empty.</p>
-          <Link
-            to="/shop"
-            className="inline-block mt-4 px-4 py-2 rounded-lg bg-black text-white text-sm"
-          >
-            Browse Products
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {items.map((entry, index) => {
-            const product = entry?.product;
-            if (!product?._id) return null;
-
-            const image = getFullImageUrl(product?.images?.[0]);
-            const productId = String(product._id);
-            const pricing = toProductPrice(product);
-
-            return (
-              <div
-                key={`${productId}-${index}`}
-                className="bg-white border border-gray-200 rounded-xl overflow-hidden"
-              >
-                <Link to={`/product/${productId}`} className="block aspect-square bg-gray-100">
-                  {image ? (
-                    <img
-                      src={image}
-                      alt={product.title}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : null}
-                </Link>
-                <div className="p-4 space-y-2">
-                  <Link
-                    to={`/product/${productId}`}
-                    className="font-semibold text-gray-900 line-clamp-2 hover:text-black"
-                  >
-                    {product.title}
-                  </Link>
-                  <p className="text-sm text-gray-600">
-                    {product?.vendor?.storeName || "Marketplace Product"}
-                  </p>
-                  <div className="text-base font-bold text-black">
-                    {pricing.isTba ? (
-                      "TBA"
-                    ) : pricing.hasDiscount ? (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-sm text-gray-400 line-through font-medium">
-                          {Number(pricing.previousPrice || 0).toFixed(2)} Tk
-                        </span>
-                        <span>{Number(pricing.currentPrice || 0).toFixed(2)} Tk</span>
-                      </div>
-                    ) : (
-                      `${Number(pricing.currentPrice || 0).toFixed(2)} Tk`
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <Link
-                      to={`/product/${productId}`}
-                      className="flex-1 inline-flex items-center justify-center gap-2 text-sm border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50"
-                    >
-                      <FiExternalLink className="w-4 h-4" />
-                      View
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => handleRemove(productId)}
-                      disabled={removingId === productId}
-                      className="inline-flex items-center justify-center gap-2 text-sm border border-red-200 text-red-700 rounded-lg px-3 py-2 hover:bg-red-50 disabled:opacity-60"
-                    >
-                      <FiTrash2 className="w-4 h-4" />
-                      {removingId === productId ? "Removing..." : "Remove"}
-                    </button>
-                  </div>
-                </div>
+    <div className="site-shell py-8">
+      <div className="app-panel p-5 sm:p-6">
+        <div className="flex flex-col gap-4 border-b border-gray-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="mt-1 flex items-center gap-3">
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-white sm:h-11 sm:w-11">
+                <FaHeart className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+              </span>
+              <div>
+                <h1 className="text-2xl font-black text-black">Wishlist</h1>
+                <p className="mt-1 text-sm leading-6 text-gray-600 sm:leading-normal">
+                  {sourceLabel}. Logged-in users keep wishlist items in the database, while guests keep them in local storage.
+                </p>
               </div>
-            );
-          })}
+            </div>
+          </div>
+
+          {items.length > 0 ? (
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={clearing}
+              className="app-btn-danger px-4 py-2 text-sm disabled:opacity-60"
+            >
+              <FiTrash2 className="h-4 w-4" />
+              {clearing ? "Clearing..." : "Clear Wishlist"}
+            </button>
+          ) : null}
         </div>
-      )}
+
+        {loading ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-600">
+            Loading wishlist...
+          </div>
+        ) : items.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
+            <FiHeart className="mx-auto mb-3 h-10 w-10 text-gray-400" />
+            <p className="text-gray-600">Your wishlist is empty.</p>
+            <Link
+              to="/shop"
+              className="inline-block mt-4 rounded-lg bg-black px-4 py-2 text-sm text-white"
+            >
+              Browse Products
+            </Link>
+          </div>
+        ) : (
+          <div className="storefront-card-grid pt-6">
+            {items.map((product) =>
+              product?._id ? (
+                <div
+                  key={String(product._id)}
+                  className="storefront-card-grid__item"
+                >
+                  <StorefrontProductCard
+                    product={product}
+                    className="!w-full"
+                    onViewDetails={() => {
+                      navigate(`/product/${product._id}`);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

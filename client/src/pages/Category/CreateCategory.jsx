@@ -4,17 +4,16 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import axios from "axios";
 import toast from "react-hot-toast";
+import RichTextEditor from "../../components/RichTextEditor";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
 function CreateCategory() {
   const [categoryName, setCategoryName] = useState("");
   const [categoryType, setCategoryType] = useState("General");
+  const [categoryDescription, setCategoryDescription] = useState("");
   const [categoryImageFile, setCategoryImageFile] = useState(null);
   const [categoryImagePreview, setCategoryImagePreview] = useState("");
-  const [commissionType, setCommissionType] = useState("inherit");
-  const [commissionValue, setCommissionValue] = useState("");
-  const [commissionFixed, setCommissionFixed] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameError, setNameError] = useState("");
   const [typeError, setTypeError] = useState("");
@@ -97,9 +96,7 @@ function CreateCategory() {
       const formData = new FormData();
       formData.append("name", categoryName);
       formData.append("type", categoryType);
-      formData.append("commissionType", commissionType);
-      formData.append("commissionValue", String(Number(commissionValue || 0)));
-      formData.append("commissionFixed", String(Number(commissionFixed || 0)));
+      formData.append("description", categoryDescription);
       formData.append("isActive", "true");
 
       if (categoryImageFile) {
@@ -117,11 +114,9 @@ function CreateCategory() {
         // Reset form
         setCategoryName("");
         setCategoryType("General");
+        setCategoryDescription("");
         setCategoryImageFile(null);
         setCategoryImagePreview("");
-        setCommissionType("inherit");
-        setCommissionValue("");
-        setCommissionFixed("");
 
         // Show success toast
         toast.success("Category created successfully!");
@@ -249,6 +244,21 @@ function CreateCategory() {
             </div>
 
             <div className="mb-4">
+              <label
+                htmlFor="categoryDescription"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Description
+              </label>
+              <RichTextEditor
+                value={categoryDescription}
+                onChange={setCategoryDescription}
+                placeholder="Optional category description"
+                minHeight={180}
+              />
+            </div>
+
+            <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Category Image
               </label>
@@ -282,66 +292,6 @@ function CreateCategory() {
                   </button>
                 </div>
               ) : null}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              <div>
-                <label
-                  htmlFor="commissionType"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Commission Rule
-                </label>
-                <select
-                  id="commissionType"
-                  value={commissionType}
-                  onChange={(e) => setCommissionType(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-base"
-                >
-                  <option value="inherit">Inherit Global</option>
-                  <option value="percentage">Percentage</option>
-                  <option value="fixed">Fixed</option>
-                  <option value="hybrid">Hybrid</option>
-                </select>
-              </div>
-              <div>
-                <label
-                  htmlFor="commissionValue"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Commission %
-                </label>
-                <input
-                  id="commissionValue"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={commissionValue}
-                  onChange={(e) => setCommissionValue(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-base"
-                  placeholder="0"
-                  disabled={commissionType === "inherit" || commissionType === "fixed"}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="commissionFixed"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Fixed (Tk)
-                </label>
-                <input
-                  id="commissionFixed"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={commissionFixed}
-                  onChange={(e) => setCommissionFixed(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-base"
-                  placeholder="0"
-                  disabled={commissionType === "inherit" || commissionType === "percentage"}
-                />
-              </div>
             </div>
 
             <motion.button

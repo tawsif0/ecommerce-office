@@ -83,6 +83,19 @@ const AdminAddOrder = () => {
     () => paymentMethods.find((entry) => String(entry._id) === String(paymentMethodId)) || null,
     [paymentMethods, paymentMethodId],
   );
+  const selectedMethodChannel = String(selectedMethod?.channelType || "manual").toLowerCase();
+  const selectedMethodIsCod = selectedMethodChannel === "cod";
+  const selectedMethodIsGateway = ["stripe", "paypal", "sslcommerz"].includes(
+    selectedMethodChannel,
+  );
+  const selectedMethodShippingCost =
+    selectedMethodIsCod && selectedMethod
+      ? Math.max(0, Number(selectedMethod?.shippingCost || 0))
+      : 0;
+  const selectedMethodRequiresProof =
+    selectedMethod?.requiresTransactionProof === undefined
+      ? !selectedMethodIsCod && !selectedMethodIsGateway
+      : Boolean(selectedMethod?.requiresTransactionProof);
 
   const subtotal = useMemo(
     () =>
@@ -168,6 +181,21 @@ const AdminAddOrder = () => {
 
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    if (!selectedMethodRequiresProof && paymentDetails.transactionId) {
+      setPaymentDetails((prev) => ({
+        ...prev,
+        transactionId: "",
+      }));
+    }
+  }, [paymentDetails.transactionId, selectedMethodRequiresProof]);
+
+  useEffect(() => {
+    if (selectedMethodIsCod) {
+      setShippingFee(selectedMethodShippingCost);
+    }
+  }, [selectedMethodIsCod, selectedMethodShippingCost]);
 
   const checkRisk = async () => {
     if (!customer.phone.trim() && !customer.email.trim() && !customerUserId) {
@@ -259,6 +287,11 @@ const AdminAddOrder = () => {
       return;
     }
 
+    if (selectedMethodRequiresProof && !String(paymentDetails.transactionId || "").trim()) {
+      toast.error("Transaction ID is required for this payment method");
+      return;
+    }
+
     try {
       setSubmitting(true);
       const response = await axios.post(
@@ -291,6 +324,7 @@ const AdminAddOrder = () => {
           courierTrackingNumber: meta.courierTrackingNumber || "",
           courierConsignmentId: meta.courierConsignmentId || "",
           paymentMethodId,
+          paymentMethod: selectedMethod?.type || "",
           paymentDetails,
         },
         { headers: getAuthHeaders() },
@@ -466,8 +500,7 @@ const AdminAddOrder = () => {
                 <option key={entry._id} value={entry._id}>{entry.type}</option>
               ))}
             </select>
-            <input type="number" min="0" step="0.01" value={shippingFee} onChange={(e) => setShippingFee(roundMoney(e.target.value))} placeholder="Shipping fee" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={paymentDetails.transactionId} onChange={(e) => setPaymentDetails((p) => ({ ...p, transactionId: e.target.value }))} placeholder={selectedMethod?.requiresTransactionProof ? "Transaction ID*" : "Transaction ID"} className="px-3 py-2.5 border border-gray-200 rounded-lg" />
+            <input type="number" min="0" step="0.01" value={shippingFee} onChange={(e) => setShippingFee(roundMoney(e.target.value))} placeholder="Shipping fee" disabled={selectedMethodIsCod} className="px-3 py-2.5 border border-gray-200 rounded-lg disabled:bg-gray-100" />
             <input value={paymentDetails.sentFrom} onChange={(e) => setPaymentDetails((p) => ({ ...p, sentFrom: e.target.value }))} placeholder="Sent from" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
             <input value={paymentDetails.sentTo} onChange={(e) => setPaymentDetails((p) => ({ ...p, sentTo: e.target.value }))} placeholder="Sent to" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
             <input value={meta.couponCode} onChange={(e) => setMeta((p) => ({ ...p, couponCode: e.target.value }))} placeholder="Coupon code" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
@@ -475,6 +508,22 @@ const AdminAddOrder = () => {
             <input value={meta.courierTrackingNumber} onChange={(e) => setMeta((p) => ({ ...p, courierTrackingNumber: e.target.value }))} placeholder="Tracking number" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
             <input value={meta.courierConsignmentId} onChange={(e) => setMeta((p) => ({ ...p, courierConsignmentId: e.target.value }))} placeholder="Consignment ID" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
           </div>
+          {selectedMethodRequiresProof ? (
+            <div className="space-y-2">
+              <input value={paymentDetails.transactionId} onChange={(e) => setPaymentDetails((p) => ({ ...p, transactionId: e.target.value }))} placeholder="Transaction ID*" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" />
+              <p className="text-xs text-gray-500">
+                Admin must match this transaction manually from order management before marking the payment as paid.
+              </p>
+            </div>
+          ) : selectedMethodIsGateway ? (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-800">
+              This is a gateway payment method. Create the order, then update payment status after confirmation.
+            </p>
+          ) : selectedMethodIsCod ? (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+              Cash on Delivery does not need a transaction ID. Payment completes automatically on delivery. Shipping fee: {selectedMethodShippingCost.toFixed(2)} Tk.
+            </p>
+          ) : null}
           <textarea value={meta.adminNotes} onChange={(e) => setMeta((p) => ({ ...p, adminNotes: e.target.value }))} rows={2} placeholder="Admin notes" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" />
           <div className="flex flex-wrap items-center gap-4 text-sm">
             <p>Subtotal: <span className="font-semibold">{subtotal.toFixed(2)} Tk</span></p>

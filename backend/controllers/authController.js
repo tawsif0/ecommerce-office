@@ -7,6 +7,7 @@ const User = require("../models/User");
 const Order = require("../models/Order");
 const Vendor = require("../models/Vendor");
 const Product = require("../models/Product");
+const Category = require("../models/Category");
 const Purchase = require("../models/Purchase");
 const AbandonedOrder = require("../models/AbandonedOrder");
 const { AccountEntry } = require("../models/AccountEntry");
@@ -14,8 +15,15 @@ const { uploadImageBuffer, deleteImage } = require("../config/cloudinary");
 const { readMarketplaceMode } = require("../middlewares/marketplaceMode");
 const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
 const { buildUniqueStoreSlug } = require("../utils/vendorUtils");
-const { getVoiceDatasetForClient } = require("../utils/voiceDataset");
-const { planVoiceCommand, getVoicePlannerConfig } = require("../utils/voicePlanner");
+const { getRiskLevel } = require("../utils/customerRiskUtils");
+const {
+  authenticateNotificationToken,
+  broadcastNotificationRead,
+  broadcastNotificationsReadAll,
+  registerNotificationClient,
+  serializeNotification,
+  writeSseEvent,
+} = require("../utils/notificationUtils");
 
 const createTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -79,13 +87,20 @@ const hasAdminPermission = (user, key) => {
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 
-const classifyRiskLevel = (successRate, totalOrders) => {
-  if (!Number.isFinite(totalOrders) || totalOrders <= 0) return "new";
-  if (successRate >= 80) return "trusted";
-  if (successRate >= 60) return "medium";
-  if (successRate >= 40) return "high";
-  return "blacklisted";
-};
+const classifyRiskLevel = (
+  successRate,
+  totalOrders,
+  isBlacklisted = false,
+  cancelledOrders = 0,
+  returnedOrders = 0,
+) =>
+  getRiskLevel({
+    successRate,
+    totalOrders,
+    isBlacklisted,
+    cancelledOrders,
+    returnedOrders,
+  });
 
 const roundMoney = (value) => {
   const num = Number(value || 0);
@@ -541,6 +556,7 @@ const buildPublicSettingsPayload = (settings = {}, { isInitialSetup = false } = 
       logoMode: normalizeWebsiteLogoMode(website.logoMode),
       logoText: String(website.logoText || "").trim(),
       logoUrl: String(website.logoUrl || "").trim(),
+      headerIconUrl: String(website.headerIconUrl || website.headerIcon || "").trim(),
       themeColor: String(website.themeColor || "#000000").trim(),
       fontFamily: String(website.fontFamily || "inherit").trim(),
     },
@@ -563,6 +579,10 @@ const buildPublicSettingsPayload = (settings = {}, { isInitialSetup = false } = 
       termsConditions: String(policies.termsConditions || "").trim(),
       returnPolicy: String(policies.returnPolicy || "").trim(),
       privacyPolicy: String(policies.privacyPolicy || "").trim(),
+      cancellationPolicy: String(policies.cancellationPolicy || "").trim(),
+      cancellationWindowDays: Number.isFinite(parseInt(policies.cancellationWindowDays, 10))
+        ? Math.max(0, parseInt(policies.cancellationWindowDays, 10))
+        : 1,
     },
     integrations: {
       facebookPixelId: String(integrations.facebookPixelId || "").trim(),
@@ -602,6 +622,7 @@ const toSafeUser = (userDoc) => {
   delete user.tokens;
   delete user.passwordResetToken;
   delete user.passwordResetExpires;
+  delete user.notifications;
   user.phone = user.originalPhone || user.phone;
   return user;
 };
@@ -1684,6 +1705,136 @@ exports.uploadWebsiteLogo = async (req, res) => {
   }
 };
 
+exports.uploadWebsiteHeaderIcon = async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    if (!req.file?.buffer) {
+      return res.status(400).json({ error: "Header icon image file is required" });
+    }
+
+    const primaryAdmin = await getPrimaryAdminUser();
+    if (!primaryAdmin) {
+      return res.status(404).json({ error: "Primary admin account not found" });
+    }
+
+    const currentSettings = isPlainObject(primaryAdmin.adminSettings)
+      ? primaryAdmin.adminSettings
+      : {};
+    const currentWebsite = isPlainObject(currentSettings.website)
+      ? currentSettings.website
+      : {};
+    const previousPublicId = String(currentWebsite.headerIconPublicId || "").trim();
+
+    const uploaded = await uploadImageBuffer(req.file.buffer, {
+      folder: "marketplace/site-brand",
+      resource_type: "image",
+    });
+
+    if (!uploaded?.secure_url) {
+      return res.status(500).json({ error: "Header icon upload failed" });
+    }
+
+    primaryAdmin.adminSettings = {
+      ...currentSettings,
+      website: {
+        ...currentWebsite,
+        headerIconUrl: String(uploaded.secure_url || "").trim(),
+        headerIconPublicId: String(uploaded.public_id || "").trim(),
+      },
+    };
+
+    await primaryAdmin.save();
+
+    if (previousPublicId && previousPublicId !== uploaded.public_id) {
+      await deleteImage(previousPublicId).catch(() => null);
+    }
+
+    clearPublicSettingsCache();
+
+    return res.json({
+      success: true,
+      message: "Website header icon uploaded successfully",
+      headerIconUrl: String(uploaded.secure_url || "").trim(),
+      settings: buildPublicSettingsPayload(primaryAdmin.adminSettings),
+    });
+  } catch (error) {
+    console.error("Upload website header icon error:", error);
+    return res.status(500).json({ error: error.message || "Server error" });
+  }
+};
+
+exports.generateSitemapXml = async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const settings = await getPrimaryAdminSettings();
+    const storefrontBaseUrl = String(
+      process.env.FRONTEND_URL ||
+        settings?.website?.siteUrl ||
+        settings?.website?.storeUrl ||
+        "http://localhost:5174",
+    )
+      .trim()
+      .replace(/\/+$/, "");
+
+    const [categories, products] = await Promise.all([
+      Category.find({ isActive: true }).select("_id").lean(),
+      Product.find({
+        isActive: true,
+        publicationStatus: "published",
+        approvalStatus: { $in: ["approved", null] },
+      })
+        .select("_id")
+        .lean(),
+    ]);
+
+    const staticPaths = [
+      "/",
+      "/shop",
+      "/about",
+      "/contact",
+      "/faqs",
+      "/wishlist",
+      "/track-order",
+      "/policy/delivery",
+      "/policy/shipment",
+      "/policy/return",
+      "/policy/privacy",
+      "/policy/terms",
+      "/policy/cancellation",
+    ];
+
+    const categoryPaths = categories.map((category) => `/shop?category=${category._id}`);
+    const productPaths = products.map((product) => `/products/${product._id}`);
+    const allPaths = [...new Set([...staticPaths, ...categoryPaths, ...productPaths])];
+    const lastmod = new Date().toISOString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${allPaths
+  .map(
+    (path) => `  <url>
+    <loc>${escapeXml(`${storefrontBaseUrl}${path}`)}</loc>
+    <lastmod>${lastmod}</lastmod>
+  </url>`,
+  )
+  .join("\n")}
+</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="sitemap.xml"');
+    return res.status(200).send(xml);
+  } catch (error) {
+    console.error("Generate sitemap error:", error);
+    return res.status(500).json({ error: error.message || "Failed to generate sitemap" });
+  }
+};
+
 exports.getMarketplaceControlOverview = async (req, res) => {
   try {
     if (!isSuperAdmin(req.user)) {
@@ -2264,7 +2415,13 @@ exports.getSystemStats = async (req, res) => {
     for (const entry of riskMap.values()) {
       const successRate =
         entry.totalOrders > 0 ? (entry.deliveredOrders / entry.totalOrders) * 100 : 0;
-      const riskLevel = classifyRiskLevel(successRate, entry.totalOrders);
+      const riskLevel = classifyRiskLevel(
+        successRate,
+        entry.totalOrders,
+        false,
+        entry.cancelledOrders || 0,
+        entry.returnedOrders || 0,
+      );
       if (riskLevel === "high" || riskLevel === "blacklisted") {
         highRiskCustomers += 1;
       }
@@ -2460,9 +2617,13 @@ exports.getCustomerRiskProfiles = async (req, res) => {
     let profiles = Array.from(profileMap.values()).map((entry) => {
       const successRate =
         entry.totalOrders > 0 ? (entry.deliveredOrders / entry.totalOrders) * 100 : 0;
-      const riskLevel = entry.isBlacklisted
-        ? "blacklisted"
-        : classifyRiskLevel(successRate, entry.totalOrders);
+      const riskLevel = classifyRiskLevel(
+        successRate,
+        entry.totalOrders,
+        entry.isBlacklisted,
+        entry.cancelledOrders || 0,
+        entry.returnedOrders || 0,
+      );
 
       return {
         ...entry,
@@ -2581,9 +2742,13 @@ exports.getCustomerProfileByAdmin = async (req, res) => {
         ? (metrics.deliveredOrders / metrics.totalOrders) * 100
         : 0;
 
-    const riskLevel = user.isBlacklisted
-      ? "blacklisted"
-      : classifyRiskLevel(successRate, metrics.totalOrders);
+    const riskLevel = classifyRiskLevel(
+      successRate,
+      metrics.totalOrders,
+      user.isBlacklisted,
+      metrics.cancelledOrders,
+      metrics.returnedOrders,
+    );
 
     return res.json({
       success: true,
@@ -2665,91 +2830,150 @@ exports.updateCustomerBlacklist = async (req, res) => {
   }
 };
 
-exports.getVoiceDataset = async (req, res) => {
+exports.getUserNotifications = async (req, res) => {
   try {
-    if (!isAdmin(req.user)) {
-      return res.status(403).json({ error: "Admin access required" });
-    }
+    const notifications = Array.isArray(req.user?.notifications)
+      ? [...req.user.notifications]
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+          .map((item) => serializeNotification(item))
+      : [];
 
-    const force = String(req.query?.force || "").trim() === "1";
-    const dataset = getVoiceDatasetForClient({ force });
-
-    return res.status(200).json({
+    return res.json({
       success: true,
-      dataset,
+      notifications,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      error: "Failed to build voice dataset",
-      details: error.message,
+      message: "Failed to load notifications",
+      error: error.message,
     });
   }
 };
 
-exports.planVoiceAction = async (req, res) => {
-  try {
-    if (!isAdmin(req.user)) {
-      return res.status(403).json({ error: "Admin access required" });
-    }
+const escapeXml = (value) =>
+  String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 
-    const command = String(req.body?.command || "").trim();
-    if (!command) {
-      return res.status(400).json({
+exports.markUserNotificationRead = async (req, res) => {
+  try {
+    const notification = req.user?.notifications?.id(req.params.notificationId);
+
+    if (!notification) {
+      return res.status(404).json({
         success: false,
-        error: "Voice command is required",
+        message: "Notification not found",
       });
     }
 
-    const dataset = getVoiceDatasetForClient({ force: false });
-    const result = await planVoiceCommand({
-      command,
-      currentPath: req.body?.currentPath,
-      dashboardTab: req.body?.dashboardTab,
-      dataset,
-    });
+    if (!notification.isRead) {
+      notification.isRead = true;
+      notification.readAt = new Date();
+      await req.user.save();
+      broadcastNotificationRead(
+        req.user._id,
+        notification._id,
+        notification.readAt,
+      );
+    }
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-      planner: result,
+      message: "Notification marked as read",
+      notification: serializeNotification(notification),
     });
   } catch (error) {
-    const message = String(error?.message || "Voice planner unavailable");
-    const upstreamStatus = Number(error?.response?.status || 0);
-    const isConnectionError =
-      String(error?.code || "").toLowerCase() === "econnrefused" ||
-      message.toLowerCase().includes("connect") ||
-      message.toLowerCase().includes("timeout");
-    const plannerConfig = getVoicePlannerConfig();
-    const resolvedProvider = plannerConfig.resolvedProvider || plannerConfig.provider;
-    const isGroqMissingKey = resolvedProvider === "groq" && !plannerConfig.hasGroqKey;
-    const isGeminiMissingKey = resolvedProvider === "gemini" && !plannerConfig.hasGeminiKey;
-    const isRateLimitError =
-      upstreamStatus === 429 ||
-      message.toLowerCase().includes("rate limit") ||
-      message.toLowerCase().includes("resource_exhausted") ||
-      message.toLowerCase().includes("quota");
-    const providerLabel =
-      resolvedProvider === "groq"
-        ? `Groq API (${plannerConfig.groqModel})`
-        : resolvedProvider === "gemini"
-          ? `Gemini API (${plannerConfig.geminiModel})`
-          : `Ollama (${plannerConfig.ollamaModel})`;
-
-    return res
-      .status(isGroqMissingKey || isGeminiMissingKey || isConnectionError ? 503 : isRateLimitError ? 429 : 500)
-      .json({
+    return res.status(500).json({
       success: false,
-      error: isGroqMissingKey
-        ? "Groq planner is selected but GROQ_API_KEY is missing in backend/.env."
-        : isGeminiMissingKey
-        ? "Gemini planner is selected but GEMINI_API_KEY is missing in backend/.env."
-        : isRateLimitError
-          ? `${providerLabel} is rate-limited or out of free quota right now. Check the provider limits and try again.`
-        : isConnectionError
-          ? `${providerLabel} is unavailable right now. Check the planner service and try again.`
-        : "Failed to plan voice action",
-      details: message,
+      message: "Failed to update notification",
+      error: error.message,
+    });
+  }
+};
+
+exports.markAllUserNotificationsRead = async (req, res) => {
+  try {
+    const notifications = Array.isArray(req.user?.notifications)
+      ? req.user.notifications
+      : [];
+
+    let changed = false;
+    const readAt = new Date();
+
+    notifications.forEach((notification) => {
+      if (!notification.isRead) {
+        notification.isRead = true;
+        notification.readAt = readAt;
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      await req.user.save();
+      broadcastNotificationsReadAll(req.user._id, readAt);
+    }
+
+    return res.json({
+      success: true,
+      message: "All notifications marked as read",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update notifications",
+      error: error.message,
+    });
+  }
+};
+
+exports.streamUserNotifications = async (req, res) => {
+  let unregister = null;
+
+  try {
+    const token =
+      req.query?.token || req.headers.authorization || req.headers.Authorization;
+    const user = await authenticateNotificationToken(token);
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    if (typeof res.flushHeaders === "function") {
+      res.flushHeaders();
+    }
+
+    unregister = registerNotificationClient(user._id, res);
+
+    const unreadCount = Array.isArray(user.notifications)
+      ? user.notifications.filter((item) => !item.isRead).length
+      : 0;
+
+    writeSseEvent(res, "ready", {
+      connected: true,
+      unreadCount,
+    });
+
+    req.on("close", () => {
+      if (unregister) {
+        unregister();
+        unregister = null;
+      }
+      if (!res.writableEnded) {
+        res.end();
+      }
+    });
+  } catch (error) {
+    if (unregister) {
+      unregister();
+    }
+    return res.status(error.statusCode || 401).json({
+      success: false,
+      message: error.message || "Unable to open notification stream",
     });
   }
 };

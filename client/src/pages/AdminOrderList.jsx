@@ -26,6 +26,11 @@ import {
   FaClock,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
+import {
+  formatPaymentMethodLabel,
+  formatPaymentStatusLabel,
+  getOrderCustomerProfile,
+} from "../utils/orderPresentation";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -41,7 +46,9 @@ const AdminOrderList = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [statusNotes, setStatusNotes] = useState("");
   const [isStatusUpdating, setIsStatusUpdating] = useState(false);
+  const [isPaymentStatusUpdating, setIsPaymentStatusUpdating] = useState(false);
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+  const [cancellationReviewAction, setCancellationReviewAction] = useState("");
   const [courierAction, setCourierAction] = useState("");
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -144,17 +151,75 @@ const AdminOrderList = () => {
     return messages[currentStatus] || "";
   };
 
+  const getPaymentProviderType = (order) =>
+    String(order?.paymentDetails?.providerType || "").trim().toLowerCase();
+
+  const isCashOnDeliveryOrder = (order) => {
+    const paymentCategory = String(order?.paymentDetails?.paymentCategory || "")
+      .trim()
+      .toLowerCase();
+    const providerType = getPaymentProviderType(order);
+    const paymentLookup = `${order?.paymentMethod || ""} ${order?.paymentDetails?.method || ""}`;
+
+    return (
+      paymentCategory === "cash_on_delivery" ||
+      providerType === "cod" ||
+      /\bcod\b|cash[\s_-]*on[\s_-]*delivery/i.test(paymentLookup)
+    );
+  };
+
+  const isGatewayPaymentOrder = (order) =>
+    ["stripe", "paypal", "sslcommerz"].includes(getPaymentProviderType(order));
+
+  const canManuallyManagePayment = (order) =>
+    Boolean(order) &&
+    !isCashOnDeliveryOrder(order) &&
+    !["cancelled", "returned"].includes(String(order?.orderStatus || "").toLowerCase());
+
+  const getPaymentStatusTextClass = (status) => {
+    const normalized = String(status || "").trim().toLowerCase();
+    if (normalized === "completed") return "text-green-600";
+    if (normalized === "failed") return "text-red-600";
+    return "text-yellow-600";
+  };
+
+  const getTransactionReference = (order) => {
+    const candidates = [
+      order?.paymentDetails?.transactionId,
+      order?.transactionId,
+    ];
+
+    for (const candidate of candidates) {
+      const value = String(candidate || "").trim();
+      if (value && value !== "N/A") return value;
+    }
+
+    return "";
+  };
+
+  const canMarkPaymentCompleted = (order) => {
+    if (!canManuallyManagePayment(order)) return false;
+    if (isGatewayPaymentOrder(order)) return true;
+    return Boolean(getTransactionReference(order));
+  };
+
+  const canAdminCancelOrder = (order) =>
+    String(order?.orderStatus || "").trim().toLowerCase() === "pending";
+
   // Fetch orders
   const fetchOrders = async (page = 1) => {
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
-      const response = await axios.get(
-        `${baseUrl}/orders/admin/all?page=${page}&limit=20&status=${statusFilter}&search=${searchTerm}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
+      const response = await axios.get(`${baseUrl}/orders/admin/all`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          page,
+          limit: 20,
+          status: statusFilter,
+          search: searchTerm,
         },
-      );
+      });
 
       if (response.data.success) {
         setOrders(response.data.orders);
@@ -188,7 +253,7 @@ const AdminOrderList = () => {
 
   // Handle proceed to next step
   const handleProceed = async () => {
-    if (!selectedOrder || isStatusUpdating || isCancellingOrder) return;
+    if (!selectedOrder || isStatusUpdating || isPaymentStatusUpdating || isCancellingOrder) return;
 
     if (!canProceedToNextStatus(selectedOrder.orderStatus)) {
       toast.error("No next status available for this order");
@@ -219,27 +284,21 @@ const AdminOrderList = () => {
           updatedOrder.paymentStatus || selectedOrder.paymentStatus;
 
         toast.success(`Order status updated to ${updatedStatus}`);
-
-        setOrders(
-          orders.map((order) =>
-            order._id === selectedOrder._id
-              ? {
-                  ...order,
-                  orderStatus: updatedStatus,
-                  paymentStatus: updatedPaymentStatus,
-                  courier: updatedOrder.courier || order.courier || null,
-                  adminNotes: updatedOrder.adminNotes || order.adminNotes || "",
-                  statusTimeline: Array.isArray(updatedOrder.statusTimeline)
-                    ? updatedOrder.statusTimeline
-                    : order.statusTimeline,
-                }
-              : order,
-          ),
-        );
+        updateOrderInState(selectedOrder._id, {
+          orderStatus: updatedStatus,
+          paymentStatus: updatedPaymentStatus,
+          courier: updatedOrder.courier || selectedOrder.courier || null,
+          adminNotes: updatedOrder.adminNotes || selectedOrder.adminNotes || "",
+          statusTimeline: Array.isArray(updatedOrder.statusTimeline)
+            ? updatedOrder.statusTimeline
+            : selectedOrder.statusTimeline,
+          cancellation: updatedOrder.cancellation || selectedOrder.cancellation,
+          cancellationRequest:
+            updatedOrder.cancellationRequest || selectedOrder.cancellationRequest,
+        });
 
         setShowStatusModal(false);
         setStatusNotes("");
-        setSelectedOrder(null);
       }
     } catch (error) {
       console.error("Error updating status:", error);
@@ -251,7 +310,11 @@ const AdminOrderList = () => {
 
   // Handle cancel order
   const handleCancelOrder = async () => {
-    if (!selectedOrder || isStatusUpdating || isCancellingOrder) return;
+    if (!selectedOrder || isStatusUpdating || isPaymentStatusUpdating || isCancellingOrder) return;
+    if (!canAdminCancelOrder(selectedOrder)) {
+      toast.error("Order cancellation is only available while the order is pending");
+      return;
+    }
 
     try {
       setIsCancellingOrder(true);
@@ -276,35 +339,121 @@ const AdminOrderList = () => {
           updatedOrder.paymentStatus || selectedOrder.paymentStatus || "failed";
 
         toast.success("Order cancelled successfully");
-
-        // Update local state
-        setOrders(
-          orders.map((order) =>
-            order._id === selectedOrder._id
-              ? {
-                  ...order,
-                  orderStatus: updatedStatus,
-                  paymentStatus: updatedPaymentStatus,
-                  courier: updatedOrder.courier || order.courier || null,
-                  adminNotes: updatedOrder.adminNotes || order.adminNotes || "",
-                  statusTimeline: Array.isArray(updatedOrder.statusTimeline)
-                    ? updatedOrder.statusTimeline
-                    : order.statusTimeline,
-                }
-              : order,
-          ),
-        );
+        updateOrderInState(selectedOrder._id, {
+          orderStatus: updatedStatus,
+          paymentStatus: updatedPaymentStatus,
+          courier: updatedOrder.courier || selectedOrder.courier || null,
+          adminNotes: updatedOrder.adminNotes || selectedOrder.adminNotes || "",
+          statusTimeline: Array.isArray(updatedOrder.statusTimeline)
+            ? updatedOrder.statusTimeline
+            : selectedOrder.statusTimeline,
+          cancellation: updatedOrder.cancellation || selectedOrder.cancellation,
+          cancellationRequest:
+            updatedOrder.cancellationRequest || selectedOrder.cancellationRequest,
+        });
 
         setShowCancelConfirm(false);
         setShowStatusModal(false);
         setStatusNotes("");
-        setSelectedOrder(null);
       }
     } catch (error) {
       console.error("Error cancelling order:", error);
       toast.error("Failed to cancel order");
     } finally {
       setIsCancellingOrder(false);
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (nextPaymentStatus) => {
+    if (!selectedOrder?._id || !canManuallyManagePayment(selectedOrder)) return;
+
+    try {
+      setIsPaymentStatusUpdating(true);
+      const token = localStorage.getItem("token");
+      const response = await axios.patch(
+        `${baseUrl}/orders/admin/${selectedOrder._id}/payment-status`,
+        {
+          paymentStatus: nextPaymentStatus,
+          notes: statusNotes || `Payment status updated to ${nextPaymentStatus}`,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          meta: { skipGlobalButtonLoading: true },
+        },
+      );
+
+      if (!response.data?.success) {
+        toast.error(response.data?.message || "Failed to update payment status");
+        return;
+      }
+
+      const updatedOrder = response.data?.order || {};
+      const updatedPaymentStatus =
+        updatedOrder.paymentStatus || nextPaymentStatus || selectedOrder.paymentStatus;
+
+      toast.success(`Payment status updated to ${updatedPaymentStatus}`);
+
+      updateOrderInState(selectedOrder._id, {
+        orderStatus: updatedOrder.orderStatus || selectedOrder.orderStatus,
+        paymentStatus: updatedPaymentStatus,
+        courier: updatedOrder.courier || selectedOrder.courier || null,
+        adminNotes: updatedOrder.adminNotes || selectedOrder.adminNotes || "",
+        statusTimeline: Array.isArray(updatedOrder.statusTimeline)
+          ? updatedOrder.statusTimeline
+          : selectedOrder.statusTimeline,
+        cancellation: updatedOrder.cancellation || selectedOrder.cancellation,
+        cancellationRequest:
+          updatedOrder.cancellationRequest || selectedOrder.cancellationRequest,
+      });
+    } catch (error) {
+      console.error("Error updating payment status:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to update payment status",
+      );
+    } finally {
+      setIsPaymentStatusUpdating(false);
+    }
+  };
+
+  const handleReviewCancellationRequest = async (action) => {
+    if (!selectedOrder?._id) return;
+
+    try {
+      setCancellationReviewAction(action);
+      const token = localStorage.getItem("token");
+      const response = await axios.patch(
+        `${baseUrl}/orders/admin/${selectedOrder._id}/cancellation`,
+        {
+          action,
+          notes: statusNotes || "",
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          meta: { skipGlobalButtonLoading: true },
+        },
+      );
+
+      if (!response.data?.success) {
+        toast.error(response.data?.message || "Failed to review cancellation request");
+        return;
+      }
+
+      toast.success(
+        response.data?.message ||
+          (action === "approve"
+            ? "Cancellation request approved"
+            : "Cancellation request rejected"),
+      );
+      setShowStatusModal(false);
+      setStatusNotes("");
+      await fetchOrders(pagination.currentPage || 1);
+    } catch (error) {
+      console.error("Review cancellation request error:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to review cancellation request",
+      );
+    } finally {
+      setCancellationReviewAction("");
     }
   };
 
@@ -327,6 +476,10 @@ const AdminOrderList = () => {
           ? {
               ...order,
               ...patch,
+              customer: getOrderCustomerProfile({
+                ...order,
+                ...patch,
+              }),
             }
           : order,
       ),
@@ -337,6 +490,10 @@ const AdminOrderList = () => {
         ? {
             ...prev,
             ...patch,
+            customer: getOrderCustomerProfile({
+              ...prev,
+              ...patch,
+            }),
           }
         : prev,
     );
@@ -566,12 +723,7 @@ const AdminOrderList = () => {
 
   // Get payment method display
   const getPaymentMethodDisplay = (order) => {
-    const rawMethod = String(order.paymentMethod || "").trim();
-    const normalizedMethod = rawMethod.toLowerCase().replace(/[_-]+/g, " ");
-    const method =
-      normalizedMethod === "cod" || normalizedMethod === "cash on delivery"
-        ? "Cash on Delivery"
-        : rawMethod.replace(/_/g, " ");
+    const method = formatPaymentMethodLabel(order?.paymentMethod || "");
     const transactionId = order.transactionId || "";
 
     if (transactionId && transactionId !== "N/A") {
@@ -589,58 +741,284 @@ const AdminOrderList = () => {
 
   // Print order
   const printOrder = (order) => {
+    const customer = getOrderCustomerProfile(order);
+    const showPaymentStatus = !isCashOnDeliveryOrder(order);
+    const paymentMethodLabel = formatPaymentMethodLabel(order?.paymentMethod);
+    const orderItems = Array.isArray(order?.items) ? order.items : [];
+    const escapeHtml = (value) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
     const printContent = `
       <html>
         <head>
-          <title>Order ${order.orderNumber}</title>
+          <title>Invoice ${escapeHtml(order.orderNumber)}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            .header { text-align: center; margin-bottom: 30px; }
-            .order-info { margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-            th { background-color: #f5f5f5; }
-            .total { font-weight: bold; font-size: 18px; text-align: right; }
-            @media print { .no-print { display: none; } }
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              background: #f5f5f5;
+              color: #111827;
+              font-family: "Segoe UI", Arial, sans-serif;
+            }
+            .sheet {
+              max-width: 920px;
+              margin: 0 auto;
+              padding: 28px;
+            }
+            .invoice {
+              background: #ffffff;
+              border: 1px solid #e5e7eb;
+              border-radius: 28px;
+              overflow: hidden;
+              box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+            }
+            .hero {
+              padding: 28px 32px;
+              background: linear-gradient(135deg, #0f172a 0%, #111827 55%, #1f2937 100%);
+              color: #ffffff;
+              display: flex;
+              justify-content: space-between;
+              gap: 24px;
+              align-items: flex-start;
+            }
+            .hero h1 { margin: 10px 0 0; font-size: 30px; line-height: 1.1; }
+            .hero p { margin: 6px 0 0; color: rgba(255,255,255,0.72); }
+            .kicker {
+              font-size: 11px;
+              letter-spacing: 0.28em;
+              text-transform: uppercase;
+              color: rgba(255,255,255,0.68);
+            }
+            .badge {
+              display: inline-flex;
+              align-items: center;
+              border-radius: 999px;
+              padding: 10px 16px;
+              background: rgba(255,255,255,0.1);
+              border: 1px solid rgba(255,255,255,0.14);
+              font-size: 12px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.14em;
+            }
+            .body {
+              padding: 28px 32px 32px;
+            }
+            .grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 18px;
+              margin-bottom: 22px;
+            }
+            .card {
+              border: 1px solid #e5e7eb;
+              border-radius: 20px;
+              padding: 18px;
+              background: #fafafa;
+            }
+            .card h3 {
+              margin: 0 0 14px;
+              font-size: 13px;
+              text-transform: uppercase;
+              letter-spacing: 0.18em;
+              color: #6b7280;
+            }
+            .meta-row {
+              display: flex;
+              justify-content: space-between;
+              gap: 12px;
+              margin-bottom: 8px;
+              font-size: 14px;
+            }
+            .meta-row strong { color: #111827; }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 22px;
+              border: 1px solid #e5e7eb;
+              border-radius: 20px;
+              overflow: hidden;
+            }
+            thead { background: #f8fafc; }
+            th, td {
+              padding: 14px 16px;
+              text-align: left;
+              border-bottom: 1px solid #e5e7eb;
+              font-size: 14px;
+            }
+            th {
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.14em;
+              color: #6b7280;
+            }
+            tbody tr:last-child td { border-bottom: none; }
+            .product-name { font-weight: 700; color: #111827; }
+            .product-meta { display: block; margin-top: 4px; font-size: 12px; color: #6b7280; }
+            .totals {
+              margin-top: 24px;
+              margin-left: auto;
+              width: 320px;
+              border: 1px solid #e5e7eb;
+              border-radius: 22px;
+              padding: 18px;
+              background: #fafafa;
+            }
+            .total-row {
+              display: flex;
+              justify-content: space-between;
+              gap: 12px;
+              margin-bottom: 10px;
+              font-size: 14px;
+            }
+            .total-row:last-child { margin-bottom: 0; }
+            .grand-total {
+              border-top: 1px solid #d1d5db;
+              padding-top: 14px;
+              margin-top: 14px;
+              font-size: 18px;
+              font-weight: 800;
+            }
+            .footer {
+              margin-top: 26px;
+              padding-top: 18px;
+              border-top: 1px dashed #d1d5db;
+              color: #6b7280;
+              font-size: 12px;
+              line-height: 1.7;
+            }
+            @media print {
+              body { background: #ffffff; }
+              .sheet { padding: 0; }
+              .invoice { border: none; box-shadow: none; border-radius: 0; }
+            }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>Order Invoice</h1>
-            <h2>Order #${order.orderNumber}</h2>
-          </div>
-          <div class="order-info">
-            <p><strong>Date:</strong> ${formatDate(order.createdAt)}</p>
-            <p><strong>Customer:</strong> ${order.customer.name}</p>
-            <p><strong>Email:</strong> ${order.customer.email}</p>
-            <p><strong>Status:</strong> ${order.orderStatus}</p>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${order.items
-                .map(
-                  (item) => `
-                <tr>
-                  <td>${item.product}</td>
-                  <td>${item.quantity}</td>
-                  <td>Tk ${item.price.toFixed(2)}</td>
-                  <td>Tk ${item.total.toFixed(2)}</td>
-                </tr>
-              `,
-                )
-                .join("")}
-            </tbody>
-          </table>
-          <div class="total">
-            <p>Total: Tk ${order.total.toFixed(2)}</p>
+          <div class="sheet">
+            <div class="invoice">
+              <div class="hero">
+                <div>
+                  <div class="kicker">E-Commerce Office</div>
+                  <h1>Invoice #${escapeHtml(order.orderNumber)}</h1>
+                  <p>Prepared for order management and fulfillment review.</p>
+                </div>
+                <div class="badge">${escapeHtml(order.orderStatus || "pending")}</div>
+              </div>
+
+              <div class="body">
+                <div class="grid">
+                  <div class="card">
+                    <h3>Customer</h3>
+                    <div class="meta-row"><span>Name</span><strong>${escapeHtml(customer.name)}</strong></div>
+                    <div class="meta-row"><span>Email</span><strong>${escapeHtml(customer.email || "N/A")}</strong></div>
+                    <div class="meta-row"><span>Phone</span><strong>${escapeHtml(customer.phone || "N/A")}</strong></div>
+                    <div class="meta-row"><span>Account</span><strong>${escapeHtml(customer.accountType || "Guest")}</strong></div>
+                  </div>
+                  <div class="card">
+                    <h3>Order & Payment</h3>
+                    <div class="meta-row"><span>Date</span><strong>${escapeHtml(formatDate(order.createdAt))}</strong></div>
+                    <div class="meta-row"><span>Payment Method</span><strong>${escapeHtml(paymentMethodLabel)}</strong></div>
+                    ${
+                      showPaymentStatus
+                        ? `<div class="meta-row"><span>Payment Status</span><strong>${escapeHtml(
+                            formatPaymentStatusLabel(order.paymentStatus),
+                          )}</strong></div>`
+                        : `<div class="meta-row"><span>Payment Note</span><strong>Pay on delivery</strong></div>`
+                    }
+                    ${
+                      order?.transactionId && order.transactionId !== "N/A"
+                        ? `<div class="meta-row"><span>Transaction ID</span><strong>${escapeHtml(
+                            order.transactionId,
+                          )}</strong></div>`
+                        : ""
+                    }
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h3>Shipping Address</h3>
+                  <div class="meta-row"><span>Recipient</span><strong>${escapeHtml(customer.name)}</strong></div>
+                  <div class="meta-row"><span>Address</span><strong>${escapeHtml(
+                    order?.shippingAddress?.address || "N/A",
+                  )}</strong></div>
+                  <div class="meta-row"><span>City</span><strong>${escapeHtml(
+                    `${order?.shippingAddress?.city || ""}${order?.shippingAddress?.district ? `, ${order.shippingAddress.district}` : ""}` || "N/A",
+                  )}</strong></div>
+                  <div class="meta-row"><span>Postal</span><strong>${escapeHtml(
+                    `${order?.shippingAddress?.postalCode || ""}${order?.shippingAddress?.country ? `, ${order.shippingAddress.country}` : ""}` || "N/A",
+                  )}</strong></div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Qty</th>
+                      <th>Unit Price</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${orderItems
+                      .map((item) => {
+                        const productName =
+                          typeof item?.product === "string"
+                            ? item.product
+                            : item?.product?.title || "Product";
+                        const meta = [item?.variationLabel, item?.sku, item?.dimensions]
+                          .filter(Boolean)
+                          .join(" | ");
+                        const lineTotal = Number(
+                          item?.total ?? Number(item?.quantity || 0) * Number(item?.price || 0),
+                        );
+
+                        return `
+                          <tr>
+                            <td>
+                              <span class="product-name">${escapeHtml(productName)}</span>
+                              ${
+                                meta
+                                  ? `<span class="product-meta">${escapeHtml(meta)}</span>`
+                                  : ""
+                              }
+                            </td>
+                            <td>${escapeHtml(Number(item?.quantity || 0))}</td>
+                            <td>Tk ${Number(item?.price || 0).toFixed(2)}</td>
+                            <td>Tk ${lineTotal.toFixed(2)}</td>
+                          </tr>
+                        `;
+                      })
+                      .join("")}
+                  </tbody>
+                </table>
+
+                <div class="totals">
+                  <div class="total-row"><span>Subtotal</span><strong>Tk ${Number(order?.subtotal || 0).toFixed(2)}</strong></div>
+                  <div class="total-row"><span>Shipping</span><strong>Tk ${Number(order?.shippingFee || 0).toFixed(2)}</strong></div>
+                  ${
+                    Number(order?.discount || 0) > 0
+                      ? `<div class="total-row"><span>Discount</span><strong>-Tk ${Number(
+                          order.discount || 0,
+                        ).toFixed(2)}</strong></div>`
+                      : ""
+                  }
+                  <div class="total-row grand-total"><span>Total</span><strong>Tk ${Number(
+                    order?.total || 0,
+                  ).toFixed(2)}</strong></div>
+                </div>
+
+                <div class="footer">
+                  This invoice is generated from the admin order management panel. Keep the order
+                  number for tracking, fulfillment, and support follow-up.
+                </div>
+              </div>
+            </div>
           </div>
         </body>
       </html>
@@ -676,6 +1054,8 @@ const AdminOrderList = () => {
     );
   }
 
+  const selectedCustomer = getOrderCustomerProfile(selectedOrder || {});
+
   return (
     <div className="p-2">
       {/* Filters & Search - Mobile Optimized */}
@@ -686,7 +1066,7 @@ const AdminOrderList = () => {
             <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm sm:text-base" />
             <input
               type="text"
-              placeholder="Search orders..."
+              placeholder="Search order, phone, email, or transaction..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
@@ -782,7 +1162,11 @@ const AdminOrderList = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {orders.map((order) => (
+                  {orders.map((order) => {
+                    const customer = getOrderCustomerProfile(order);
+                    const showPaymentStatus = !isCashOnDeliveryOrder(order);
+
+                    return (
                     <tr
                       key={order._id}
                       className="hover:bg-gray-50 transition-colors"
@@ -807,10 +1191,10 @@ const AdminOrderList = () => {
                       <td className="px-4 sm:px-6 py-3 sm:py-4">
                         <div>
                           <div className="font-medium text-gray-900 text-sm sm:text-base">
-                            {order.customer.name}
+                            {customer.name}
                           </div>
                           <div className="text-xs sm:text-sm text-gray-500">
-                            {order.customer.email}
+                            {customer.email || "No email"}
                           </div>
                         </div>
                       </td>
@@ -820,28 +1204,34 @@ const AdminOrderList = () => {
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-3 sm:py-4">
-                        <span
-                          className={`inline-block px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            order.orderStatus,
-                          )}`}
-                        >
-                          {order.orderStatus}
-                        </span>
+                        <div className="space-y-1">
+                          <span
+                            className={`inline-block px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                              order.orderStatus,
+                            )}`}
+                          >
+                            {order.orderStatus}
+                          </span>
+                          {String(order?.cancellation?.requestStatus || "").toLowerCase() ===
+                          "pending" ? (
+                            <div className="inline-block rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+                              Cancellation request
+                            </div>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 sm:px-6 py-3 sm:py-4">
                         <div className="text-xs sm:text-sm">
                           <div className="font-medium">
                             {getPaymentMethodDisplay(order)}
                           </div>
-                          <div
-                            className={`text-xs ${
-                              order.paymentStatus === "completed"
-                                ? "text-green-600"
-                                : "text-yellow-600"
-                            }`}
-                          >
-                            {order.paymentStatus}
-                          </div>
+                          {showPaymentStatus ? (
+                            <div
+                              className={`text-xs ${getPaymentStatusTextClass(order.paymentStatus)}`}
+                            >
+                              {formatPaymentStatusLabel(order.paymentStatus)}
+                            </div>
+                          ) : null}
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-3 sm:py-4">
@@ -879,14 +1269,19 @@ const AdminOrderList = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile Cards */}
             <div className="sm:hidden divide-y divide-gray-200">
-              {orders.map((order) => (
+              {orders.map((order) => {
+                const customer = getOrderCustomerProfile(order);
+                const showPaymentStatus = !isCashOnDeliveryOrder(order);
+
+                return (
                 <div key={order._id} className="p-3 hover:bg-gray-50">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
@@ -917,15 +1312,21 @@ const AdminOrderList = () => {
                       >
                         {order.orderStatus}
                       </span>
+                      {String(order?.cancellation?.requestStatus || "").toLowerCase() ===
+                      "pending" ? (
+                        <div className="mt-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          Cancellation request
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="mb-2">
                     <div className="font-medium text-xs text-gray-900">
-                      {order.customer.name}
+                      {customer.name}
                     </div>
                     <div className="text-xs text-gray-500 truncate">
-                      {order.customer.email}
+                      {customer.email || "No email"}
                     </div>
                   </div>
 
@@ -934,15 +1335,13 @@ const AdminOrderList = () => {
                       <div className="font-medium truncate max-w-[120px]">
                         {getPaymentMethodDisplay(order)}
                       </div>
-                      <div
-                        className={`${
-                          order.paymentStatus === "completed"
-                            ? "text-green-600"
-                            : "text-yellow-600"
-                        }`}
-                      >
-                        {order.paymentStatus}
-                      </div>
+                      {showPaymentStatus ? (
+                        <div
+                          className={getPaymentStatusTextClass(order.paymentStatus)}
+                        >
+                          {formatPaymentStatusLabel(order.paymentStatus)}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -965,7 +1364,8 @@ const AdminOrderList = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Pagination - Responsive */}
@@ -1051,7 +1451,7 @@ const AdminOrderList = () => {
 
       {/* Order Details Modal - Responsive */}
       {showDetailsModal && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/50 overflow-y-auto">
+        <div className="fixed inset-0 app-layer-modal flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1087,25 +1487,25 @@ const AdminOrderList = () => {
                     <p>
                       <span className="text-gray-600">Name:</span>{" "}
                       <span className="font-medium">
-                        {selectedOrder.customer.name}
+                        {selectedCustomer.name}
                       </span>
                     </p>
                     <p>
                       <span className="text-gray-600">Email:</span>{" "}
                       <span className="font-medium">
-                        {selectedOrder.customer.email}
+                        {selectedCustomer.email || "N/A"}
                       </span>
                     </p>
                     <p>
                       <span className="text-gray-600">Phone:</span>{" "}
                       <span className="font-medium">
-                        {selectedOrder.customer.phone}
+                        {selectedCustomer.phone || "N/A"}
                       </span>
                     </p>
                     <p>
                       <span className="text-gray-600">Account:</span>{" "}
                       <span className="font-medium">
-                        {selectedOrder.customer.accountType || "Registered"}
+                        {selectedCustomer.accountType || "Registered"}
                       </span>
                     </p>
                   </div>
@@ -1186,6 +1586,44 @@ const AdminOrderList = () => {
                           ) : null}
                         </div>
                       ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedOrder.cancellation ? (
+                <div className="bg-gray-50 p-3 sm:p-4 rounded-lg mb-4 sm:mb-6">
+                  <h3 className="font-semibold text-black mb-2 sm:mb-3 text-sm sm:text-base">
+                    Cancellation Details
+                  </h3>
+                  <div className="space-y-2 text-xs sm:text-sm">
+                    <p>
+                      <span className="text-gray-600">Action:</span>{" "}
+                      <span className="font-medium">
+                        {selectedOrder.cancellation.actionType || "none"}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="text-gray-600">Request status:</span>{" "}
+                      <span className="font-medium">
+                        {selectedOrder.cancellation.requestStatus || "none"}
+                      </span>
+                    </p>
+                    {selectedOrder.cancellation.requestReason ? (
+                      <p>
+                        <span className="text-gray-600">Reason:</span>{" "}
+                        <span className="font-medium">
+                          {selectedOrder.cancellation.requestReason}
+                        </span>
+                      </p>
+                    ) : null}
+                    {selectedOrder.cancellation.resolutionNote ? (
+                      <p>
+                        <span className="text-gray-600">Admin note:</span>{" "}
+                        <span className="font-medium">
+                          {selectedOrder.cancellation.resolutionNote}
+                        </span>
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -1417,7 +1855,7 @@ const AdminOrderList = () => {
 
       {/* Update Status Modal - Step by Step */}
       {showStatusModal && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/50 overflow-y-auto">
+        <div className="fixed inset-0 app-layer-modal flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1447,7 +1885,7 @@ const AdminOrderList = () => {
                     const isReturned = selectedOrder.orderStatus === "returned";
 
                     return (
-                      <div key={status} className="text-center flex-1">
+                      <div key={status} className="relative z-10 text-center flex-1">
                         <div
                           className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mx-auto mb-1 sm:mb-2 ${
                             isCancelled
@@ -1583,13 +2021,204 @@ const AdminOrderList = () => {
                   </div>
                 )}
 
+              {isCashOnDeliveryOrder(selectedOrder) ? (
+                <div className="mb-4 sm:mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4">
+                  <h4 className="text-sm sm:text-base font-medium text-amber-900">
+                    COD payment flow
+                  </h4>
+                  <p className="mt-1 text-xs sm:text-sm text-amber-800">
+                    Cash on Delivery is collected directly from the customer at delivery, so
+                    there is no separate payment-status control here.
+                  </p>
+                </div>
+              ) : canManuallyManagePayment(selectedOrder) ? (
+                <div className="mb-4 sm:mb-6 rounded-lg border border-sky-200 bg-sky-50 p-3 sm:p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm sm:text-base font-medium text-sky-900">
+                        Payment status control
+                      </h4>
+                      <p className="mt-1 text-xs sm:text-sm text-sky-800">
+                        {isGatewayPaymentOrder(selectedOrder)
+                          ? "Use this after Stripe, SSLCommerz, or other gateway payment is confirmed."
+                          : "Use this after you verify the manual wallet or bank transaction."}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
+                        selectedOrder.paymentStatus === "completed"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : selectedOrder.paymentStatus === "failed"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {selectedOrder.paymentStatus}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-1 text-xs sm:text-sm text-slate-700">
+                    {getTransactionReference(selectedOrder) ? (
+                      <p>
+                        Transaction ID:{" "}
+                        <span className="font-semibold">
+                          {getTransactionReference(selectedOrder)}
+                        </span>
+                      </p>
+                    ) : isGatewayPaymentOrder(selectedOrder) ? (
+                      <p className="text-sky-700">
+                        No manual transaction ID was stored. Match this payment from the
+                        gateway confirmation before marking it as paid.
+                      </p>
+                    ) : (
+                      <p className="text-amber-700">
+                        Add and verify the transaction reference before marking this
+                        manual payment as paid.
+                      </p>
+                    )}
+                    {selectedOrder?.paymentDetails?.gatewayPaymentId ? (
+                      <p>
+                        Gateway Ref:{" "}
+                        <span className="font-semibold">
+                          {selectedOrder.paymentDetails.gatewayPaymentId}
+                        </span>
+                      </p>
+                    ) : null}
+                    {selectedOrder?.paymentDetails?.sentFrom ? (
+                      <p>
+                        Sent from:{" "}
+                        <span className="font-semibold">
+                          {selectedOrder.paymentDetails.sentFrom}
+                        </span>
+                      </p>
+                    ) : null}
+                    {selectedOrder?.paymentDetails?.sentTo ? (
+                      <p>
+                        Sent to:{" "}
+                        <span className="font-semibold">
+                          {selectedOrder.paymentDetails.sentTo}
+                        </span>
+                      </p>
+                    ) : null}
+                    {selectedOrder?.paymentDetails?.accountNo ? (
+                      <p>
+                        Receiving account:{" "}
+                        <span className="font-semibold">
+                          {selectedOrder.paymentDetails.accountNo}
+                        </span>
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdatePaymentStatus("completed")}
+                      disabled={
+                        isPaymentStatusUpdating ||
+                        selectedOrder.paymentStatus === "completed" ||
+                        !canMarkPaymentCompleted(selectedOrder)
+                      }
+                      className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isPaymentStatusUpdating &&
+                      selectedOrder.paymentStatus !== "completed"
+                        ? "Updating..."
+                        : !canMarkPaymentCompleted(selectedOrder)
+                          ? "Transaction ID Needed"
+                          : "Mark Paid"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdatePaymentStatus("pending")}
+                      disabled={
+                        isPaymentStatusUpdating ||
+                        selectedOrder.paymentStatus === "pending"
+                      }
+                      className="rounded-lg border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Set Pending
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdatePaymentStatus("failed")}
+                      disabled={
+                        isPaymentStatusUpdating ||
+                        selectedOrder.paymentStatus === "failed"
+                      }
+                      className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Mark Failed
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {String(selectedOrder?.cancellation?.requestStatus || "").toLowerCase() ===
+              "pending" ? (
+                <div className="mb-4 sm:mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4">
+                  <h4 className="text-sm sm:text-base font-medium text-amber-900">
+                    Pending cancellation request
+                  </h4>
+                  <p className="mt-1 text-xs sm:text-sm text-amber-800">
+                    {selectedOrder.cancellation?.requestReason
+                      ? `Reason: ${selectedOrder.cancellation.requestReason}`
+                      : "Customer requested to cancel this order."}
+                  </p>
+                  <textarea
+                    value={statusNotes}
+                    onChange={(event) => setStatusNotes(event.target.value)}
+                    placeholder="Optional admin note for approval or rejection"
+                    rows="3"
+                    className="mt-3 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                </div>
+              ) : null}
+
               {/* Action Buttons */}
               <div className="space-y-2 sm:space-y-3">
+                {String(selectedOrder?.cancellation?.requestStatus || "").toLowerCase() ===
+                "pending" ? (
+                  <>
+                    <button
+                      onClick={() => handleReviewCancellationRequest("approve")}
+                      disabled={
+                        Boolean(cancellationReviewAction) ||
+                        isCancellingOrder ||
+                        isPaymentStatusUpdating
+                      }
+                      className="w-full py-2.5 sm:py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {cancellationReviewAction === "approve"
+                        ? "Approving cancellation..."
+                        : "Approve Cancellation"}
+                    </button>
+                    <button
+                      onClick={() => handleReviewCancellationRequest("reject")}
+                      disabled={
+                        Boolean(cancellationReviewAction) ||
+                        isCancellingOrder ||
+                        isPaymentStatusUpdating
+                      }
+                      className="w-full py-2.5 sm:py-3 border border-amber-300 text-amber-800 font-medium rounded-lg hover:bg-amber-50 transition-colors text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {cancellationReviewAction === "reject"
+                        ? "Rejecting request..."
+                        : "Reject Cancellation Request"}
+                    </button>
+                  </>
+                ) : null}
+
                 {canProceedToNextStatus(selectedOrder.orderStatus) ? (
                   <>
                     <button
                       onClick={handleProceed}
-                      disabled={isStatusUpdating || isCancellingOrder}
+                      disabled={
+                        isStatusUpdating ||
+                        isPaymentStatusUpdating ||
+                        isCancellingOrder ||
+                        Boolean(cancellationReviewAction)
+                      }
                       className="w-full py-2.5 sm:py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {isStatusUpdating ? (
@@ -1606,10 +2235,15 @@ const AdminOrderList = () => {
                       )}
                     </button>
 
-                    {selectedOrder.orderStatus !== "delivered" ? (
+                    {canAdminCancelOrder(selectedOrder) ? (
                       <button
                         onClick={() => setShowCancelConfirm(true)}
-                        disabled={isStatusUpdating || isCancellingOrder}
+                        disabled={
+                          isStatusUpdating ||
+                          isPaymentStatusUpdating ||
+                          isCancellingOrder ||
+                          Boolean(cancellationReviewAction)
+                        }
                         className="w-full py-2.5 sm:py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         <FiXCircle className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1623,7 +2257,12 @@ const AdminOrderList = () => {
                       setShowStatusModal(false);
                       setStatusNotes("");
                     }}
-                    disabled={isStatusUpdating || isCancellingOrder}
+                    disabled={
+                      isStatusUpdating ||
+                      isPaymentStatusUpdating ||
+                      isCancellingOrder ||
+                      Boolean(cancellationReviewAction)
+                    }
                     className="w-full py-2.5 sm:py-3 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-colors text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     Close
@@ -1635,7 +2274,12 @@ const AdminOrderList = () => {
                     setShowStatusModal(false);
                     setStatusNotes("");
                   }}
-                  disabled={isStatusUpdating || isCancellingOrder}
+                  disabled={
+                    isStatusUpdating ||
+                    isPaymentStatusUpdating ||
+                    isCancellingOrder ||
+                    Boolean(cancellationReviewAction)
+                  }
                   className="w-full py-2.5 sm:py-3 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {selectedOrder.orderStatus === "cancelled" ||
@@ -1651,7 +2295,7 @@ const AdminOrderList = () => {
 
       {/* Cancel Confirmation Modal - Responsive */}
       {showCancelConfirm && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/50 overflow-y-auto">
+        <div className="fixed inset-0 app-layer-modal flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1700,14 +2344,14 @@ const AdminOrderList = () => {
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <button
                   onClick={() => setShowCancelConfirm(false)}
-                  disabled={isCancellingOrder || isStatusUpdating}
+                  disabled={isCancellingOrder || isStatusUpdating || isPaymentStatusUpdating}
                   className="flex-1 py-2.5 sm:py-3 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Go Back
                 </button>
                 <button
                   onClick={handleCancelOrder}
-                  disabled={isCancellingOrder || isStatusUpdating}
+                  disabled={isCancellingOrder || isStatusUpdating || isPaymentStatusUpdating}
                   className="flex-1 py-2.5 sm:py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isCancellingOrder ? (

@@ -9,7 +9,7 @@ import { toast } from "react-hot-toast";
 // Components
 import Sidebar from "../components/Dashboard/Sidebar";
 import MobileHeader from "../components/Dashboard/MobileHeader";
-import { fetchPublicSettings } from "../utils/publicSettings";
+import usePublicSettings from "../hooks/usePublicSettings";
 import {
   canAccessDashboardTab,
   isSuperAdminUser,
@@ -40,13 +40,13 @@ const VendorShippingZones = React.lazy(() => import("./VendorShippingZones"));
 const VendorMessages = React.lazy(() => import("./VendorMessages"));
 const AdminVendorReports = React.lazy(() => import("./AdminVendorReports"));
 const AdminVendorReviews = React.lazy(() => import("./AdminVendorReviews"));
+const AdminProductReviews = React.lazy(() => import("./AdminProductReviews"));
 const AdminProductReports = React.lazy(() => import("./AdminProductReports"));
 const AdminCustomerRisk = React.lazy(() => import("./AdminCustomerRisk"));
 const MyAddresses = React.lazy(() => import("./MyAddresses"));
 const MyWishlist = React.lazy(() => import("./MyWishlist"));
 const ModuleSubscriptions = React.lazy(() => import("./ModuleSubscriptions"));
 const ModuleBookings = React.lazy(() => import("./ModuleBookings"));
-const ModuleAuctions = React.lazy(() => import("./ModuleAuctions"));
 const ModuleStaff = React.lazy(() => import("./ModuleStaff"));
 const ModuleVerifications = React.lazy(() => import("./ModuleVerifications"));
 const ModuleAds = React.lazy(() => import("./ModuleAds"));
@@ -59,13 +59,13 @@ const ModuleInventoryCenter = React.lazy(() => import("./ModuleInventoryCenter")
 const ModuleAccounts = React.lazy(() => import("./ModuleAccounts"));
 const ModuleBrands = React.lazy(() => import("./ModuleBrands"));
 const ModuleVendorPayouts = React.lazy(() => import("./ModuleVendorPayouts"));
-const ModuleVoiceAssistant = React.lazy(() => import("./ModuleVoiceAssistant"));
 const ModuleBusinessReports = React.lazy(() => import("./ModuleBusinessReports"));
 const ModuleWebsiteSetup = React.lazy(() => import("./ModuleWebsiteSetup"));
 const ModuleCampaignOffers = React.lazy(() => import("./ModuleCampaignOffers"));
 const ModuleAdminUsers = React.lazy(() => import("./ModuleAdminUsers"));
 const ModuleSuperAdminControl = React.lazy(() => import("./ModuleSuperAdminControl"));
 const AdminContactedUsers = React.lazy(() => import("./AdminContactedUsers"));
+const NotificationsCenter = React.lazy(() => import("./NotificationsCenter"));
 
 const TabLoadingFallback = () => (
   <div className="app-panel-soft flex min-h-[260px] items-center justify-center">
@@ -81,6 +81,8 @@ const TabContent = React.memo(({
   onMarketplaceModeChange,
   marketplaceMode,
 }) => {
+  const isSingleMode = normalizeMarketplaceMode(marketplaceMode) === "single";
+
   if (
     activeTab !== "dashboard" &&
     !canAccessDashboardTab({
@@ -104,6 +106,16 @@ const TabContent = React.memo(({
   }
 
   if (user?.userType === "vendor" && activeTab === "dashboard") {
+    if (isSingleMode) {
+      return (
+        <div className="app-panel p-8 text-center">
+          <h2 className="mb-2 text-xl font-semibold text-black">Vendor Mode Disabled</h2>
+          <p className="text-gray-600">
+            This account&apos;s vendor workspace is hidden while the store is in single-vendor mode.
+          </p>
+        </div>
+      );
+    }
     return <VendorDashboardHome onTabChange={onTabChange} />;
   }
 
@@ -116,6 +128,8 @@ const TabContent = React.memo(({
       return <Settings user={user} />;
     case "payment-methods":
       return user?.userType === "admin" ? <AdminPaymentMethods /> : null;
+    case "notifications":
+      return <NotificationsCenter user={user} onNavigate={onTabChange} />;
     case "vendors-admin":
       return user?.userType === "admin" ? <AdminVendors /> : null;
     case "create-category":
@@ -164,6 +178,8 @@ const TabContent = React.memo(({
       return user?.userType === "admin" ? <AdminProductReports /> : null;
     case "vendor-reviews":
       return user?.userType === "admin" ? <AdminVendorReviews /> : null;
+    case "product-reviews":
+      return user?.userType === "admin" ? <AdminProductReviews /> : null;
     case "customer-risk":
       return user?.userType === "admin" ? <AdminCustomerRisk /> : null;
     case "customers":
@@ -180,8 +196,6 @@ const TabContent = React.memo(({
       ) : null;
     case "module-bookings":
       return <ModuleBookings />;
-    case "module-auctions":
-      return <ModuleAuctions />;
     case "module-staff":
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleStaff />
@@ -230,13 +244,6 @@ const TabContent = React.memo(({
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleCampaignOffers onOpenTab={onTabChange} />
       ) : null;
-    case "module-voice":
-      return (
-        <ModuleVoiceAssistant
-          user={user}
-          onTabChange={onTabChange}
-        />
-      );
     case "module-admin-users":
       return user?.userType === "admin" ? <ModuleAdminUsers /> : null;
     case "module-super-admin":
@@ -265,13 +272,16 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem("dashboardActiveTab") || "dashboard";
   });
-  const [marketplaceMode, setMarketplaceMode] = useState("multi");
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const { settings, loaded } = usePublicSettings();
+  const marketplaceMode = loaded
+    ? normalizeMarketplaceMode(settings?.marketplaceMode)
+    : "multi";
   const pageMeta = getDashboardTabMeta(activeTab, user);
 
   // Check screen size
@@ -310,27 +320,6 @@ const Dashboard = () => {
       localStorage.setItem("dashboardActiveTab", activeTab);
     }
   }, [activeTab]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadMarketplaceMode = async () => {
-      if (!user) return;
-      try {
-        const settings = await fetchPublicSettings();
-        if (!mounted) return;
-        setMarketplaceMode(normalizeMarketplaceMode(settings?.marketplaceMode));
-      } catch (_error) {
-        if (!mounted) return;
-        setMarketplaceMode("multi");
-      }
-    };
-
-    loadMarketplaceMode();
-    return () => {
-      mounted = false;
-    };
-  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -403,21 +392,19 @@ const Dashboard = () => {
   }, [isMobile, marketplaceMode, navigate, user]);
 
   useEffect(() => {
-    const handleVoiceTabChange = (event) => {
+    const handleDashboardTabChange = (event) => {
       const tab = String(event?.detail?.tab || "").trim();
       if (!tab) return;
       handleTabChange(tab);
     };
 
-    window.addEventListener("voiceDashboardTabChange", handleVoiceTabChange);
+    window.addEventListener("dashboardTabChange", handleDashboardTabChange);
     return () => {
-      window.removeEventListener("voiceDashboardTabChange", handleVoiceTabChange);
+      window.removeEventListener("dashboardTabChange", handleDashboardTabChange);
     };
   }, [handleTabChange]);
 
-  const handleMarketplaceModeChange = (mode) => {
-    setMarketplaceMode(normalizeMarketplaceMode(mode));
-  };
+  const handleMarketplaceModeChange = () => {};
 
   const toggleSidebar = () => {
     if (isMobile) {
@@ -474,7 +461,7 @@ const Dashboard = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/30 md:hidden"
+            className="app-layer-drawer-overlay fixed inset-0 bg-black/30 md:hidden"
             onClick={() => setIsMobileOpen(false)}
           />
         )}
@@ -554,7 +541,7 @@ const Dashboard = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+            className="fixed inset-0 app-layer-modal bg-black/40 flex items-center justify-center p-4"
           >
             <motion.div
               initial={{ y: 20, opacity: 0, scale: 0.95 }}

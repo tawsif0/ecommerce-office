@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Brand = require("../models/Brand");
 const { isAdmin, getVendorForUser, getUserId } = require("../utils/marketplaceAccess");
+const { uploadImageBuffer } = require("../config/cloudinary");
 
 const slugify = (value) =>
   String(value || "")
@@ -87,7 +88,7 @@ exports.createBrand = async (req, res) => {
 
     const slug = await ensureUniqueSlug({
       scope,
-      slug: req.body?.slug || name,
+      slug: name,
     });
 
     const brand = await Brand.create({
@@ -101,7 +102,7 @@ exports.createBrand = async (req, res) => {
     });
 
     const populated = await Brand.findById(brand._id)
-      .populate("vendor", "storeName slug")
+      .populate("vendor", "storeName")
       .populate("createdBy", "name email");
 
     res.status(201).json({
@@ -114,7 +115,7 @@ exports.createBrand = async (req, res) => {
     if (error?.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "Brand slug already exists in this scope",
+        message: "Brand already exists in this scope",
       });
     }
     res.status(500).json({
@@ -140,7 +141,7 @@ exports.getBrands = async (req, res) => {
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
-        { slug: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -150,7 +151,7 @@ exports.getBrands = async (req, res) => {
 
     const [brands, total] = await Promise.all([
       Brand.find(query)
-        .populate("vendor", "storeName slug")
+        .populate("vendor", "storeName")
         .populate("createdBy", "name email")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -203,14 +204,6 @@ exports.updateBrand = async (req, res) => {
       brand.name = name;
     }
 
-    if (req.body?.slug !== undefined) {
-      brand.slug = await ensureUniqueSlug({
-        scope,
-        slug: req.body?.slug || brand.name,
-        excludeId: brand._id,
-      });
-    }
-
     if (req.body?.description !== undefined) {
       brand.description = String(req.body?.description || "").trim();
     }
@@ -226,8 +219,17 @@ exports.updateBrand = async (req, res) => {
       brand.vendor = mongoose.Types.ObjectId.isValid(vendorId) ? vendorId : null;
     }
 
+    brand.slug = await ensureUniqueSlug({
+      scope: {
+        admin: true,
+        vendorId: brand.vendor ? String(brand.vendor) : null,
+      },
+      slug: brand.name,
+      excludeId: brand._id,
+    });
+
     await brand.save();
-    await brand.populate("vendor", "storeName slug");
+    await brand.populate("vendor", "storeName");
     await brand.populate("createdBy", "name email");
 
     res.json({
@@ -240,7 +242,7 @@ exports.updateBrand = async (req, res) => {
     if (error?.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "Brand slug already exists in this scope",
+        message: "Brand already exists in this scope",
       });
     }
     res.status(500).json({
@@ -291,7 +293,8 @@ exports.getPublicBrands = async (req, res) => {
     }
 
     const brands = await Brand.find(query)
-      .select("name slug logoUrl description vendor")
+      .select("name logoUrl description vendor")
+      .populate("vendor", "storeName businessName")
       .sort({ name: 1 })
       .lean();
 
@@ -304,6 +307,44 @@ exports.getPublicBrands = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while fetching public brands",
+    });
+  }
+};
+
+exports.uploadBrandLogo = async (req, res) => {
+  try {
+    const scope = await resolveScope(req, res);
+    if (!scope) return;
+
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: "Brand logo image file is required",
+      });
+    }
+
+    const uploaded = await uploadImageBuffer(req.file.buffer, {
+      folder: "marketplace/brands",
+      resource_type: "image",
+    });
+
+    if (!uploaded?.secure_url) {
+      return res.status(500).json({
+        success: false,
+        message: "Brand logo upload failed",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Brand logo uploaded successfully",
+      logoUrl: String(uploaded.secure_url || "").trim(),
+    });
+  } catch (error) {
+    console.error("Upload brand logo error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while uploading brand logo",
     });
   }
 };

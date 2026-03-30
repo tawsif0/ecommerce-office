@@ -21,6 +21,11 @@ const toInteger = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const safeString = (value) => String(value || "").trim();
 
 const normalizeChannelType = (value) => {
@@ -28,26 +33,39 @@ const normalizeChannelType = (value) => {
   return CHANNEL_TYPES.includes(normalized) ? normalized : "manual";
 };
 
-const isCashOnDeliveryMethod = (method = {}) => {
-  const channelType = safeString(method?.channelType).toLowerCase();
-  if (channelType === "cod") return true;
+const validateGatewayConfig = ({ channelType, gatewayConfig, isActive }) => {
+  if (!isActive) return;
 
-  const lookup = `${safeString(method?.code)} ${safeString(method?.type)}`.toLowerCase();
-  return /\bcod\b|cash[\s_-]*on[\s_-]*delivery/.test(lookup);
+  if (channelType === "stripe") {
+    if (!safeString(gatewayConfig?.publishableKey) || !safeString(gatewayConfig?.secretKey)) {
+      const error = new Error(
+        "Stripe publishable key and secret key are required before activating this method",
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (channelType === "paypal") {
+    if (!safeString(gatewayConfig?.clientId) || !safeString(gatewayConfig?.clientSecret)) {
+      const error = new Error(
+        "PayPal client ID and client secret are required before activating this method",
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (channelType === "sslcommerz") {
+    if (!safeString(gatewayConfig?.storeId) || !safeString(gatewayConfig?.storePassword)) {
+      const error = new Error(
+        "SSLCommerz store ID and store password are required before activating this method",
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+  }
 };
-
-const buildFallbackCashOnDeliveryMethod = () => ({
-  _id: "fallback-cod",
-  code: "cash-on-delivery",
-  type: "Cash on Delivery",
-  channelType: "cod",
-  accountNo: "",
-  instructions: "Pay cash when your order is delivered.",
-  requiresTransactionProof: false,
-  displayOrder: 9999,
-  isActive: true,
-  createdAt: new Date(0),
-});
 
 const parseGatewayConfig = (value) => {
   if (!value) return {};
@@ -116,13 +134,9 @@ const ensureAdminAccess = (req, res) => {
 // Public: active payment methods for checkout
 exports.getPaymentMethods = async (req, res) => {
   try {
-    let paymentMethods = await PaymentMethod.find({ isActive: true })
+    const paymentMethods = await PaymentMethod.find({ isActive: true })
       .sort({ displayOrder: 1, createdAt: -1 })
       .lean();
-
-    if (!paymentMethods.some((method) => isCashOnDeliveryMethod(method))) {
-      paymentMethods = [...paymentMethods, buildFallbackCashOnDeliveryMethod()];
-    }
 
     const normalized = paymentMethods
       .map((method) => sanitizePaymentMethodForPublic(method))
@@ -177,21 +191,24 @@ exports.addPaymentMethod = async (req, res) => {
     }
 
     const gatewayConfig = normalizeGatewayConfig(req.body?.gatewayConfig, channelType);
+    validateGatewayConfig({ channelType, gatewayConfig, isActive });
 
     const paymentMethod = new PaymentMethod({
       code: safeString(req.body?.code),
       type,
       channelType,
       accountNo: channelType === "manual" ? accountNo : "",
-      instructions,
-      requiresTransactionProof:
-        channelType === "manual"
-          ? toBoolean(req.body?.requiresTransactionProof, true)
-          : false,
-      gatewayConfig,
-      displayOrder,
-      isActive,
-      createdBy: req.user._id,
+    instructions,
+    requiresTransactionProof:
+      channelType === "manual"
+        ? toBoolean(req.body?.requiresTransactionProof, true)
+        : false,
+    shippingCost:
+      channelType === "cod" ? Math.max(0, toNumber(req.body?.shippingCost, 0)) : 0,
+    gatewayConfig,
+    displayOrder,
+    isActive,
+    createdBy: req.user._id,
     });
 
     await paymentMethod.save();
@@ -203,7 +220,7 @@ exports.addPaymentMethod = async (req, res) => {
         error: "Payment method code already exists. Use a different code/type.",
       });
     }
-    res.status(500).json({ error: error.message });
+    res.status(error?.statusCode || 500).json({ error: error.message });
   }
 };
 
@@ -238,6 +255,20 @@ exports.updatePaymentMethod = async (req, res) => {
       });
     }
 
+    const nextGatewayConfig =
+      req.body?.gatewayConfig !== undefined
+        ? normalizeGatewayConfig(req.body.gatewayConfig, channelType)
+        : paymentMethod.gatewayConfig;
+    const nextIsActive =
+      req.body?.isActive !== undefined
+        ? toBoolean(req.body.isActive, paymentMethod.isActive)
+        : paymentMethod.isActive;
+    validateGatewayConfig({
+      channelType,
+      gatewayConfig: nextGatewayConfig,
+      isActive: nextIsActive,
+    });
+
     paymentMethod.code =
       req.body?.code !== undefined ? safeString(req.body.code) : paymentMethod.code;
     paymentMethod.type = type;
@@ -253,18 +284,22 @@ exports.updatePaymentMethod = async (req, res) => {
           ? toBoolean(req.body.requiresTransactionProof, true)
           : paymentMethod.requiresTransactionProof
         : false;
-    paymentMethod.gatewayConfig =
-      req.body?.gatewayConfig !== undefined
-        ? normalizeGatewayConfig(req.body.gatewayConfig, channelType)
-        : paymentMethod.gatewayConfig;
+    paymentMethod.shippingCost =
+      channelType === "cod"
+        ? Math.max(
+            0,
+            toNumber(
+              req.body?.shippingCost,
+              paymentMethod.shippingCost || 0,
+            ),
+          )
+        : 0;
+    paymentMethod.gatewayConfig = nextGatewayConfig;
     paymentMethod.displayOrder =
       req.body?.displayOrder !== undefined
         ? toInteger(req.body.displayOrder, paymentMethod.displayOrder || 0)
         : paymentMethod.displayOrder;
-    paymentMethod.isActive =
-      req.body?.isActive !== undefined
-        ? toBoolean(req.body.isActive, paymentMethod.isActive)
-        : paymentMethod.isActive;
+    paymentMethod.isActive = nextIsActive;
     paymentMethod.updatedBy = req.user._id;
     paymentMethod.updatedAt = new Date();
 
@@ -277,7 +312,7 @@ exports.updatePaymentMethod = async (req, res) => {
         error: "Payment method code already exists. Use a different code/type.",
       });
     }
-    res.status(500).json({ error: error.message });
+    res.status(error?.statusCode || 500).json({ error: error.message });
   }
 };
 

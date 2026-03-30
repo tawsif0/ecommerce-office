@@ -24,6 +24,12 @@ import {
 } from "react-icons/fi";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+import {
+  formatOrderEstimatedDeliveryLabel,
+  formatPaymentMethodLabel,
+  formatPaymentStatusLabel,
+  shouldShowPaymentStatus,
+} from "../../utils/orderPresentation";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const ORDER_PROGRESS_STATUSES = [
@@ -33,15 +39,6 @@ const ORDER_PROGRESS_STATUSES = [
   "shipped",
   "delivered",
 ];
-
-const formatPaymentMethodLabel = (value) => {
-  const raw = String(value || "").trim();
-  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
-  if (normalized === "cod" || normalized === "cash on delivery") {
-    return "Cash on Delivery";
-  }
-  return raw.replace(/_/g, " ");
-};
 
 const resolveImageValue = (value) => {
   if (!value) return "";
@@ -306,12 +303,8 @@ const ThankYou = () => {
     }
   };
   const orderItems = Array.isArray(order?.items) ? order.items : [];
-  const estimatedDeliveryLabel =
-    Number(order?.shippingMeta?.estimatedMaxDays || 0) > 0
-      ? Number(order?.shippingMeta?.estimatedMinDays || 0) > 0
-        ? `${order.shippingMeta.estimatedMinDays}-${order.shippingMeta.estimatedMaxDays} business days`
-        : `${order.shippingMeta.estimatedMaxDays} business days`
-      : "3-5 business days";
+  const showPaymentStatus = shouldShowPaymentStatus(order);
+  const estimatedDeliveryLabel = formatOrderEstimatedDeliveryLabel(order);
 
   if (loading) {
     return (
@@ -423,7 +416,9 @@ const ThankYou = () => {
                     {formatPaymentMethodLabel(order.paymentMethod)}
                   </p>
                   <p className="mt-1 text-xs text-white/70 capitalize">
-                    Status: {order.paymentStatus || "pending"}
+                    {showPaymentStatus
+                      ? `Status: ${formatPaymentStatusLabel(order.paymentStatus)}`
+                      : "Collected when the order is delivered"}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -488,7 +483,7 @@ const ThankYou = () => {
                 return (
                   <div key={step.status} className="text-center">
                     <div
-                      className={`mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full shadow-sm ${
+                      className={`relative z-10 mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full shadow-sm ${
                         isActive ? "bg-green-500" : "bg-gray-200"
                       }`}
                     >
@@ -714,23 +709,23 @@ const ThankYou = () => {
                         {formatPaymentMethodLabel(order.paymentMethod)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Status</span>
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          order.paymentStatus === "completed"
-                            ? "bg-green-100 text-green-700"
-                            : order.paymentStatus === "pending"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {(order.paymentStatus || "pending").charAt(0).toUpperCase() +
-                          (order.paymentStatus || "pending").slice(1)}
-                      </span>
-                    </div>
-                    {String(formatPaymentMethodLabel(order.paymentMethod || "")).toLowerCase() ===
-                    "cash on delivery" ? (
+                    {showPaymentStatus ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Status</span>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            order.paymentStatus === "completed"
+                              ? "bg-green-100 text-green-700"
+                              : order.paymentStatus === "pending"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {formatPaymentStatusLabel(order.paymentStatus)}
+                        </span>
+                      </div>
+                    ) : null}
+                    {!showPaymentStatus ? (
                       <div className="rounded-2xl border border-gray-200 bg-white p-3 text-xs leading-5 text-gray-700">
                         Please keep the payable amount ready for delivery confirmation.
                       </div>
@@ -741,7 +736,7 @@ const ThankYou = () => {
             </div>
           </div>
 
-          <div className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+          <div className="storefront-sticky-offset space-y-6 lg:sticky lg:self-start">
             <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
               <h3 className="text-lg font-semibold text-black">Order Actions</h3>
               <div className="mt-6 space-y-5">

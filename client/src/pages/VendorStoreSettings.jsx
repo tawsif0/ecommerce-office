@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+import { FiUpload } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
+import RichTextEditor from "../components/RichTextEditor";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -47,6 +49,9 @@ const VendorStoreSettings = () => {
   const [form, setForm] = useState(initialForm);
   const [vendorStatus, setVendorStatus] = useState("pending");
   const [hasProfile, setHasProfile] = useState(false);
+  const [assetUploading, setAssetUploading] = useState("");
+  const logoInputRef = useRef(null);
+  const bannerInputRef = useRef(null);
 
   const fetchVendorProfile = useCallback(async () => {
     try {
@@ -101,6 +106,40 @@ const VendorStoreSettings = () => {
         [key]: value,
       },
     }));
+  };
+
+  const handleAssetUpload = async (assetType, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setAssetUploading(assetType);
+      const payload = new FormData();
+      payload.append("image", file);
+      payload.append("assetType", assetType);
+
+      const response = await axios.post(`${baseUrl}/vendors/me/assets/upload`, payload, {
+        headers: getAuthHeaders(),
+      });
+
+      const uploadedUrl = String(response?.data?.url || "").trim();
+      if (!uploadedUrl) {
+        throw new Error("Upload failed");
+      }
+
+      setForm((prev) => ({ ...prev, [assetType]: uploadedUrl }));
+      toast.success(response?.data?.message || "Image uploaded");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to upload image");
+    } finally {
+      setAssetUploading("");
+      if (assetType === "logo" && logoInputRef.current) {
+        logoInputRef.current.value = "";
+      }
+      if (assetType === "banner" && bannerInputRef.current) {
+        bannerInputRef.current.value = "";
+      }
+    }
   };
 
   const submitApplyVendor = async () => {
@@ -230,14 +269,18 @@ const VendorStoreSettings = () => {
               className="px-3 py-2.5 border border-gray-200 rounded-lg"
             />
           </div>
-          <textarea
-            name="description"
-            rows={3}
-            value={form.description}
-            onChange={handleChange}
-            placeholder="Store description"
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg mb-4"
-          />
+          <div className="mb-4">
+            <RichTextEditor
+              value={form.description}
+              onChange={(value) =>
+                setForm((prev) => ({
+                  ...prev,
+                  description: value,
+                }))
+              }
+              placeholder="Store description"
+            />
+          </div>
           <button
             onClick={submitApplyVendor}
             disabled={saving}
@@ -294,20 +337,52 @@ const VendorStoreSettings = () => {
               placeholder="Opening hours (e.g. 10AM-10PM)"
               className="px-3 py-2.5 border border-gray-200 rounded-lg"
             />
-            <input
-              name="logo"
-              value={form.logo}
-              onChange={handleChange}
-              placeholder="Logo URL"
-              className="px-3 py-2.5 border border-gray-200 rounded-lg"
-            />
-            <input
-              name="banner"
-              value={form.banner}
-              onChange={handleChange}
-              placeholder="Banner URL"
-              className="px-3 py-2.5 border border-gray-200 rounded-lg"
-            />
+            <div className="space-y-2">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml"
+                onChange={(event) => handleAssetUpload("logo", event)}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={assetUploading === "logo"}
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-60"
+              >
+                <FiUpload className="h-4 w-4" />
+                {assetUploading === "logo" ? "Uploading Logo..." : "Upload Logo"}
+              </button>
+              {form.logo ? (
+                <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3">
+                  <img src={form.logo} alt="Store logo" className="h-full w-auto max-w-full object-contain" />
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml"
+                onChange={(event) => handleAssetUpload("banner", event)}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => bannerInputRef.current?.click()}
+                disabled={assetUploading === "banner"}
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-60"
+              >
+                <FiUpload className="h-4 w-4" />
+                {assetUploading === "banner" ? "Uploading Banner..." : "Upload Banner"}
+              </button>
+              {form.banner ? (
+                <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3">
+                  <img src={form.banner} alt="Store banner" className="h-full w-full rounded object-cover" />
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <textarea
@@ -319,14 +394,18 @@ const VendorStoreSettings = () => {
             className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
           />
 
-          <textarea
-            name="description"
-            rows={3}
-            value={form.description}
-            onChange={handleChange}
-            placeholder="Store description"
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-          />
+          <div>
+            <RichTextEditor
+              value={form.description}
+              onChange={(value) =>
+                setForm((prev) => ({
+                  ...prev,
+                  description: value,
+                }))
+              }
+              placeholder="Store description"
+            />
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
@@ -399,67 +478,71 @@ const VendorStoreSettings = () => {
             Enable store contact form
           </label>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <textarea
-              rows={4}
-              value={form.storePolicies?.shippingPolicy || ""}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  storePolicies: {
-                    ...(prev.storePolicies || {}),
-                    shippingPolicy: e.target.value,
-                  },
-                }))
-              }
-              placeholder="Shipping policy"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-            />
-            <textarea
-              rows={4}
-              value={form.storePolicies?.refundPolicy || ""}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  storePolicies: {
-                    ...(prev.storePolicies || {}),
-                    refundPolicy: e.target.value,
-                  },
-                }))
-              }
-              placeholder="Refund policy"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-            />
-            <textarea
-              rows={4}
-              value={form.storePolicies?.privacyPolicy || ""}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  storePolicies: {
-                    ...(prev.storePolicies || {}),
-                    privacyPolicy: e.target.value,
-                  },
-                }))
-              }
-              placeholder="Privacy policy"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-            />
-            <textarea
-              rows={4}
-              value={form.storePolicies?.termsConditions || ""}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  storePolicies: {
-                    ...(prev.storePolicies || {}),
-                    termsConditions: e.target.value,
-                  },
-                }))
-              }
-              placeholder="Terms & conditions"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-            />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Shipping policy</p>
+              <RichTextEditor
+                value={form.storePolicies?.shippingPolicy || ""}
+                onChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    storePolicies: {
+                      ...(prev.storePolicies || {}),
+                      shippingPolicy: value,
+                    },
+                  }))
+                }
+                placeholder="Shipping policy"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Refund policy</p>
+              <RichTextEditor
+                value={form.storePolicies?.refundPolicy || ""}
+                onChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    storePolicies: {
+                      ...(prev.storePolicies || {}),
+                      refundPolicy: value,
+                    },
+                  }))
+                }
+                placeholder="Refund policy"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Privacy policy</p>
+              <RichTextEditor
+                value={form.storePolicies?.privacyPolicy || ""}
+                onChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    storePolicies: {
+                      ...(prev.storePolicies || {}),
+                      privacyPolicy: value,
+                    },
+                  }))
+                }
+                placeholder="Privacy policy"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Terms & conditions</p>
+              <RichTextEditor
+                value={form.storePolicies?.termsConditions || ""}
+                onChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    storePolicies: {
+                      ...(prev.storePolicies || {}),
+                      termsConditions: value,
+                    },
+                  }))
+                }
+                placeholder="Terms & conditions"
+              />
+            </div>
           </div>
 
           <button

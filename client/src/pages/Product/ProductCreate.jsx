@@ -1,9 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
 import axios from "axios";
+import RichTextEditor from "../../components/RichTextEditor";
+import SearchableSelect from "../../components/SearchableSelect";
+import { stripHtml } from "../../utils/richText";
 import {
   FiImage,
   FiUpload,
@@ -14,6 +17,7 @@ import {
   FiPackage,
   FiBox,
   FiLayers,
+  FiTruck,
   FiX,
   FiPlus,
   FiTrash2,
@@ -38,11 +42,17 @@ const ProductCreate = () => {
     title: "",
     description: "",
     price: "",
+    sku: "",
+    stock: "0",
+    lowStockThreshold: "5",
+    allowBackorder: false,
     category: "",
     productType: "General",
     brand: "",
     weight: "",
     dimensions: "",
+    deliveryMinDays: "2",
+    deliveryMaxDays: "5",
     colors: [],
   });
 
@@ -85,6 +95,20 @@ const ProductCreate = () => {
     { name: "Gray", value: "#6b7280" },
     { name: "Orange", value: "#ea580c" },
   ];
+
+  const brandSelectOptions = useMemo(
+    () =>
+      brandOptions.map((brand) => {
+        const vendorName =
+          brand?.vendor?.storeName || brand?.vendor?.businessName || "";
+        return {
+          value: String(brand?.name || "").trim(),
+          label: String(brand?.name || "").trim(),
+          description: vendorName ? `Vendor brand · ${vendorName}` : "Global brand",
+        };
+      }),
+    [brandOptions],
+  );
 
   const fetchCategories = async () => {
     try {
@@ -263,8 +287,8 @@ const ProductCreate = () => {
           error = "Title must be at least 3 characters";
         break;
       case "description":
-        if (!value.trim()) error = "Description is required";
-        else if (value.trim().length < 10)
+        if (!stripHtml(value)) error = "Description is required";
+        else if (stripHtml(value).length < 10)
           error = "Description must be at least 10 characters";
         break;
       case "price":
@@ -287,7 +311,10 @@ const ProductCreate = () => {
     if (name === "productType") {
       handleProductTypeChange(e);
     } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
+      setForm((prev) => ({
+        ...prev,
+        [name]: e.target.type === "checkbox" ? e.target.checked : value,
+      }));
       if (errors[name]) validateField(name, value);
     }
   };
@@ -408,11 +435,17 @@ const ProductCreate = () => {
       formData.append("title", form.title.trim());
       formData.append("description", form.description.trim());
       formData.append("price", form.price);
+      formData.append("sku", form.sku.trim());
+      formData.append("stock", form.stock || "0");
+      formData.append("lowStockThreshold", form.lowStockThreshold || "5");
+      formData.append("allowBackorder", String(Boolean(form.allowBackorder)));
       formData.append("category", form.category);
       formData.append("productType", form.productType);
       formData.append("brand", form.brand.trim());
       formData.append("weight", form.weight || "0");
       formData.append("dimensions", form.dimensions.trim());
+      formData.append("deliveryMinDays", form.deliveryMinDays || "2");
+      formData.append("deliveryMaxDays", form.deliveryMaxDays || "5");
       formData.append("colors", JSON.stringify(form.colors));
       formData.append(
         "features",
@@ -451,11 +484,17 @@ const ProductCreate = () => {
           title: "",
           description: "",
           price: "",
+          sku: "",
+          stock: "0",
+          lowStockThreshold: "5",
+          allowBackorder: false,
           category: "",
           productType: "General",
           brand: "",
           weight: "",
           dimensions: "",
+          deliveryMinDays: "2",
+          deliveryMaxDays: "5",
           colors: [],
         });
         setFeatures([""]);
@@ -564,20 +603,16 @@ const ProductCreate = () => {
                     <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                       <FiFileText className="mr-2" /> Description *
                     </label>
-                    <textarea
-                      name="description"
+                    <RichTextEditor
                       value={form.description}
-                      onChange={handleChange}
-                      onBlur={() =>
-                        validateField("description", form.description)
-                      }
-                      rows={4}
-                      className={`w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border ${
-                        errors.description
-                          ? "border-red-500"
-                          : "border-gray-300"
-                      } focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base`}
+                      onChange={(value) => {
+                        setForm((prev) => ({ ...prev, description: value }));
+                        if (errors.description) {
+                          validateField("description", value);
+                        }
+                      }}
                       placeholder="Enter product description"
+                      minHeight={220}
                     />
                     {errors.description && (
                       <motion.p
@@ -616,6 +651,60 @@ const ProductCreate = () => {
                         </p>
                       )}
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                    <div>
+                      <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                        <FiTag className="mr-2" /> SKU
+                      </label>
+                      <input
+                        type="text"
+                        name="sku"
+                        value={form.sku}
+                        onChange={handleChange}
+                        placeholder="Enter SKU"
+                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                        <FiPackage className="mr-2" /> Stock Qty
+                      </label>
+                      <input
+                        type="number"
+                        name="stock"
+                        value={form.stock}
+                        onChange={handleChange}
+                        placeholder="0"
+                        min="0"
+                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                        <FiBox className="mr-2" /> Low Stock Alert
+                      </label>
+                      <input
+                        type="number"
+                        name="lowStockThreshold"
+                        value={form.lowStockThreshold}
+                        onChange={handleChange}
+                        placeholder="5"
+                        min="0"
+                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                      />
+                    </div>
+                    <label className="flex items-center justify-between rounded-lg border border-gray-300 px-3 md:px-4 py-2 md:py-3 text-sm text-gray-700">
+                      <span className="font-medium">Allow backorder</span>
+                      <input
+                        type="checkbox"
+                        name="allowBackorder"
+                        checked={Boolean(form.allowBackorder)}
+                        onChange={handleChange}
+                        className="h-4 w-4 rounded border-gray-300 accent-black"
+                      />
+                    </label>
                   </div>
 
                   {/* Product Type */}
@@ -688,22 +777,14 @@ const ProductCreate = () => {
                     <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                       <FiPackage className="mr-2" /> Brand
                     </label>
-                    <input
-                      type="text"
-                      name="brand"
+                    <SearchableSelect
                       value={form.brand}
-                      onChange={handleChange}
-                      placeholder="Enter brand name"
-                      list="brand-options"
-                      className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                      onChange={(value) => setForm((prev) => ({ ...prev, brand: value }))}
+                      options={brandSelectOptions}
+                      placeholder="Select a brand"
+                      searchPlaceholder="Search brands"
+                      emptyLabel="No matching brands found"
                     />
-                    <datalist id="brand-options">
-                      {brandOptions.map((brand) => (
-                        <option key={brand._id || brand.slug || brand.name} value={brand.name}>
-                          {brand.name}
-                        </option>
-                      ))}
-                    </datalist>
                   </div>
 
                   {/* Physical Details */}
@@ -737,6 +818,40 @@ const ProductCreate = () => {
                       />
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                    <div>
+                      <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                        <FiTruck className="mr-2" /> Estimated Delivery Min Days
+                      </label>
+                      <input
+                        type="number"
+                        name="deliveryMinDays"
+                        value={form.deliveryMinDays}
+                        onChange={handleChange}
+                        placeholder="2"
+                        min="0"
+                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                        <FiTruck className="mr-2" /> Estimated Delivery Max Days
+                      </label>
+                      <input
+                        type="number"
+                        name="deliveryMaxDays"
+                        value={form.deliveryMaxDays}
+                        onChange={handleChange}
+                        placeholder="5"
+                        min="0"
+                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                      />
+                    </div>
+                  </div>
+                  <p className="-mt-1 text-xs text-gray-500">
+                    Set the delivery window for this product. It will be shown on the product page and used in checkout messaging.
+                  </p>
 
                   {/* Features */}
                   <div>

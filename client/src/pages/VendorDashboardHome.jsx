@@ -21,6 +21,8 @@ import {
   YAxis,
 } from "recharts";
 import { useAuth } from "../hooks/useAuth";
+import usePublicSettings from "../hooks/usePublicSettings";
+import { normalizeMarketplaceMode } from "../utils/dashboardAccess";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -31,6 +33,7 @@ const getAuthHeaders = () => {
 
 const VendorDashboardHome = ({ onTabChange }) => {
   const { user } = useAuth();
+  const { settings, loaded } = usePublicSettings();
   const [loading, setLoading] = useState(true);
   const [vendor, setVendor] = useState(null);
   const [stats, setStats] = useState({
@@ -80,6 +83,9 @@ const VendorDashboardHome = ({ onTabChange }) => {
     }
   }, []);
 
+  const isSingleMode =
+    !loaded || normalizeMarketplaceMode(settings?.marketplaceMode) === "single";
+
   useEffect(() => {
     if (user?.userType === "vendor") {
       fetchVendorDashboard();
@@ -91,6 +97,17 @@ const VendorDashboardHome = ({ onTabChange }) => {
       <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
         <h2 className="text-xl font-semibold text-black mb-2">Vendor Access Only</h2>
         <p className="text-gray-600">This dashboard is available for vendor accounts.</p>
+      </div>
+    );
+  }
+
+  if (isSingleMode) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+        <h2 className="text-xl font-semibold text-black mb-2">Vendor Workspace Disabled</h2>
+        <p className="text-gray-600">
+          Vendor tools are unavailable while Website Settings is set to single-vendor mode.
+        </p>
       </div>
     );
   }

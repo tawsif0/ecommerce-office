@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchPublicSettings } from "../../utils/publicSettings";
+import { hasHtmlContent } from "../../utils/richText";
 
 const POLICY_MAP = {
   shipment: {
@@ -22,6 +23,10 @@ const POLICY_MAP = {
   privacy: {
     title: "Privacy Policy",
     key: "privacyPolicy",
+  },
+  cancellation: {
+    title: "Cancellation Policy",
+    key: "cancellationPolicy",
   },
 };
 
@@ -87,9 +92,16 @@ const PolicyPage = () => {
         <h1 className="text-3xl font-bold text-black">{policy.title}</h1>
         <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6">
           {content ? (
-            <div className="prose max-w-none whitespace-pre-line text-gray-700">
-              {content}
-            </div>
+            hasHtmlContent(content) ? (
+              <div
+                className="prose max-w-none text-gray-700"
+                dangerouslySetInnerHTML={{ __html: content }}
+              />
+            ) : (
+              <div className="prose max-w-none whitespace-pre-line text-gray-700">
+                {content}
+              </div>
+            )
           ) : (
             <p className="text-gray-600">This policy has not been configured yet.</p>
           )}

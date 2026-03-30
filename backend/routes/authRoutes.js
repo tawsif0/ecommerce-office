@@ -17,11 +17,23 @@ router.post("/forgot-password", authController.forgotPassword);
 router.post("/reset-password/:token", authController.resetPassword);
 router.get("/payment-methods", responseCache(60000), paymentController.getPaymentMethods);
 router.get("/public/settings", responseCache(60000), authController.getPublicSettings);
+router.get("/notifications/stream", authController.streamUserNotifications);
 
 // Protected routes - All users
 router.get("/profile", auth, authController.getUserProfile);
 router.put("/profile", auth, authController.updateUserProfile);
 router.put("/change-password", auth, authController.changePassword);
+router.get("/notifications", auth, authController.getUserNotifications);
+router.patch(
+  "/notifications/read-all",
+  auth,
+  authController.markAllUserNotificationsRead
+);
+router.patch(
+  "/notifications/:notificationId/read",
+  auth,
+  authController.markUserNotificationRead
+);
 router.get("/addresses", auth, authController.getUserAddresses);
 router.post("/addresses", auth, authController.createUserAddress);
 router.put("/addresses/:addressId", auth, authController.updateUserAddress);
@@ -42,6 +54,14 @@ router.post(
   handleMulterError,
   authController.uploadWebsiteLogo
 );
+router.post(
+  "/admin/settings/header-icon-upload",
+  auth,
+  upload.single("icon"),
+  handleMulterError,
+  authController.uploadWebsiteHeaderIcon
+);
+router.get("/admin/settings/sitemap.xml", auth, authController.generateSitemapXml);
 router.get(
   "/admin/marketplace-control",
   auth,
@@ -57,8 +77,6 @@ router.get("/admin/all-users", auth, authController.getAllUsers);
 router.patch("/admin/users/:userId", auth, authController.updateUserByAdmin);
 router.get("/admin/system-stats", auth, authController.getSystemStats);
 router.get("/admin/customer-risk", auth, authController.getCustomerRiskProfiles);
-router.get("/admin/voice-dataset", auth, authController.getVoiceDataset);
-router.post("/admin/voice-plan", auth, authController.planVoiceAction);
 router.get(
   "/admin/customers/:userId/profile",
   auth,

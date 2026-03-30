@@ -54,7 +54,7 @@ const supportTicketSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["general", "order", "payment", "technical", "vendor", "booking", "auction"],
+      enum: ["general", "order", "payment", "technical", "vendor", "booking"],
       default: "general",
     },
     priority: {

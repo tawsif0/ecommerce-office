@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import axios from "axios";
 import toast from "react-hot-toast";
 import ConfirmModal from "../../components/ConfirmModal";
+import RichTextEditor from "../../components/RichTextEditor";
+import { stripHtml } from "../../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -14,11 +16,9 @@ function ModifyCategory() {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("General");
+  const [editDescription, setEditDescription] = useState("");
   const [editImageFile, setEditImageFile] = useState(null);
   const [editImagePreview, setEditImagePreview] = useState("");
-  const [editCommissionType, setEditCommissionType] = useState("inherit");
-  const [editCommissionValue, setEditCommissionValue] = useState("");
-  const [editCommissionFixed, setEditCommissionFixed] = useState("");
   const [editError, setEditError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -137,11 +137,9 @@ function ModifyCategory() {
     setEditingId(category._id);
     setEditName(category.name);
     setEditType(category.type || "General");
+    setEditDescription(category.description || "");
     setEditImageFile(null);
     setEditImagePreview(category.image || "");
-    setEditCommissionType(category.commissionType || "inherit");
-    setEditCommissionValue(String(category.commissionValue ?? ""));
-    setEditCommissionFixed(String(category.commissionFixed ?? ""));
     setEditError("");
   };
 
@@ -149,11 +147,9 @@ function ModifyCategory() {
     setEditingId(null);
     setEditName("");
     setEditType("General");
+    setEditDescription("");
     setEditImageFile(null);
     setEditImagePreview("");
-    setEditCommissionType("inherit");
-    setEditCommissionValue("");
-    setEditCommissionFixed("");
     setEditError("");
   };
 
@@ -174,9 +170,7 @@ function ModifyCategory() {
       const formData = new FormData();
       formData.append("name", editName);
       formData.append("type", editType);
-      formData.append("commissionType", editCommissionType);
-      formData.append("commissionValue", String(Number(editCommissionValue || 0)));
-      formData.append("commissionFixed", String(Number(editCommissionFixed || 0)));
+      formData.append("description", editDescription);
 
       if (editImageFile) {
         formData.append("image", editImageFile);
@@ -198,11 +192,9 @@ function ModifyCategory() {
         setEditingId(null);
         setEditName("");
         setEditType("General");
+        setEditDescription("");
         setEditImageFile(null);
         setEditImagePreview("");
-        setEditCommissionType("inherit");
-        setEditCommissionValue("");
-        setEditCommissionFixed("");
         toast.success("Category updated successfully!");
 
         // Dispatch event for navbar update
@@ -335,78 +327,41 @@ function ModifyCategory() {
                           </label>
                         </div>
                         <div className="flex flex-col md:flex-row md:items-center gap-3">
-                          <div className="flex-1">
-                          <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => {
-                              setEditName(e.target.value);
-                              // Clear error when user starts typing
-                              if (editError) setEditError("");
-                            }}
-                            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
-                              editError
-                                ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                                : "border-gray-300 focus:border-gray-500 focus:ring-gray-500"
-                            } text-gray-900 placeholder-gray-400`}
-                            placeholder="Category name"
-                            autoFocus
-                          />
+                          <div className="flex-1 space-y-3">
+                            <input
+                              type="text"
+                              value={editName}
+                              onChange={(e) => {
+                                setEditName(e.target.value);
+                                if (editError) setEditError("");
+                              }}
+                              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
+                                editError
+                                  ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                                  : "border-gray-300 focus:border-gray-500 focus:ring-gray-500"
+                              } text-gray-900 placeholder-gray-400`}
+                              placeholder="Category name"
+                              autoFocus
+                            />
+                            <RichTextEditor
+                              value={editDescription}
+                              onChange={setEditDescription}
+                              placeholder="Optional category description"
+                              minHeight={180}
+                            />
                           </div>
                           <div className="w-full md:w-auto">
                             <select
                               value={editType}
-                            onChange={(e) => setEditType(e.target.value)}
-                            className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
-                          >
-                            {categoryTypes.map((type) => (
-                              <option key={type} value={type}>
-                                {type}
-                              </option>
-                            ))}
-                          </select>
-                          </div>
-                          <div className="w-full md:w-auto">
-                            <select
-                              value={editCommissionType}
-                            onChange={(e) => setEditCommissionType(e.target.value)}
-                            className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
-                          >
-                            <option value="inherit">Inherit Global</option>
-                            <option value="percentage">Percentage</option>
-                            <option value="fixed">Fixed</option>
-                            <option value="hybrid">Hybrid</option>
-                          </select>
-                          </div>
-                          <div className="w-full md:w-32">
-                            <input
-                              type="number"
-                            min="0"
-                            step="0.01"
-                            value={editCommissionValue}
-                            onChange={(e) => setEditCommissionValue(e.target.value)}
-                            placeholder="%"
-                            disabled={
-                              editCommissionType === "inherit" ||
-                              editCommissionType === "fixed"
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900 disabled:bg-gray-100"
-                          />
-                          </div>
-                          <div className="w-full md:w-36">
-                            <input
-                              type="number"
-                            min="0"
-                            step="0.01"
-                            value={editCommissionFixed}
-                            onChange={(e) => setEditCommissionFixed(e.target.value)}
-                            placeholder="Fixed Tk"
-                            disabled={
-                              editCommissionType === "inherit" ||
-                              editCommissionType === "percentage"
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900 disabled:bg-gray-100"
-                          />
+                              onChange={(e) => setEditType(e.target.value)}
+                              className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
+                            >
+                              {categoryTypes.map((type) => (
+                                <option key={type} value={type}>
+                                  {type}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
                             <button
@@ -476,17 +431,13 @@ function ModifyCategory() {
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 self-start sm:self-center">
                             {category.type || "General"}
                           </span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 self-start sm:self-center">
-                            Commission: {category.commissionType || "inherit"}
-                            {(category.commissionType === "percentage" ||
-                              category.commissionType === "hybrid") &&
-                              ` ${Number(category.commissionValue || 0)}%`}
-                            {(category.commissionType === "fixed" ||
-                              category.commissionType === "hybrid") &&
-                              ` + ${Number(category.commissionFixed || 0)} Tk`}
-                          </span>
                         </div>
                       </div>
+                      {category.description ? (
+                        <p className="mt-2 text-sm text-gray-500 sm:pl-[3.75rem]">
+                          {stripHtml(category.description)}
+                        </p>
+                      ) : null}
                       <div className="flex items-center space-x-2 self-end sm:self-center">
                         <button
                           onClick={() => startEditing(category)}

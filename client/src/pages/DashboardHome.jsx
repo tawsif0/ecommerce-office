@@ -14,7 +14,7 @@ import {
   TicketIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
-import { fetchPublicSettings } from "../utils/publicSettings";
+import usePublicSettings from "../hooks/usePublicSettings";
 import {
   canAccessDashboardTab,
   normalizeMarketplaceMode,
@@ -25,7 +25,6 @@ const baseUrl = import.meta.env.VITE_API_URL;
 
 const DashboardHome = ({ user, onTabChange }) => {
   const [loading, setLoading] = useState(false);
-  const [marketplaceMode, setMarketplaceMode] = useState("multi");
   const [systemStats, setSystemStats] = useState({
     totalUsers: 0,
     activeUsers: 0,
@@ -65,8 +64,12 @@ const DashboardHome = ({ user, onTabChange }) => {
       recentOrders: [],
     },
   });
+  const { settings, loaded } = usePublicSettings();
 
   const isAdmin = user?.userType === "admin";
+  const marketplaceMode = loaded
+    ? normalizeMarketplaceMode(settings?.marketplaceMode)
+    : "single";
   const isSingleMode = normalizeMarketplaceMode(marketplaceMode) === "single";
   const statCardClass = "app-stat-card";
   const panelClass = "app-panel p-5";
@@ -95,28 +98,6 @@ const DashboardHome = ({ user, onTabChange }) => {
       fetchAdminData();
     }
   }, [isAdmin]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadMarketplaceMode = async () => {
-      try {
-        const settings = await fetchPublicSettings();
-        if (!mounted) return;
-        setMarketplaceMode(
-          normalizeMarketplaceMode(settings?.marketplaceMode),
-        );
-      } catch (_error) {
-        if (!mounted) return;
-        setMarketplaceMode("multi");
-      }
-    };
-
-    loadMarketplaceMode();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const fetchAdminData = async () => {
     try {

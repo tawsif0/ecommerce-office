@@ -5,6 +5,8 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import { motion } from "framer-motion";
 import ConfirmModal from "../../components/ConfirmModal";
+import RichTextEditor from "../../components/RichTextEditor";
+import { stripHtml } from "../../utils/richText";
 import {
   FiEdit2,
   FiTrash2,
@@ -518,13 +520,11 @@ function ModifyBanner() {
                       <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                         <FiFileText className="mr-2" /> Description
                       </label>
-                      <textarea
-                        name="description"
+                      <RichTextEditor
                         value={form.description}
-                        onChange={handleChange}
-                        rows={4}
-                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300  focus:border-gray-500 transition-all text-sm md:text-base"
+                        onChange={(value) => setForm((prev) => ({ ...prev, description: value }))}
                         placeholder="Enter banner description"
+                        minHeight={180}
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Description will be displayed if provided
@@ -786,7 +786,7 @@ function ModifyBanner() {
                             )}
                             {banner.description && (
                               <p className="text-gray-600 text-xs md:text-sm mb-3 line-clamp-2">
-                                {banner.description}
+                                {stripHtml(banner.description)}
                               </p>
                             )}
 

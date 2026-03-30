@@ -519,7 +519,7 @@ const AddToCart = () => {
               </div>
             </div>
 
-            <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+            <div className="storefront-sticky-offset space-y-4 lg:sticky lg:self-start">
               <div className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm md:p-6">
                 <h3 className="text-xl font-semibold text-gray-900">Order Summary</h3>
                 <p className="mt-1 text-sm text-gray-500">

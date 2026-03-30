@@ -105,6 +105,50 @@ const addressBookEntrySchema = new mongoose.Schema(
   },
 );
 
+const userNotificationSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    title: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    message: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    link: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    readAt: {
+      type: Date,
+      default: null,
+    },
+    meta: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+  },
+  {
+    _id: true,
+  },
+);
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -170,6 +214,10 @@ const userSchema = new mongoose.Schema({
   },
   addressBook: {
     type: [addressBookEntrySchema],
+    default: [],
+  },
+  notifications: {
+    type: [userNotificationSchema],
     default: [],
   },
   passwordResetToken: String,
@@ -248,6 +296,7 @@ userSchema.methods.toSafeObject = function toSafeObject() {
   delete user.tokens;
   delete user.passwordResetToken;
   delete user.passwordResetExpires;
+  delete user.notifications;
   user.phone = user.originalPhone || user.phone;
   return user;
 };

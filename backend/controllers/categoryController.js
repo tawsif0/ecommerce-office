@@ -13,20 +13,6 @@ const invalidatePublicCategoryCache = () => {
   clearResponseCacheByPrefix("/api/products/public");
 };
 
-const normalizeCommissionType = (value) => {
-  const normalized = String(value || "inherit").trim().toLowerCase();
-  if (["inherit", "percentage", "fixed", "hybrid"].includes(normalized)) {
-    return normalized;
-  }
-  return "inherit";
-};
-
-const toNonNegativeNumber = (value, fallback = 0) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
-  return parsed;
-};
-
 const normalizeCategoryImage = (value) => {
   const normalized = String(value || "").trim();
   return normalized;
@@ -43,7 +29,7 @@ const uploadCategoryImage = async (file) => {
 const createCategory = async (req, res) => {
   let uploadedImagePublicId = "";
   try {
-    const { name, type, commissionType, commissionValue, commissionFixed } = req.body;
+    const { name, type, description } = req.body;
 
     // Check if category already exists
     const categoryExists = await Category.findOne({ name });
@@ -70,11 +56,9 @@ const createCategory = async (req, res) => {
     const category = await Category.create({
       name,
       type: type || "General",
+      description: String(description || "").trim(),
       image: normalizeCategoryImage(image),
       imagePublicId,
-      commissionType: normalizeCommissionType(commissionType),
-      commissionValue: toNonNegativeNumber(commissionValue, 0),
-      commissionFixed: toNonNegativeNumber(commissionFixed, 0),
       isActive: true,
       updatedAt: Date.now(),
     });
@@ -104,7 +88,7 @@ const createCategory = async (req, res) => {
 const getPublicCategories = async (req, res) => {
   try {
     const categories = await Category.find({ isActive: true })
-      .select("name type image _id")
+      .select("name type description image _id")
       .sort({ name: 1 })
       .lean();
 
@@ -179,7 +163,7 @@ const getCategory = async (req, res) => {
 const updateCategory = async (req, res) => {
   let uploadedImagePublicId = "";
   try {
-    const { name, type, isActive, commissionType, commissionValue, commissionFixed } = req.body;
+    const { name, type, description, isActive } = req.body;
 
     let category = await Category.findById(req.params.id);
     if (!category) {
@@ -218,20 +202,12 @@ const updateCategory = async (req, res) => {
       {
         name,
         type: type || category.type,
+        description:
+          description !== undefined
+            ? String(description || "").trim()
+            : category.description || "",
         image: normalizeCategoryImage(nextImage),
         imagePublicId: nextImagePublicId,
-        commissionType:
-          commissionType !== undefined
-            ? normalizeCommissionType(commissionType)
-            : category.commissionType || "inherit",
-        commissionValue:
-          commissionValue !== undefined
-            ? toNonNegativeNumber(commissionValue, 0)
-            : category.commissionValue || 0,
-        commissionFixed:
-          commissionFixed !== undefined
-            ? toNonNegativeNumber(commissionFixed, 0)
-            : category.commissionFixed || 0,
         isActive: isActive !== undefined ? isActive : category.isActive,
         updatedAt: Date.now(),
       },

@@ -128,6 +128,7 @@ const DEFAULT_SETTINGS = {
     logoMode: "image",
     logoText: "",
     logoUrl: "",
+    headerIconUrl: "",
     themeColor: "#000000",
     fontFamily: "inherit",
   },
@@ -150,6 +151,8 @@ const DEFAULT_SETTINGS = {
     termsConditions: "",
     returnPolicy: "",
     privacyPolicy: "",
+    cancellationPolicy: "",
+    cancellationWindowDays: 1,
   },
   integrations: {
     facebookPixelId: "",
@@ -292,10 +295,21 @@ const mergeSettings = (incoming = {}) => {
       logoMode: normalizeLogoMode(incoming?.website?.logoMode),
       logoText: String(incoming?.website?.logoText || "").trim(),
       logoUrl: String(incoming?.website?.logoUrl || "").trim(),
+      headerIconUrl: String(
+        incoming?.website?.headerIconUrl || incoming?.website?.headerIcon || "",
+      ).trim(),
     },
     contact: { ...DEFAULT_SETTINGS.contact, ...(incoming.contact || {}) },
     social: { ...DEFAULT_SETTINGS.social, ...(incoming.social || {}) },
-    policies: { ...DEFAULT_SETTINGS.policies, ...(incoming.policies || {}) },
+    policies: {
+      ...DEFAULT_SETTINGS.policies,
+      ...(incoming.policies || {}),
+      cancellationWindowDays: Number.isFinite(
+        parseInt(incoming?.policies?.cancellationWindowDays, 10),
+      )
+        ? Math.max(0, parseInt(incoming?.policies?.cancellationWindowDays, 10))
+        : 1,
+    },
     integrations: {
       ...DEFAULT_SETTINGS.integrations,
       ...(incoming.integrations || {}),
@@ -448,4 +462,41 @@ export const toPublicAssetUrl = (value) => {
   }
 
   return baseUrl ? `${baseUrl}/${raw.replace(/^\/+/, "")}` : raw;
+};
+
+let defaultDocumentTitle = "";
+let defaultFaviconHref = "";
+
+export const applyPublicSettingsDocument = (settings = {}) => {
+  if (typeof document === "undefined") return;
+
+  const website = settings?.website || {};
+  const storeName = String(website?.storeName || "").trim() || "E-Commerce";
+  const iconValue = String(website?.headerIconUrl || website?.logoUrl || "").trim();
+
+  if (!defaultDocumentTitle) {
+    defaultDocumentTitle = String(document.title || "E-Commerce").trim() || "E-Commerce";
+  }
+
+  document.title = storeName || defaultDocumentTitle;
+
+  if (!defaultFaviconHref) {
+    defaultFaviconHref =
+      document
+        .querySelector("link[data-website-favicon='true']")
+        ?.getAttribute("href") || "/vite.png";
+  }
+
+  const resolvedIcon = toPublicAssetUrl(iconValue) || defaultFaviconHref || "/vite.png";
+  let faviconLink = document.querySelector("link[data-website-favicon='true']");
+
+  if (!faviconLink) {
+    faviconLink = document.createElement("link");
+    faviconLink.setAttribute("rel", "icon");
+    faviconLink.setAttribute("data-website-favicon", "true");
+    document.head.appendChild(faviconLink);
+  }
+
+  faviconLink.setAttribute("rel", "icon");
+  faviconLink.setAttribute("href", resolvedIcon);
 };

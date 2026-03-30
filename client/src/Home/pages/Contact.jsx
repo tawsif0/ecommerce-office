@@ -11,6 +11,8 @@ import {
 } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import usePublicSettings from "../../hooks/usePublicSettings";
+import RichTextEditor from "../../components/RichTextEditor";
+import { stripHtml } from "../../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -36,14 +38,96 @@ const withProtocol = (value) => {
   return `https://${trimmed}`;
 };
 
-const getMapEmbedUrl = (address, addressLink) => {
-  const normalizedLink = withProtocol(addressLink);
-  if (normalizedLink.includes("output=embed")) return normalizedLink;
+const fallbackMapUrl =
+  "https://www.google.com/maps?q=Dhaka+Bangladesh&output=embed";
 
-  const normalizedAddress = String(address || "").trim() || "Dhaka Bangladesh";
-  return `https://maps.google.com/maps?q=${encodeURIComponent(
-    normalizedAddress,
-  )}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
+const getMapLinkUrl = (addressLink, address = "") => {
+  const directLink = withProtocol(addressLink);
+  if (directLink) return directLink;
+  if (address) {
+    return `https://maps.google.com/?q=${encodeURIComponent(address)}`;
+  }
+  return "https://maps.google.com";
+};
+
+const getMapEmbedUrl = (addressLink, address = "") => {
+  const directLink = withProtocol(addressLink);
+  const fallbackQuery = String(address || "").trim();
+
+  const getCoordinateMatch = (value) => {
+    const source = String(value || "");
+    const atMatch = source.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:,(\d+(?:\.\d+)?)z?)?/i);
+    if (atMatch) {
+      return {
+        lat: atMatch[1],
+        lng: atMatch[2],
+        zoom: atMatch[3] || "",
+      };
+    }
+
+    const dataMatch = source.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i);
+    if (dataMatch) {
+      return {
+        lat: dataMatch[1],
+        lng: dataMatch[2],
+        zoom: "",
+      };
+    }
+
+    return null;
+  };
+
+  if (!directLink) {
+    return fallbackQuery
+      ? `https://www.google.com/maps?q=${encodeURIComponent(fallbackQuery)}&output=embed`
+      : fallbackMapUrl;
+  }
+
+  try {
+    const url = new URL(directLink);
+    const hostname = url.hostname.replace(/^www\./i, "").toLowerCase();
+
+    if (!hostname.includes("google.") && hostname !== "maps.app.goo.gl") {
+      return directLink;
+    }
+
+    if (url.pathname.includes("/maps/embed") || url.searchParams.get("output") === "embed") {
+      return directLink;
+    }
+
+    const coordinates = getCoordinateMatch(directLink);
+    if (coordinates?.lat && coordinates?.lng) {
+      const query = `${coordinates.lat},${coordinates.lng}`;
+      const zoomPart = coordinates.zoom ? `&z=${encodeURIComponent(coordinates.zoom)}` : "";
+      return `https://www.google.com/maps?q=${encodeURIComponent(query)}${zoomPart}&output=embed`;
+    }
+
+    let query =
+      url.searchParams.get("q") ||
+      url.searchParams.get("query") ||
+      url.searchParams.get("destination") ||
+      "";
+
+    if (!query && url.pathname.includes("/place/")) {
+      query = decodeURIComponent(
+        url.pathname.split("/place/")[1]?.split("/")[0] || "",
+      ).replace(/\+/g, " ");
+    }
+
+    if (!query) {
+      query = fallbackQuery;
+    }
+
+    if (query) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
+    }
+
+    return fallbackMapUrl;
+  } catch {
+    return fallbackQuery
+      ? `https://www.google.com/maps?q=${encodeURIComponent(fallbackQuery)}&output=embed`
+      : fallbackMapUrl;
+  }
 };
 
 const Contact = () => {
@@ -68,14 +152,10 @@ const Contact = () => {
       phone1: String(contact?.phone1 || "+880 1700-000000").trim(),
       phone2: String(contact?.phone2 || "").trim(),
       address:
-        String(contact?.address || "").trim() ||
+        stripHtml(contact?.address) ||
         "Shop 12, Level 3, Bashundhara City, Panthapath, Dhaka 1215, Bangladesh",
-      addressLink:
-        withProtocol(contact?.addressLink) ||
-        `https://maps.google.com/?q=${encodeURIComponent(
-          String(contact?.address || "Dhaka Bangladesh").trim(),
-        )}`,
-      mapUrl: getMapEmbedUrl(contact?.address, contact?.addressLink),
+      addressLink: getMapLinkUrl(contact?.addressLink, stripHtml(contact?.address)),
+      mapUrl: getMapEmbedUrl(contact?.addressLink, stripHtml(contact?.address)),
     }),
     [contact],
   );
@@ -122,7 +202,12 @@ const Contact = () => {
       message: String(formData.message || "").trim(),
     };
 
-    if (!payload.name || !payload.email || !payload.subject || !payload.message) {
+    if (
+      !payload.name ||
+      !payload.email ||
+      !payload.subject ||
+      !stripHtml(payload.message)
+    ) {
       toast.error("Name, email, subject, and message are required");
       return;
     }
@@ -284,14 +369,13 @@ const Contact = () => {
                     <label className="text-sm font-medium text-gray-700">
                       Your Message *
                     </label>
-                    <textarea
-                      name="message"
+                    <RichTextEditor
                       value={formData.message}
-                      onChange={handleChange}
-                      required
-                      rows={7}
-                      className="w-full resize-none rounded-xl border-2 border-gray-200 bg-white px-4 py-3 transition-all duration-300 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10"
+                      onChange={(value) =>
+                        setFormData((current) => ({ ...current, message: value }))
+                      }
                       placeholder="Tell us how we can help you..."
+                      minHeight={220}
                     />
                   </div>
 

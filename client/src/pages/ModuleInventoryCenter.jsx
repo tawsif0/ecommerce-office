@@ -56,7 +56,7 @@ const getStockStatus = (product) => {
 const openDashboardTab = (tab) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem("dashboardActiveTab", tab);
-  window.dispatchEvent(new CustomEvent("voiceDashboardTabChange", { detail: { tab } }));
+  window.dispatchEvent(new CustomEvent("dashboardTabChange", { detail: { tab } }));
 };
 
 const ModuleInventoryCenter = () => {
@@ -89,6 +89,19 @@ const ModuleInventoryCenter = () => {
   useEffect(() => {
     loadInventory();
   }, [loadInventory]);
+
+  useEffect(() => {
+    if (!isAdminOrVendor) return undefined;
+
+    const handleInventoryRefresh = () => {
+      loadInventory();
+    };
+
+    window.addEventListener("productCreated", handleInventoryRefresh);
+    return () => {
+      window.removeEventListener("productCreated", handleInventoryRefresh);
+    };
+  }, [isAdminOrVendor, loadInventory]);
 
   const summary = useMemo(() => {
     return products.reduce(

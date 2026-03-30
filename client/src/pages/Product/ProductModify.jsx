@@ -1,10 +1,13 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { motion } from "framer-motion";
 import ConfirmModal from "../../components/ConfirmModal";
+import RichTextEditor from "../../components/RichTextEditor";
+import SearchableSelect from "../../components/SearchableSelect";
+import { stripHtml } from "../../utils/richText";
 import {
   FiEdit2,
   FiTrash2,
@@ -33,6 +36,7 @@ function ProductModify({ initialMode = "list" }) {
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [publishingId, setPublishingId] = useState(null);
   const [mainImageFile, setMainImageFile] = useState(null);
   const [mainImagePreview, setMainImagePreview] = useState("");
   const [galleryFiles, setGalleryFiles] = useState([]);
@@ -51,9 +55,7 @@ function ProductModify({ initialMode = "list" }) {
     price: "",
     salePrice: "",
     priceType: "single",
-    commissionType: "inherit",
-    commissionValue: "",
-    commissionFixed: "",
+    publicationStatus: "draft",
     category: "",
     productType: "General",
     marketplaceType: "simple",
@@ -75,7 +77,6 @@ function ProductModify({ initialMode = "list" }) {
     brand: "",
     weight: "",
     dimensions: "",
-    colors: [],
   });
 
   const [errors, setErrors] = useState({});
@@ -85,6 +86,7 @@ function ProductModify({ initialMode = "list" }) {
   ]);
   const [customColorValue, setCustomColorValue] = useState("#2563eb");
   const [brandOptions, setBrandOptions] = useState([]);
+  const [variantDefinitions, setVariantDefinitions] = useState([]);
 
   // Product type options
   const productTypes = [
@@ -96,10 +98,7 @@ function ProductModify({ initialMode = "list" }) {
   ];
   const marketplaceTypes = [
     { value: "simple", label: "Simple Product" },
-    { value: "variable", label: "Variable Product" },
     { value: "digital", label: "Digital Product" },
-    { value: "service", label: "Service Product" },
-    { value: "grouped", label: "Grouped Product" },
   ];
   const priceTypes = [
     { value: "single", label: "Single Price" },
@@ -122,6 +121,120 @@ function ProductModify({ initialMode = "list" }) {
     { name: "Gray", value: "#6b7280" },
     { name: "Orange", value: "#ea580c" },
   ];
+
+  const createVariantOption = (preset = "custom") =>
+    preset === "color"
+      ? { label: "Black", value: "#000000", colorHex: "#000000" }
+      : { label: "", value: "", colorHex: "" };
+
+  const createVariantDefinition = (preset = "size") => ({
+    preset,
+    name: preset === "size" ? "Size" : preset === "color" ? "Color" : "",
+    options: [createVariantOption(preset)],
+  });
+
+  const normalizeVariantDefinitionsForForm = (definitions = [], fallbackColors = []) => {
+    if (Array.isArray(definitions) && definitions.length > 0) {
+      return definitions.map((definition) => ({
+        preset: ["size", "color", "custom"].includes(String(definition?.preset || "custom"))
+          ? String(definition.preset || "custom")
+          : "custom",
+        name: String(definition?.name || "").trim(),
+        options: Array.isArray(definition?.options) && definition.options.length > 0
+          ? definition.options.map((option) => ({
+              label: String(option?.label || option?.value || option?.colorHex || "").trim(),
+              value: String(option?.value || option?.label || option?.colorHex || "").trim(),
+              colorHex: String(option?.colorHex || "").trim(),
+            }))
+          : [createVariantOption(String(definition?.preset || "custom"))],
+      }));
+    }
+
+    if (Array.isArray(fallbackColors) && fallbackColors.length > 0) {
+      return [
+        {
+          preset: "color",
+          name: "Color",
+          options: fallbackColors.map((color) => ({
+            label: String(color || "").trim(),
+            value: String(color || "").trim(),
+            colorHex: String(color || "").trim(),
+          })),
+        },
+      ];
+    }
+
+    return [];
+  };
+
+  const getNormalizedVariantDefinitions = () =>
+    variantDefinitions
+      .map((definition) => {
+        const preset = ["size", "color", "custom"].includes(
+          String(definition?.preset || "custom"),
+        )
+          ? String(definition.preset || "custom")
+          : "custom";
+        const name =
+          preset === "size"
+            ? "Size"
+            : preset === "color"
+              ? "Color"
+              : String(definition?.name || "").trim();
+        const options = Array.isArray(definition?.options)
+          ? definition.options
+              .map((option) => {
+                const label = String(option?.label || option?.value || "").trim();
+                const value = String(option?.value || option?.label || "").trim();
+                const colorHex = String(option?.colorHex || "").trim().toLowerCase();
+
+                if (preset === "color") {
+                  const resolvedHex =
+                    /^#[0-9a-fA-F]{6}$/.test(colorHex)
+                      ? colorHex
+                      : /^#[0-9a-fA-F]{6}$/.test(value)
+                        ? value.toLowerCase()
+                        : /^#[0-9a-fA-F]{6}$/.test(label)
+                          ? label.toLowerCase()
+                          : "";
+                  if (!resolvedHex) return null;
+                  return {
+                    label: label || resolvedHex,
+                    value: value || resolvedHex,
+                    colorHex: resolvedHex,
+                  };
+                }
+
+                if (!label && !value) return null;
+                return {
+                  label: label || value,
+                  value: value || label,
+                  colorHex: "",
+                };
+              })
+              .filter(Boolean)
+          : [];
+
+        if (!options.length) return null;
+        if (preset === "custom" && !name) return null;
+
+        return { preset, name, options };
+      })
+      .filter(Boolean);
+
+  const brandSelectOptions = useMemo(
+    () =>
+      brandOptions.map((brand) => {
+        const vendorName =
+          brand?.vendor?.storeName || brand?.vendor?.businessName || "";
+        return {
+          value: String(brand?.name || "").trim(),
+          label: String(brand?.name || "").trim(),
+          description: vendorName ? `Vendor brand · ${vendorName}` : "Global brand",
+        };
+      }),
+    [brandOptions],
+  );
 
   const getToken = () => {
     return localStorage.getItem("token");
@@ -416,9 +529,7 @@ function ProductModify({ initialMode = "list" }) {
       price: "",
       salePrice: "",
       priceType: "single",
-      commissionType: "inherit",
-      commissionValue: "",
-      commissionFixed: "",
+      publicationStatus: "draft",
       category: "",
       productType: "General",
       marketplaceType: "simple",
@@ -440,7 +551,6 @@ function ProductModify({ initialMode = "list" }) {
       brand: "",
       weight: "",
       dimensions: "",
-      colors: [],
     });
     setFeatures([""]);
     setSpecifications([{ key: "", value: "" }]);
@@ -454,6 +564,7 @@ function ProductModify({ initialMode = "list" }) {
     setCurrentGalleryImageIds([]);
     setErrors({});
     setCustomColorValue("#2563eb");
+    setVariantDefinitions([]);
     setEditingId(null);
   };
 
@@ -486,21 +597,11 @@ function ProductModify({ initialMode = "list" }) {
         )
           ? String(productData.priceType || "single")
           : "single",
-        commissionType: ["inherit", "percentage", "fixed", "hybrid"].includes(
-          String(productData.commissionType || "inherit"),
-        )
-          ? String(productData.commissionType || "inherit")
-          : "inherit",
-        commissionValue:
-          productData.commissionValue !== undefined &&
-          productData.commissionValue !== null
-            ? String(productData.commissionValue)
-            : "",
-        commissionFixed:
-          productData.commissionFixed !== undefined &&
-          productData.commissionFixed !== null
-            ? String(productData.commissionFixed)
-            : "",
+        publicationStatus:
+          String(productData.publicationStatus || "draft").trim().toLowerCase() ===
+          "published"
+            ? "published"
+            : "draft",
         category: productData.category?._id || productData.category || "",
         productType: productData.productType || "General",
         marketplaceType: allowedMarketplaceTypeValues.has(
@@ -568,13 +669,14 @@ function ProductModify({ initialMode = "list" }) {
         brand: productData.brand || "",
         weight: productData.weight || "",
         dimensions: productData.dimensions || "",
-        colors: productData.colors || [],
       });
-      setCustomColorValue(
-        /^#[0-9a-fA-F]{6}$/.test(String(productData.colors?.[0] || ""))
-          ? String(productData.colors[0]).toLowerCase()
-          : "#2563eb",
+      setVariantDefinitions(
+        normalizeVariantDefinitionsForForm(
+          productData.variantDefinitions || [],
+          productData.colors || [],
+        ),
       );
+      setCustomColorValue("#2563eb");
 
       setFeatures(
         productData.features?.length > 0 ? productData.features : [""],
@@ -714,15 +816,17 @@ function ProductModify({ initialMode = "list" }) {
 
   const validateField = (name, value) => {
     let error = "";
+    const normalizedValue = String(value || "");
+    const plainValue = stripHtml(normalizedValue);
     switch (name) {
       case "title":
-        if (!value.trim()) error = "Product title is required";
-        else if (value.trim().length < 3)
+        if (!normalizedValue.trim()) error = "Product title is required";
+        else if (normalizedValue.trim().length < 3)
           error = "Title must be at least 3 characters";
         break;
       case "description":
-        if (!value.trim()) error = "Description is required";
-        else if (value.trim().length < 10)
+        if (!plainValue) error = "Description is required";
+        else if (plainValue.length < 10)
           error = "Description must be at least 10 characters";
         break;
       case "price":
@@ -754,9 +858,8 @@ function ProductModify({ initialMode = "list" }) {
     } else if (name === "marketplaceType") {
       setForm((prev) => {
         const updated = { ...prev, [name]: nextValue };
-        if (["variable", "grouped"].includes(nextValue)) {
-          updated.priceType = "single";
-          updated.salePrice = "";
+        if (nextValue !== "digital") {
+          updated.downloadUrl = "";
           updated.isRecurring = false;
           updated.recurringInterval = "monthly";
           updated.recurringIntervalCount = "1";
@@ -804,7 +907,7 @@ function ProductModify({ initialMode = "list" }) {
           };
         }
 
-        if (prev.priceType === "tba" || ["variable", "grouped"].includes(prev.marketplaceType)) {
+        if (prev.priceType === "tba" || prev.marketplaceType !== "digital") {
           return {
             ...base,
             isRecurring: false,
@@ -896,7 +999,193 @@ function ProductModify({ initialMode = "list" }) {
     }
   };
 
-  const validateForm = () => {
+  const handleTogglePublication = async (product) => {
+    const productId = String(product?._id || "").trim();
+    if (!productId) return;
+
+    const currentStatus =
+      String(product?.publicationStatus || "draft").trim().toLowerCase() ===
+      "published"
+        ? "published"
+        : "draft";
+    const nextStatus = currentStatus === "published" ? "draft" : "published";
+    const toastId = toast.loading(
+      nextStatus === "published"
+        ? "Publishing product..."
+        : "Moving product back to draft...",
+    );
+
+    try {
+      setPublishingId(productId);
+      const payload = new FormData();
+      payload.append("publicationStatus", nextStatus);
+
+      const response = await axios.put(`${baseUrl}/products/${productId}`, payload, {
+        headers: getAuthHeaders(),
+      });
+      const updatedProduct = response?.data?.product || response?.data?.data || {};
+
+      toast.success(
+        nextStatus === "published"
+          ? "Product published successfully"
+          : "Product moved to draft successfully",
+        { id: toastId },
+      );
+      setProducts((prev) =>
+        prev.map((entry) =>
+          String(entry?._id || "") === productId
+            ? {
+                ...entry,
+                ...updatedProduct,
+                publicationStatus: updatedProduct.publicationStatus || nextStatus,
+              }
+            : entry,
+        ),
+      );
+      if (String(editingId || "") === productId) {
+        setForm((prev) => ({
+          ...prev,
+          publicationStatus:
+            String(updatedProduct.publicationStatus || nextStatus).trim().toLowerCase() ===
+            "published"
+              ? "published"
+              : "draft",
+        }));
+      }
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          `Failed to ${nextStatus === "published" ? "publish" : "save draft"}`,
+        { id: toastId },
+      );
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const handleVariantDefinitionAdd = (preset = "size") => {
+    setVariantDefinitions((prev) => [...prev, createVariantDefinition(preset)]);
+  };
+
+  const handleVariantDefinitionRemove = (index) => {
+    setVariantDefinitions((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+  };
+
+  const handleVariantDefinitionChange = (index, field, value) => {
+    setVariantDefinitions((prev) =>
+      prev.map((definition, currentIndex) => {
+        if (currentIndex !== index) return definition;
+
+        if (field === "preset") {
+          const preset = ["size", "color", "custom"].includes(String(value || "custom"))
+            ? String(value || "custom")
+            : "custom";
+          return {
+            preset,
+            name: preset === "size" ? "Size" : preset === "color" ? "Color" : "",
+            options:
+              Array.isArray(definition.options) && definition.options.length > 0
+                ? definition.options.map((option) =>
+                    preset === "color"
+                      ? {
+                          label: option?.label || option?.value || "Black",
+                          value:
+                            option?.value && /^#[0-9a-fA-F]{6}$/.test(String(option.value))
+                              ? String(option.value).toLowerCase()
+                              : "#000000",
+                          colorHex:
+                            option?.colorHex &&
+                            /^#[0-9a-fA-F]{6}$/.test(String(option.colorHex))
+                              ? String(option.colorHex).toLowerCase()
+                              : "#000000",
+                        }
+                      : {
+                          label: option?.label || option?.value || "",
+                          value: option?.value || option?.label || "",
+                          colorHex: "",
+                        },
+                  )
+                : [createVariantOption(preset)],
+          };
+        }
+
+        return {
+          ...definition,
+          [field]: value,
+        };
+      }),
+    );
+  };
+
+  const handleVariantOptionAdd = (definitionIndex) => {
+    setVariantDefinitions((prev) =>
+      prev.map((definition, index) =>
+        index === definitionIndex
+          ? {
+              ...definition,
+              options: [...(definition.options || []), createVariantOption(definition.preset)],
+            }
+          : definition,
+      ),
+    );
+  };
+
+  const handleVariantOptionChange = (definitionIndex, optionIndex, field, value) => {
+    setVariantDefinitions((prev) =>
+      prev.map((definition, index) => {
+        if (index !== definitionIndex) return definition;
+
+        const nextOptions = (definition.options || []).map((option, currentOptionIndex) => {
+          if (currentOptionIndex !== optionIndex) return option;
+
+          if (definition.preset === "color" && field === "colorHex") {
+            const normalizedColor = String(value || "").trim().toLowerCase();
+            return {
+              ...option,
+              colorHex: normalizedColor,
+              value: normalizedColor,
+              label:
+                String(option?.label || "").trim() || normalizedColor,
+            };
+          }
+
+          return {
+            ...option,
+            [field]: value,
+          };
+        });
+
+        return {
+          ...definition,
+          options: nextOptions,
+        };
+      }),
+    );
+  };
+
+  const handleVariantOptionRemove = (definitionIndex, optionIndex) => {
+    setVariantDefinitions((prev) =>
+      prev.map((definition, index) => {
+        if (index !== definitionIndex) return definition;
+        const remainingOptions = (definition.options || []).filter(
+          (_, currentOptionIndex) => currentOptionIndex !== optionIndex,
+        );
+        return {
+          ...definition,
+          options: remainingOptions.length > 0
+            ? remainingOptions
+            : [createVariantOption(definition.preset)],
+        };
+      }),
+    );
+  };
+
+  const validateForm = (desiredStatus = "published") => {
+    if (String(desiredStatus || "published").trim().toLowerCase() === "draft") {
+      setErrors({});
+      return true;
+    }
+
     let isValid = true;
 
     isValid = validateField("title", form.title) && isValid;
@@ -929,9 +1218,9 @@ function ProductModify({ initialMode = "list" }) {
         isValid = false;
       }
 
-      if (!["simple", "digital", "service"].includes(form.marketplaceType)) {
+      if (form.marketplaceType !== "digital") {
         toast.error(
-          "Recurring products are allowed only for simple, digital, or service types",
+          "Recurring products are allowed only for digital products",
         );
         isValid = false;
       }
@@ -951,10 +1240,12 @@ function ProductModify({ initialMode = "list" }) {
     return isValid;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, desiredStatus = "published") => {
+    if (e?.preventDefault) {
+      e.preventDefault();
+    }
 
-    if (!validateForm()) {
+    if (!validateForm(desiredStatus)) {
       toast.error("Please fix all errors before submitting");
       return;
     }
@@ -975,6 +1266,10 @@ function ProductModify({ initialMode = "list" }) {
       }
 
       const formData = new FormData();
+      const normalizedPublicationStatus =
+        String(desiredStatus || "published").trim().toLowerCase() === "published"
+          ? "published"
+          : "draft";
       const needsDirectPrice = !["variable", "grouped"].includes(form.marketplaceType);
       const normalizedPriceType = needsDirectPrice ? form.priceType : "single";
       const normalizedPrice =
@@ -986,12 +1281,10 @@ function ProductModify({ initialMode = "list" }) {
 
       formData.append("title", form.title.trim());
       formData.append("description", form.description.trim());
+      formData.append("publicationStatus", normalizedPublicationStatus);
       formData.append("priceType", normalizedPriceType);
       formData.append("price", normalizedPrice);
       formData.append("salePrice", normalizedSalePrice);
-      formData.append("commissionType", form.commissionType || "inherit");
-      formData.append("commissionValue", form.commissionValue || "0");
-      formData.append("commissionFixed", form.commissionFixed || "0");
       formData.append("category", form.category);
       formData.append("productType", form.productType);
       formData.append("marketplaceType", form.marketplaceType);
@@ -1025,7 +1318,10 @@ function ProductModify({ initialMode = "list" }) {
       formData.append("brand", form.brand.trim());
       formData.append("weight", form.weight || "0");
       formData.append("dimensions", form.dimensions.trim());
-      formData.append("colors", JSON.stringify(form.colors));
+      formData.append(
+        "variantDefinitions",
+        JSON.stringify(getNormalizedVariantDefinitions()),
+      );
       formData.append(
         "features",
         JSON.stringify(features.filter((f) => f.trim())),
@@ -1151,7 +1447,7 @@ function ProductModify({ initialMode = "list" }) {
             </div>
           ) : null}
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={(event) => handleSubmit(event, "published")}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
               {/* Left Column - Main Info */}
               <div className="lg:col-span-2">
@@ -1199,20 +1495,14 @@ function ProductModify({ initialMode = "list" }) {
                       <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                         <FiFileText className="mr-2" /> Description *
                       </label>
-                      <textarea
-                        name="description"
+                      <RichTextEditor
                         value={form.description}
-                        onChange={handleChange}
-                        onBlur={() =>
-                          validateField("description", form.description)
-                        }
-                        rows={4}
-                        className={`w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border ${
-                          errors.description
-                            ? "border-red-500"
-                            : "border-gray-300"
-                        } focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base`}
+                        onChange={(value) => {
+                          setForm((prev) => ({ ...prev, description: value }));
+                          if (errors.description) validateField("description", value);
+                        }}
                         placeholder="Enter product description"
+                        minHeight={220}
                       />
                       {errors.description && (
                         <motion.p
@@ -1235,8 +1525,7 @@ function ProductModify({ initialMode = "list" }) {
                           name="priceType"
                           value={form.priceType}
                           onChange={handleChange}
-                          disabled={["variable", "grouped"].includes(form.marketplaceType)}
-                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base disabled:bg-gray-100 disabled:text-gray-500"
+                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
                         >
                           {priceTypes.map((priceTypeOption) => (
                             <option key={priceTypeOption.value} value={priceTypeOption.value}>
@@ -1244,15 +1533,9 @@ function ProductModify({ initialMode = "list" }) {
                             </option>
                           ))}
                         </select>
-                        {["variable", "grouped"].includes(form.marketplaceType) && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Variable and grouped products use variation/grouped pricing.
-                          </p>
-                        )}
                       </div>
 
-                      {!["variable", "grouped"].includes(form.marketplaceType) &&
-                        form.priceType === "single" && (
+                      {form.priceType === "single" && (
                           <div>
                             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                               Price (Tk) *
@@ -1276,8 +1559,7 @@ function ProductModify({ initialMode = "list" }) {
                           </div>
                         )}
 
-                      {!["variable", "grouped"].includes(form.marketplaceType) &&
-                        form.priceType === "best" && (
+                      {form.priceType === "best" && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                             <div>
                               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
@@ -1324,70 +1606,12 @@ function ProductModify({ initialMode = "list" }) {
                           </div>
                         )}
 
-                      {!["variable", "grouped"].includes(form.marketplaceType) &&
-                        form.priceType === "tba" && (
+                      {form.priceType === "tba" && (
                           <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
                             This product will show <span className="font-semibold">TBA</span>{" "}
                             instead of price and cannot be purchased until price type changes.
                           </div>
                         )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                      <div>
-                        <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                          Commission Rule
-                        </label>
-                        <select
-                          name="commissionType"
-                          value={form.commissionType}
-                          onChange={handleChange}
-                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
-                        >
-                          <option value="inherit">Inherit Global</option>
-                          <option value="percentage">Percentage</option>
-                          <option value="fixed">Fixed</option>
-                          <option value="hybrid">Hybrid</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                          Commission %
-                        </label>
-                        <input
-                          type="number"
-                          name="commissionValue"
-                          value={form.commissionValue}
-                          onChange={handleChange}
-                          placeholder="0"
-                          step="0.01"
-                          min="0"
-                          disabled={
-                            form.commissionType === "inherit" ||
-                            form.commissionType === "fixed"
-                          }
-                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 disabled:bg-gray-100 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
-                        />
-                      </div>
-                      <div>
-                        <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                          Fixed Commission (Tk)
-                        </label>
-                        <input
-                          type="number"
-                          name="commissionFixed"
-                          value={form.commissionFixed}
-                          onChange={handleChange}
-                          placeholder="0"
-                          step="0.01"
-                          min="0"
-                          disabled={
-                            form.commissionType === "inherit" ||
-                            form.commissionType === "percentage"
-                          }
-                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 disabled:bg-gray-100 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
-                        />
-                      </div>
                     </div>
 
                     {/* Product Type */}
@@ -1520,38 +1744,6 @@ function ProductModify({ initialMode = "list" }) {
                       </div>
                     </div>
 
-                    {form.marketplaceType === "variable" && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Variations JSON
-                        </label>
-                        <textarea
-                          name="variationsJson"
-                          value={form.variationsJson}
-                          onChange={handleChange}
-                          rows={5}
-                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base font-mono"
-                          placeholder='[{"label":"Size M","price":500,"stock":20}]'
-                        />
-                      </div>
-                    )}
-
-                    {form.marketplaceType === "grouped" && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Grouped Product IDs (comma separated)
-                        </label>
-                        <textarea
-                          name="groupedProductsCsv"
-                          value={form.groupedProductsCsv}
-                          onChange={handleChange}
-                          rows={3}
-                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base font-mono"
-                          placeholder="64f...a1,64f...b2"
-                        />
-                      </div>
-                    )}
-
                     {form.marketplaceType === "digital" && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1568,23 +1760,7 @@ function ProductModify({ initialMode = "list" }) {
                       </div>
                     )}
 
-                    {form.marketplaceType === "service" && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Service Duration (days)
-                        </label>
-                        <input
-                          type="number"
-                          name="serviceDurationDays"
-                          value={form.serviceDurationDays}
-                          onChange={handleChange}
-                          placeholder="0"
-                          min="0"
-                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
-                        />
-                      </div>
-                    )}
-
+                    {form.marketplaceType === "digital" ? (
                     <div className="rounded-lg border border-gray-200 p-4 space-y-3">
                       <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                         <input
@@ -1592,15 +1768,12 @@ function ProductModify({ initialMode = "list" }) {
                           name="isRecurring"
                           checked={Boolean(form.isRecurring)}
                           onChange={handleChange}
-                          disabled={
-                            form.priceType === "tba" ||
-                            ["variable", "grouped"].includes(form.marketplaceType)
-                          }
+                          disabled={form.priceType === "tba"}
                         />
                         Enable recurring subscription billing
                       </label>
                       <p className="text-xs text-gray-500">
-                        Recurring works with simple, digital, and service products.
+                        Recurring billing is available only for digital products.
                       </p>
 
                       {Boolean(form.isRecurring) && (
@@ -1665,6 +1838,7 @@ function ProductModify({ initialMode = "list" }) {
                         </div>
                       )}
                     </div>
+                    ) : null}
 
                     {/* Category */}
                     <div>
@@ -1714,22 +1888,14 @@ function ProductModify({ initialMode = "list" }) {
                       <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                         <FiPackage className="mr-2" /> Brand
                       </label>
-                      <input
-                        type="text"
-                        name="brand"
+                      <SearchableSelect
                         value={form.brand}
-                        onChange={handleChange}
-                        placeholder="Enter brand name"
-                        list="brand-options"
-                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                        onChange={(value) => setForm((prev) => ({ ...prev, brand: value }))}
+                        options={brandSelectOptions}
+                        placeholder="Select a brand"
+                        searchPlaceholder="Search brands"
+                        emptyLabel="No matching brands found"
                       />
-                      <datalist id="brand-options">
-                        {brandOptions.map((brand) => (
-                          <option key={brand._id || brand.slug || brand.name} value={brand.name}>
-                            {brand.name}
-                          </option>
-                        ))}
-                      </datalist>
                     </div>
 
                     {/* Physical Details */}
@@ -2041,7 +2207,7 @@ function ProductModify({ initialMode = "list" }) {
                   </div>
                 </motion.div>
 
-                {/* Colors */}
+                {/* Variants */}
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -2049,109 +2215,176 @@ function ProductModify({ initialMode = "list" }) {
                   className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
                 >
                   <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4">
-                    Available Colors
+                    Product Variants
                   </h2>
 
                   <div className="space-y-3 md:space-y-4">
-                    {/* Selected Colors */}
-                    {form.colors.length > 0 && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Selected Colors
-                        </label>
-                        <div className="flex flex-wrap gap-1 md:gap-2">
-                          {form.colors.map((color, index) => {
-                            const colorObj = colorOptions.find(
-                              (c) => c.value === color,
-                            );
-                            return (
-                              <div
-                                key={index}
-                                className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 bg-gray-100 rounded-full"
-                              >
-                                <div
-                                  className="w-3 h-3 md:w-4 md:h-4 rounded-full border"
-                                  style={{ backgroundColor: color }}
-                                />
-                                <span className="text-xs md:text-sm">
-                                  {colorObj?.name || color}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleColorRemove(color)}
-                                  className="text-gray-500 hover:text-red-600"
-                                >
-                                  <FiX size={10} className="md:h-3 md:w-3" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    <p className="text-sm text-gray-500">
+                      Variants are optional. Use preset types like <span className="font-semibold">Size</span> or <span className="font-semibold">Color</span>, or switch to <span className="font-semibold">Custom</span> to name your own variant group.
+                    </p>
 
-                    {/* Color Options */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Add Colors
-                      </label>
-                      <div className="grid grid-cols-4 gap-1 md:gap-2">
-                        {colorOptions.map((color) => (
-                          <button
-                            key={color.value}
-                            type="button"
-                            onClick={() => handleColorAdd(color.value)}
-                            className={`relative p-1 md:p-2 rounded-lg border ${
-                              form.colors.includes(color.value)
-                                ? "ring-1 md:ring-2 ring-gray-500"
-                                : "hover:ring-1 hover:ring-gray-300"
-                            }`}
+                    {variantDefinitions.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">
+                        No variants added yet.
+                      </div>
+                    ) : null}
+
+                    {variantDefinitions.map((definition, definitionIndex) => (
+                      <div
+                        key={`variant-${definitionIndex}`}
+                        className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3"
+                      >
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                          <select
+                            value={definition.preset}
+                            onChange={(event) =>
+                              handleVariantDefinitionChange(
+                                definitionIndex,
+                                "preset",
+                                event.target.value,
+                              )
+                            }
+                            className="w-full md:w-40 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
                           >
-                            <div
-                              className="w-full h-6 md:h-8 rounded"
-                              style={{ backgroundColor: color.value }}
-                            />
-                            <div className="text-xs mt-1 truncate">
-                              {color.name}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                            <option value="size">Size</option>
+                            <option value="color">Color</option>
+                            <option value="custom">Custom</option>
+                          </select>
 
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Add Custom Color
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={customColorValue}
-                          onChange={(event) =>
-                            setCustomColorValue(event.target.value.toLowerCase())
-                          }
-                          className="h-10 w-14 p-1 border border-gray-300 rounded-lg bg-white cursor-pointer"
-                          aria-label="Choose custom color"
-                        />
-                        <input
-                          type="text"
-                          value={customColorValue}
-                          onChange={(event) => setCustomColorValue(event.target.value)}
-                          placeholder="#2563eb"
-                          className="flex-1 h-10 px-3 border border-gray-300 rounded-lg text-sm"
-                        />
+                          {definition.preset === "custom" ? (
+                            <input
+                              type="text"
+                              value={definition.name}
+                              onChange={(event) =>
+                                handleVariantDefinitionChange(
+                                  definitionIndex,
+                                  "name",
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="Custom variant type name"
+                              className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
+                            />
+                          ) : (
+                            <div className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-700 border border-gray-200">
+                              {definition.preset === "size" ? "Size" : "Color"}
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleVariantDefinitionRemove(definitionIndex)}
+                            className="inline-flex h-10 items-center justify-center rounded-lg border border-red-200 px-3 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                          >
+                            Remove Type
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          {(definition.options || []).map((option, optionIndex) => (
+                            <div
+                              key={`variant-${definitionIndex}-option-${optionIndex}`}
+                              className="flex flex-col gap-2 md:flex-row md:items-center"
+                            >
+                              {definition.preset === "color" ? (
+                                <>
+                                  <input
+                                    type="color"
+                                    value={option.colorHex || "#000000"}
+                                    onChange={(event) =>
+                                      handleVariantOptionChange(
+                                        definitionIndex,
+                                        optionIndex,
+                                        "colorHex",
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="h-10 w-full md:w-16 rounded-lg border border-gray-300 bg-white p-1"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={option.label}
+                                    onChange={(event) =>
+                                      handleVariantOptionChange(
+                                        definitionIndex,
+                                        optionIndex,
+                                        "label",
+                                        event.target.value,
+                                      )
+                                    }
+                                    placeholder="Color label"
+                                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
+                                  />
+                                </>
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={option.label}
+                                  onChange={(event) =>
+                                    handleVariantOptionChange(
+                                      definitionIndex,
+                                      optionIndex,
+                                      "label",
+                                      event.target.value,
+                                    )
+                                  }
+                                  placeholder={
+                                    definition.preset === "size"
+                                      ? "Add size option, e.g. M"
+                                      : "Add custom option"
+                                  }
+                                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleVariantOptionRemove(definitionIndex, optionIndex)
+                                }
+                                className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600"
+                              >
+                                <FiX className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
                         <button
                           type="button"
-                          onClick={handleCustomColorAdd}
-                          className="inline-flex h-10 items-center gap-1.5 px-3 rounded-lg bg-black text-white text-sm font-medium hover:bg-gray-900"
+                          onClick={() => handleVariantOptionAdd(definitionIndex)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-black hover:text-black"
                         >
                           <FiPlus className="w-4 h-4" />
-                          Add
+                          Add Option
                         </button>
                       </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Pick any color from the palette and click Add.
-                      </p>
+                    ))}
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleVariantDefinitionAdd("size")}
+                        className="inline-flex items-center gap-2 rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-900"
+                      >
+                        <FiPlus className="w-4 h-4" />
+                        Add Size
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleVariantDefinitionAdd("color")}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-black"
+                      >
+                        <FiPlus className="w-4 h-4" />
+                        Add Color
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleVariantDefinitionAdd("custom")}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-black"
+                      >
+                        <FiPlus className="w-4 h-4" />
+                        Add Custom Variant
+                      </button>
                     </div>
                   </div>
                 </motion.div>
@@ -2168,10 +2401,20 @@ function ProductModify({ initialMode = "list" }) {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    type="button"
+                    onClick={(event) => handleSubmit(event, "draft")}
+                    disabled={isSubmitting}
+                    className="w-full py-2 md:py-3 px-3 md:px-4 rounded-lg font-medium text-gray-900 bg-amber-100 border border-amber-200 hover:bg-amber-200 transition-all shadow-sm md:shadow-md flex items-center justify-center text-sm md:text-base disabled:opacity-60"
+                  >
+                    {isSubmitting ? "Saving draft..." : editingId ? "Save Draft" : "Create Draft"}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     type="submit"
-                    disabled={isSubmitting || filteredCategories.length === 0}
+                    disabled={isSubmitting}
                     className={`w-full py-2 md:py-3 px-3 md:px-4 rounded-lg font-medium text-white ${
-                      isSubmitting || filteredCategories.length === 0
+                      isSubmitting
                         ? "bg-gray-600 cursor-not-allowed"
                         : "bg-gray-900 hover:bg-gray-800"
                     } transition-all shadow-sm md:shadow-md flex items-center justify-center text-sm md:text-base`}
@@ -2179,14 +2422,12 @@ function ProductModify({ initialMode = "list" }) {
                     {isSubmitting ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        {editingId ? "Updating..." : "Creating..."}
+                        Publishing...
                       </>
-                    ) : filteredCategories.length === 0 ? (
-                      "No Categories Available"
                     ) : editingId ? (
-                      "Update Product"
+                      "Publish Product"
                     ) : (
-                      "Create Product"
+                      "Create & Publish"
                     )}
                   </motion.button>
                 </div>
@@ -2301,9 +2542,19 @@ function ProductModify({ initialMode = "list" }) {
                               <h2 className="text-lg md:text-xl font-semibold text-gray-900 line-clamp-1">
                                 {product.title}
                               </h2>
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                                  String(product.publicationStatus || "draft").toLowerCase() ===
+                                  "published"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {String(product.publicationStatus || "draft")}
+                              </span>
                             </div>
                             <p className="text-gray-600 text-xs md:text-sm mb-3 line-clamp-2">
-                              {product.description}
+                              {stripHtml(product.description)}
                             </p>
 
                             <div className="flex flex-wrap gap-1 md:gap-2 mb-3">
@@ -2356,6 +2607,35 @@ function ProductModify({ initialMode = "list" }) {
                               title="Duplicate"
                             >
                               <FiCopy className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => handleTogglePublication(product)}
+                              disabled={publishingId === product._id}
+                              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60 ${
+                                String(product.publicationStatus || "draft")
+                                  .trim()
+                                  .toLowerCase() === "published"
+                                  ? "text-amber-700 bg-amber-50 hover:bg-amber-100"
+                                  : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                              }`}
+                              title={
+                                String(product.publicationStatus || "draft")
+                                  .trim()
+                                  .toLowerCase() === "published"
+                                  ? "Move to draft"
+                                  : "Publish"
+                              }
+                            >
+                              <FiUpload className="w-5 h-5" />
+                              <span>
+                                {publishingId === product._id
+                                  ? "Saving..."
+                                  : String(product.publicationStatus || "draft")
+                                        .trim()
+                                        .toLowerCase() === "published"
+                                    ? "Draft"
+                                    : "Publish"}
+                              </span>
                             </button>
                             <button
                               onClick={() => startEditing(product._id)}

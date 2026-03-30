@@ -154,6 +154,20 @@ const normalizeRecurringInterval = (value, fallback = "monthly") => {
   return "monthly";
 };
 
+const normalizePublicationStatus = (value, fallback = "draft") => {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  if (["draft", "published"].includes(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  const normalizedFallback = String(fallback || "draft").trim().toLowerCase();
+  if (["draft", "published"].includes(normalizedFallback)) {
+    return normalizedFallback;
+  }
+
+  return "draft";
+};
+
 const normalizeStringArray = (value) => {
   const parsed = parseJsonMaybe(value, value);
 
@@ -239,6 +253,95 @@ const normalizeVariations = (value) => {
       };
     })
     .filter(Boolean);
+};
+
+const normalizeVariantDefinitions = (value) => {
+  const parsed = parseJsonMaybe(value, value);
+
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((entry) => {
+      if (!entry) return null;
+
+      const rawPreset = String(entry.preset || entry.type || "custom")
+        .trim()
+        .toLowerCase();
+      const preset = ["size", "color", "custom"].includes(rawPreset)
+        ? rawPreset
+        : "custom";
+      const resolvedName =
+        preset === "size"
+          ? "Size"
+          : preset === "color"
+            ? "Color"
+            : asString(entry.name || entry.label || entry.typeName).trim();
+
+      const optionsSource = Array.isArray(entry.options)
+        ? entry.options
+        : Array.isArray(entry.values)
+          ? entry.values
+          : [];
+
+      const options = optionsSource
+        .map((option) => {
+          if (!option) return null;
+
+          if (typeof option === "string") {
+            const next = option.trim();
+            if (!next) return null;
+            return {
+              label: next,
+              value: next,
+              colorHex:
+                preset === "color" && /^#[0-9a-fA-F]{6}$/.test(next) ? next : "",
+            };
+          }
+
+          const label = asString(option.label || option.name || option.value).trim();
+          const valueText = asString(option.value || option.label || option.name).trim();
+          const colorHex = asString(
+            option.colorHex || option.hex || option.color || option.value,
+          ).trim();
+
+          if (!label && !valueText && !colorHex) return null;
+
+          return {
+            label: label || valueText || colorHex,
+            value: valueText || label || colorHex,
+            colorHex:
+              preset === "color" && /^#[0-9a-fA-F]{6}$/.test(colorHex) ? colorHex : "",
+          };
+        })
+        .filter(Boolean);
+
+      if (!resolvedName || options.length === 0) return null;
+
+      return {
+        preset,
+        name: resolvedName,
+        options,
+      };
+    })
+    .filter(Boolean);
+};
+
+const deriveProductColors = (fallbackColors = [], variantDefinitions = []) => {
+  const variantColors = variantDefinitions
+    .filter(
+      (variant) =>
+        String(variant?.preset || "").trim().toLowerCase() === "color" ||
+        String(variant?.name || "").trim().toLowerCase() === "color",
+    )
+    .flatMap((variant) => variant.options || [])
+    .map((option) => String(option?.colorHex || option?.value || "").trim().toLowerCase())
+    .filter((value) => /^#[0-9a-f]{6}$/.test(value));
+
+  if (variantColors.length > 0) {
+    return [...new Set(variantColors)];
+  }
+
+  return normalizeStringArray(fallbackColors);
 };
 
 const normalizeGroupedProducts = (value, productIdToExclude = null) => {
@@ -521,6 +624,7 @@ exports.searchProducts = async (req, res) => {
         { marketplaceType: { $regex: query, $options: "i" } },
       ],
       isActive: true,
+      publicationStatus: "published",
       approvalStatus: { $in: ["approved", null] },
     })
       .populate("category", "name")
@@ -557,28 +661,31 @@ exports.createProduct = async (req, res) => {
     const brand = asString(req.body.brand).trim();
     const weight = asNonNegativeNumber(req.body.weight, 0);
     const dimensions = asString(req.body.dimensions).trim();
-    const parsedColors = normalizeStringArray(req.body.colors);
+    const publicationStatus = normalizePublicationStatus(req.body.publicationStatus, "draft");
+    const parsedVariantDefinitions = normalizeVariantDefinitions(req.body.variantDefinitions);
+    const parsedColors = deriveProductColors(req.body.colors, parsedVariantDefinitions);
     const parsedFeatures = normalizeStringArray(req.body.features);
     const parsedSpecs = normalizeSpecifications(req.body.specifications);
     const { payload: marketplacePayload, errors: marketplaceErrors } =
       buildMarketplacePayload({ body: req.body });
+    const isDraft = publicationStatus === "draft";
 
-    if (!title || !description || !category) {
+    if (!isDraft && (!title || !description || !category)) {
       return res.status(400).json({
         success: false,
         message: "Title, description, and category are required",
       });
     }
 
-    if (marketplaceErrors.length > 0) {
+    if (!isDraft && marketplaceErrors.length > 0) {
       return res.status(400).json({
         success: false,
         message: marketplaceErrors.join(", "),
       });
     }
 
-    const categoryExists = await Category.findById(category);
-    if (!categoryExists) {
+    const categoryExists = category ? await Category.findById(category) : null;
+    if (category && !categoryExists) {
       return res.status(400).json({
         success: false,
         message: "Category not found",
@@ -663,14 +770,15 @@ exports.createProduct = async (req, res) => {
       vendor: vendorId,
       approvalStatus,
       rejectionReason: "",
+      publicationStatus,
       title,
       description,
       price: marketplacePayload.price,
       salePrice: marketplacePayload.salePrice,
       priceType: marketplacePayload.priceType,
-      commissionType: marketplacePayload.commissionType,
-      commissionValue: marketplacePayload.commissionValue,
-      commissionFixed: marketplacePayload.commissionFixed,
+      commissionType: "inherit",
+      commissionValue: 0,
+      commissionFixed: 0,
       isRecurring: marketplacePayload.isRecurring,
       recurringInterval: marketplacePayload.recurringInterval,
       recurringIntervalCount: marketplacePayload.recurringIntervalCount,
@@ -690,6 +798,7 @@ exports.createProduct = async (req, res) => {
       colors: parsedColors,
       features: parsedFeatures,
       specifications: parsedSpecs,
+      variantDefinitions: parsedVariantDefinitions,
       variations: marketplacePayload.variations,
       groupedProducts: marketplacePayload.groupedProducts,
       downloadUrl: marketplacePayload.downloadUrl,
@@ -711,7 +820,9 @@ exports.createProduct = async (req, res) => {
     res.status(201).json({
       success: true,
       message:
-        product.approvalStatus === "pending"
+        publicationStatus === "draft"
+          ? "Product saved as draft"
+          : product.approvalStatus === "pending"
           ? "Product submitted and waiting for admin approval"
           : "Product created successfully",
       product,
@@ -799,12 +910,13 @@ exports.getActiveProducts = async (req, res) => {
   try {
     const products = await Product.find({
       isActive: true,
+      publicationStatus: "published",
       approvalStatus: { $in: ["approved", null] },
     })
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .select(
-        "title price salePrice priceType showStockToPublic images category brand description colors dimensions vendor productType marketplaceType stock allowBackorder variations deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
+        "title price salePrice priceType showStockToPublic images category brand description colors dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -833,12 +945,13 @@ exports.getProductsByType = async (req, res) => {
     const products = await Product.find({
       isActive: true,
       productType: productType,
+      publicationStatus: "published",
       approvalStatus: { $in: ["approved", null] },
     })
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .select(
-        "title price salePrice priceType showStockToPublic images category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
+        "title price salePrice priceType showStockToPublic images category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -888,7 +1001,7 @@ exports.getProduct = async (req, res) => {
       .populate({
         path: "groupedProducts",
         select:
-          "title price salePrice priceType showStockToPublic images category brand marketplaceType stock isActive approvalStatus vendor",
+          "title price salePrice priceType showStockToPublic images category brand marketplaceType stock isActive publicationStatus approvalStatus vendor variantDefinitions",
         populate: [
           { path: "category", select: "name" },
           { path: "vendor", select: PUBLIC_VENDOR_POPULATE_FIELDS },
@@ -906,6 +1019,7 @@ exports.getProduct = async (req, res) => {
     if (
       req.baseUrl.includes("public") &&
       (!product.isActive ||
+        String(product.publicationStatus || "published") !== "published" ||
         !["approved", undefined, null].includes(product.approvalStatus) ||
         !isPublicVendorVisible(product.vendor))
     ) {
@@ -924,6 +1038,9 @@ exports.getProduct = async (req, res) => {
       if (req.baseUrl.includes("public")) {
         productObj.groupedProducts = productObj.groupedProducts.filter((groupedProduct) => {
           if (!groupedProduct?.isActive) return false;
+          if (String(groupedProduct?.publicationStatus || "published") !== "published") {
+            return false;
+          }
           if (!["approved", undefined, null].includes(groupedProduct?.approvalStatus)) {
             return false;
           }
@@ -1013,13 +1130,23 @@ exports.updateProduct = async (req, res) => {
         existing: product.toObject(),
         productIdForGrouping: req.params.id,
       });
+    const publicationStatus = normalizePublicationStatus(
+      req.body.publicationStatus,
+      product.publicationStatus || "draft",
+    );
+    const isDraft = publicationStatus === "draft";
 
-    if (marketplaceErrors.length > 0) {
+    if (!isDraft && marketplaceErrors.length > 0) {
       return res.status(400).json({
         success: false,
         message: marketplaceErrors.join(", "),
       });
     }
+
+    const parsedVariantDefinitions =
+      req.body.variantDefinitions !== undefined
+        ? normalizeVariantDefinitions(req.body.variantDefinitions)
+        : product.variantDefinitions || [];
 
     const updatePayload = {
       title:
@@ -1049,8 +1176,8 @@ exports.updateProduct = async (req, res) => {
           : product.dimensions,
       colors:
         req.body.colors !== undefined
-          ? normalizeStringArray(req.body.colors)
-          : product.colors || [],
+          ? deriveProductColors(req.body.colors, parsedVariantDefinitions)
+          : deriveProductColors(product.colors || [], parsedVariantDefinitions),
       features:
         req.body.features !== undefined
           ? normalizeStringArray(req.body.features)
@@ -1062,9 +1189,9 @@ exports.updateProduct = async (req, res) => {
       price: marketplacePayload.price,
       salePrice: marketplacePayload.salePrice,
       priceType: marketplacePayload.priceType,
-      commissionType: marketplacePayload.commissionType,
-      commissionValue: marketplacePayload.commissionValue,
-      commissionFixed: marketplacePayload.commissionFixed,
+      commissionType: "inherit",
+      commissionValue: 0,
+      commissionFixed: 0,
       isRecurring: marketplacePayload.isRecurring,
       recurringInterval: marketplacePayload.recurringInterval,
       recurringIntervalCount: marketplacePayload.recurringIntervalCount,
@@ -1076,6 +1203,7 @@ exports.updateProduct = async (req, res) => {
       allowBackorder: marketplacePayload.allowBackorder,
       showStockToPublic: marketplacePayload.showStockToPublic,
       marketplaceType: marketplacePayload.marketplaceType,
+      variantDefinitions: parsedVariantDefinitions,
       variations: marketplacePayload.variations,
       groupedProducts: marketplacePayload.groupedProducts,
       downloadUrl: marketplacePayload.downloadUrl,
@@ -1086,6 +1214,7 @@ exports.updateProduct = async (req, res) => {
         req.body.isActive !== undefined
           ? asBoolean(req.body.isActive, product.isActive)
           : product.isActive,
+      publicationStatus,
       vendor: req.body.vendor || product.vendor,
       approvalStatus: req.body.approvalStatus || product.approvalStatus,
       rejectionReason:
@@ -1183,7 +1312,10 @@ exports.updateProduct = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Product updated successfully",
+      message:
+        publicationStatus === "draft"
+          ? "Product draft updated successfully"
+          : "Product updated successfully",
       product: productObj,
     });
   } catch (error) {
@@ -1415,8 +1547,8 @@ exports.duplicateProduct = async (req, res) => {
       salePrice: sourceObj.salePrice ?? null,
       priceType: sourceObj.priceType || "single",
       commissionType: sourceObj.commissionType || "inherit",
-      commissionValue: sourceObj.commissionValue || 0,
-      commissionFixed: sourceObj.commissionFixed || 0,
+      commissionValue: 0,
+      commissionFixed: 0,
       isRecurring: sourceObj.isRecurring === true,
       recurringInterval: sourceObj.recurringInterval || "monthly",
       recurringIntervalCount: sourceObj.recurringIntervalCount || 1,
@@ -1436,6 +1568,7 @@ exports.duplicateProduct = async (req, res) => {
       colors: sourceObj.colors || [],
       features: sourceObj.features || [],
       specifications: sourceObj.specifications || [],
+      variantDefinitions: sourceObj.variantDefinitions || [],
       variations: sourceObj.variations || [],
       groupedProducts: sourceObj.groupedProducts || [],
       downloadUrl: sourceObj.downloadUrl || "",
@@ -1444,6 +1577,7 @@ exports.duplicateProduct = async (req, res) => {
       deliveryMaxDays: sourceObj.deliveryMaxDays || 5,
       images: sourceObj.images || [],
       isActive: sourceObj.isActive !== false,
+      publicationStatus: sourceObj.publicationStatus || "draft",
     });
 
     await duplicated.populate("category", "name");
@@ -1573,6 +1707,7 @@ exports.getSearchSuggestions = async (req, res) => {
             { marketplaceType: { $regex: searchQuery, $options: "i" } },
           ],
           isActive: true,
+          publicationStatus: "published",
           approvalStatus: { $in: ["approved", null] },
         })
           .populate("category", "name")

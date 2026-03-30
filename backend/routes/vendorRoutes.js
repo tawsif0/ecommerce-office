@@ -1,10 +1,12 @@
 const express = require("express");
 const auth = require("../middlewares/auth");
 const { ensureMultiVendorMode } = require("../middlewares/marketplaceMode");
+const { upload, handleMulterError } = require("../middlewares/upload");
 const {
   registerVendor,
   getMyVendorProfile,
   updateMyVendorProfile,
+  uploadMyVendorAsset,
   getPublicVendors,
   getNearbyVendors,
   getVendorStore,
@@ -29,13 +31,21 @@ const {
 const router = express.Router();
 
 // Public route
-router.get("/", getPublicVendors);
-router.get("/nearby", getNearbyVendors);
+router.get("/", ensureMultiVendorMode, getPublicVendors);
+router.get("/nearby", ensureMultiVendorMode, getNearbyVendors);
 
 // Authenticated vendor routes
 router.post("/register", auth, ensureMultiVendorMode, registerVendor);
 router.get("/me/profile", auth, ensureMultiVendorMode, getMyVendorProfile);
 router.put("/me/profile", auth, ensureMultiVendorMode, updateMyVendorProfile);
+router.post(
+  "/me/assets/upload",
+  auth,
+  ensureMultiVendorMode,
+  upload.single("image"),
+  handleMulterError,
+  uploadMyVendorAsset,
+);
 router.get("/me/stats", auth, ensureMultiVendorMode, getVendorDashboardStats);
 router.get("/me/orders", auth, ensureMultiVendorMode, getVendorOrders);
 router.get(
@@ -70,12 +80,12 @@ router.patch(
 );
 
 // Public store routes
-router.get("/:slug/store", getVendorStore);
-router.get("/:slug/reviews", getVendorReviews);
-router.post("/:slug/contact", createVendorContactMessage);
+router.get("/:slug/store", ensureMultiVendorMode, getVendorStore);
+router.get("/:slug/reviews", ensureMultiVendorMode, getVendorReviews);
+router.post("/:slug/contact", ensureMultiVendorMode, createVendorContactMessage);
 
 // Authenticated customer review routes
-router.post("/:slug/reviews", auth, createVendorReview);
-router.delete("/:slug/reviews/me", auth, deleteMyVendorReview);
+router.post("/:slug/reviews", auth, ensureMultiVendorMode, createVendorReview);
+router.delete("/:slug/reviews/me", auth, ensureMultiVendorMode, deleteMyVendorReview);
 
 module.exports = router;

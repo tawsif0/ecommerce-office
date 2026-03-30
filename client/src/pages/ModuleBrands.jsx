@@ -1,8 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiEdit2, FiPlus, FiRefreshCw, FiSave, FiTag, FiTrash2 } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
+import usePublicSettings from "../hooks/usePublicSettings";
+import RichTextEditor from "../components/RichTextEditor";
+import { stripHtml } from "../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -13,7 +16,6 @@ const getAuthHeaders = () => {
 
 const emptyForm = {
   name: "",
-  slug: "",
   description: "",
   logoUrl: "",
   isActive: true,
@@ -22,6 +24,7 @@ const emptyForm = {
 
 const ModuleBrands = () => {
   const { user } = useAuth();
+  const { settings: publicSettings } = usePublicSettings();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -29,11 +32,32 @@ const ModuleBrands = () => {
   const [vendors, setVendors] = useState([]);
   const [search, setSearch] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
+  const [vendorScope, setVendorScope] = useState("global");
+  const [vendorSearch, setVendorSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef(null);
 
   const role = String(user?.userType || "").toLowerCase();
   const isAdmin = role === "admin";
   const canAccess = ["admin", "vendor", "staff"].includes(role);
+  const isMultiVendor =
+    String(publicSettings?.marketplaceMode || "multi").trim().toLowerCase() !== "single";
+  const filteredVendors = useMemo(() => {
+    const query = String(vendorSearch || "").trim().toLowerCase();
+    if (!query) return vendors;
+    return vendors.filter((vendor) => {
+      const haystack = [
+        vendor?.storeName,
+        vendor?.businessName,
+        vendor?.user?.name,
+        vendor?.user?.email,
+      ]
+        .map((entry) => String(entry || "").trim().toLowerCase())
+        .join(" ");
+      return haystack.includes(query);
+    });
+  }, [vendorSearch, vendors]);
 
   const fetchData = useCallback(async () => {
     if (!canAccess) return;
@@ -43,7 +67,8 @@ const ModuleBrands = () => {
       const params = {
         limit: 200,
         search: search || undefined,
-        vendorId: isAdmin && vendorFilter ? vendorFilter : undefined,
+        vendorId:
+          isAdmin && isMultiVendor && vendorFilter ? vendorFilter : undefined,
       };
 
       const [brandResponse, vendorResponse] = await Promise.all([
@@ -51,7 +76,7 @@ const ModuleBrands = () => {
           headers: getAuthHeaders(),
           params,
         }),
-        isAdmin
+        isAdmin && isMultiVendor
           ? axios.get(`${baseUrl}/vendors/admin/all`, {
               headers: getAuthHeaders(),
             })
@@ -66,15 +91,51 @@ const ModuleBrands = () => {
     } finally {
       setLoading(false);
     }
-  }, [canAccess, isAdmin, search, vendorFilter]);
+  }, [canAccess, isAdmin, isMultiVendor, search, vendorFilter]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (isMultiVendor) return;
+    setVendorFilter("");
+    setVendorSearch("");
+    setVendorScope("global");
+    setForm((prev) =>
+      prev.vendorId ? { ...prev, vendorId: "" } : prev,
+    );
+  }, [isMultiVendor]);
+
   const resetForm = () => {
     setEditingId("");
     setForm(emptyForm);
+    setVendorScope("global");
+    setVendorSearch("");
+  };
+
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setLogoUploading(true);
+      const payload = new FormData();
+      payload.append("logo", file);
+      const response = await axios.post(`${baseUrl}/brands/logo-upload`, payload, {
+        headers: getAuthHeaders(),
+      });
+      const nextLogoUrl = String(response?.data?.logoUrl || "").trim();
+      setForm((prev) => ({ ...prev, logoUrl: nextLogoUrl }));
+      toast.success(response?.data?.message || "Brand logo uploaded");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to upload brand logo");
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) {
+        logoInputRef.current.value = "";
+      }
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -85,15 +146,22 @@ const ModuleBrands = () => {
       return;
     }
 
+    if (isAdmin && isMultiVendor && vendorScope === "vendor" && !String(form.vendorId || "").trim()) {
+      toast.error("Select a vendor for this vendor brand");
+      return;
+    }
+
     try {
       setSaving(true);
       const payload = {
         name: String(form.name || "").trim(),
-        slug: String(form.slug || "").trim(),
         description: String(form.description || "").trim(),
         logoUrl: String(form.logoUrl || "").trim(),
         isActive: Boolean(form.isActive),
-        vendorId: isAdmin ? String(form.vendorId || "").trim() : undefined,
+        vendorId:
+          isAdmin && isMultiVendor && vendorScope === "vendor"
+            ? String(form.vendorId || "").trim()
+            : "",
       };
 
       if (editingId) {
@@ -118,15 +186,17 @@ const ModuleBrands = () => {
   };
 
   const handleEdit = (brand) => {
+    const nextVendorId = String(brand?.vendor?._id || brand?.vendor || "");
     setEditingId(String(brand?._id || ""));
     setForm({
       name: String(brand?.name || ""),
-      slug: String(brand?.slug || ""),
       description: String(brand?.description || ""),
       logoUrl: String(brand?.logoUrl || ""),
       isActive: brand?.isActive !== false,
-      vendorId: String(brand?.vendor?._id || brand?.vendor || ""),
+      vendorId: nextVendorId,
     });
+    setVendorScope(nextVendorId ? "vendor" : "global");
+    setVendorSearch("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -174,25 +244,52 @@ const ModuleBrands = () => {
           onSubmit={handleSubmit}
           className="xl:col-span-1 bg-white border border-gray-200 rounded-xl p-5 space-y-3"
         >
-          <h2 className="text-lg font-semibold text-black">
+            <h2 className="text-lg font-semibold text-black">
             {editingId ? "Edit Brand" : "Create Brand"}
           </h2>
 
-          {isAdmin ? (
-            <select
-              value={form.vendorId}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, vendorId: event.target.value }))
-              }
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-            >
-              <option value="">Global brand (all vendors)</option>
-              {vendors.map((vendor) => (
-                <option key={vendor._id} value={vendor._id}>
-                  {vendor.storeName || vendor.businessName || vendor.user?.name || "Vendor"}
-                </option>
-              ))}
-            </select>
+          {isAdmin && isMultiVendor ? (
+            <>
+              <select
+                value={vendorScope}
+                onChange={(event) => {
+                  const nextScope = event.target.value === "vendor" ? "vendor" : "global";
+                  setVendorScope(nextScope);
+                  if (nextScope === "global") {
+                    setForm((prev) => ({ ...prev, vendorId: "" }));
+                  }
+                }}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+              >
+                <option value="global">Global brand</option>
+                <option value="vendor">Vendor brand</option>
+              </select>
+
+              {vendorScope === "vendor" ? (
+                <div className="space-y-2">
+                  <input
+                    value={vendorSearch}
+                    onChange={(event) => setVendorSearch(event.target.value)}
+                    placeholder="Search vendor"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  />
+                  <select
+                    value={form.vendorId}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, vendorId: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+                  >
+                    <option value="">Select vendor</option>
+                    {filteredVendors.map((vendor) => (
+                      <option key={vendor._id} value={vendor._id}>
+                        {vendor.storeName || vendor.businessName || vendor.user?.name || "Vendor"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </>
           ) : null}
 
           <input
@@ -202,28 +299,47 @@ const ModuleBrands = () => {
             className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
           />
 
-          <input
-            value={form.slug}
-            onChange={(event) => setForm((prev) => ({ ...prev, slug: event.target.value }))}
-            placeholder="Slug (optional)"
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-          />
+          <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml"
+                onChange={handleLogoUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={logoUploading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-60"
+              >
+                {logoUploading ? "Uploading..." : "Upload Logo"}
+              </button>
+              {form.logoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, logoUrl: "" }))}
+                  className="inline-flex h-10 items-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700"
+                >
+                  Remove Logo
+                </button>
+              ) : null}
+            </div>
+            <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white p-4">
+              {form.logoUrl ? (
+                <img src={form.logoUrl} alt={form.name || "Brand logo"} className="h-16 w-auto max-w-full object-contain" />
+              ) : (
+                <p className="text-sm text-gray-500">No brand logo uploaded yet.</p>
+              )}
+            </div>
+          </div>
 
-          <input
-            value={form.logoUrl}
-            onChange={(event) => setForm((prev) => ({ ...prev, logoUrl: event.target.value }))}
-            placeholder="Logo URL (optional)"
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-          />
-
-          <textarea
+          <RichTextEditor
             value={form.description}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, description: event.target.value }))
-            }
+            onChange={(value) => setForm((prev) => ({ ...prev, description: value }))}
             placeholder="Description (optional)"
-            rows={3}
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg"
+            minHeight={160}
           />
 
           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -268,7 +384,7 @@ const ModuleBrands = () => {
                 placeholder="Search brand"
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
-              {isAdmin ? (
+              {isAdmin && isMultiVendor ? (
                 <select
                   value={vendorFilter}
                   onChange={(event) => setVendorFilter(event.target.value)}
@@ -303,7 +419,6 @@ const ModuleBrands = () => {
                 <thead className="text-left text-gray-600 border-b border-gray-200">
                   <tr>
                     <th className="py-2 pr-3">Brand</th>
-                    <th className="py-2 pr-3">Slug</th>
                     <th className="py-2 pr-3">Vendor</th>
                     <th className="py-2 pr-3">Status</th>
                     <th className="py-2 pr-3">Actions</th>
@@ -315,10 +430,9 @@ const ModuleBrands = () => {
                       <td className="py-3 pr-3">
                         <p className="font-medium text-black">{brand.name}</p>
                         <p className="text-xs text-gray-500">
-                          {brand.description ? brand.description.slice(0, 80) : "-"}
+                          {brand.description ? stripHtml(brand.description).slice(0, 80) : "-"}
                         </p>
                       </td>
-                      <td className="py-3 pr-3 font-mono text-xs">/{brand.slug}</td>
                       <td className="py-3 pr-3 text-xs text-gray-700">
                         {brand.vendor?.storeName || "Global"}
                       </td>

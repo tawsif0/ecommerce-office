@@ -74,6 +74,7 @@ const sanitizePaymentMethodForPublic = (method) => {
     accountNo: method.accountNo || "",
     instructions: method.instructions || "",
     requiresTransactionProof: Boolean(method.requiresTransactionProof),
+    shippingCost: Number(method.shippingCost || 0),
     displayOrder: Number(method.displayOrder || 0),
     isActive: Boolean(method.isActive),
     createdAt: method.createdAt,

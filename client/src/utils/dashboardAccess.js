@@ -71,6 +71,7 @@ const ADMIN_ALLOWED_TABS = new Set([
   "dashboard",
   "settings",
   "home",
+  "notifications",
   "add-order",
   "order-list",
   "shipping-zones",
@@ -79,6 +80,7 @@ const ADMIN_ALLOWED_TABS = new Set([
   "customers",
   "vendors-admin",
   "vendor-reviews",
+  "product-reviews",
   "product-approvals",
   "create-category",
   "modify-category",
@@ -104,13 +106,11 @@ const ADMIN_ALLOWED_TABS = new Set([
   "module-super-admin",
   "module-subscriptions",
   "module-bookings",
-  "module-auctions",
   "module-staff",
   "module-verifications",
   "module-support",
   "module-geolocation",
   "module-abandoned",
-  "module-voice",
   "vendor-messages",
 ]);
 
@@ -118,6 +118,7 @@ const VENDOR_ALLOWED_TABS = new Set([
   "dashboard",
   "settings",
   "home",
+  "notifications",
   "vendor-orders",
   "vendor-store",
   "vendor-shipping",
@@ -134,7 +135,6 @@ const VENDOR_ALLOWED_TABS = new Set([
   "module-business-reports",
   "module-subscriptions",
   "module-bookings",
-  "module-auctions",
   "module-staff",
   "module-verifications",
   "module-ads",
@@ -147,6 +147,7 @@ const STAFF_ALLOWED_TABS = new Set([
   "dashboard",
   "settings",
   "home",
+  "notifications",
   "vendor-messages",
   "module-campaign-offers",
   "module-suppliers",
@@ -156,7 +157,6 @@ const STAFF_ALLOWED_TABS = new Set([
   "module-business-reports",
   "module-subscriptions",
   "module-bookings",
-  "module-auctions",
   "module-staff",
   "module-verifications",
   "module-ads",
@@ -169,12 +169,12 @@ const USER_ALLOWED_TABS = new Set([
   "dashboard",
   "settings",
   "home",
+  "notifications",
   "my-orders",
   "my-addresses",
   "wishlist",
   "vendor-messages",
   "module-bookings",
-  "module-auctions",
   "module-support",
 ]);
 
@@ -193,6 +193,7 @@ const ADMIN_TAB_PERMISSION_MAP = {
   "vendors-admin": "manageUsers",
   customers: "manageUsers",
   "vendor-reviews": "manageUsers",
+  "product-reviews": "manageProducts",
   "module-admin-users": "manageUsers",
   "vendor-reports": "manageReports",
   "product-reports": "manageReports",
@@ -214,11 +215,12 @@ export const canAccessDashboardTab = ({
 }) => {
   const role = resolveUserRole(user);
   const normalizedTab = String(tab || "").trim();
+  const normalizedMarketplaceMode = normalizeMarketplaceMode(marketplaceMode);
 
   if (!normalizedTab) return false;
 
   if (
-    normalizeMarketplaceMode(marketplaceMode) === "single" &&
+    normalizedMarketplaceMode === "single" &&
     SINGLE_VENDOR_DISABLED_TABS.has(normalizedTab)
   ) {
     return false;
@@ -238,6 +240,11 @@ export const canAccessDashboardTab = ({
   }
 
   if (role === "vendor") {
+    if (normalizedMarketplaceMode === "single") {
+      return new Set(["dashboard", "settings", "home", "notifications"]).has(
+        normalizedTab,
+      );
+    }
     return VENDOR_ALLOWED_TABS.has(normalizedTab);
   }
 

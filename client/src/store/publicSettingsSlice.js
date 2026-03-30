@@ -45,7 +45,16 @@ export const loadAdminSettings = createAsyncThunk(
 
 export const saveAdminSettings = createAsyncThunk(
   "publicSettings/saveAdminSettings",
-  async (payload, { rejectWithValue }) => {
+  async (payload, { getState, rejectWithValue }) => {
+    const previousSettings = normalizePublicSettingsPayload(
+      getState()?.publicSettings?.settings || {},
+    );
+    const optimisticSettings = normalizePublicSettingsPayload(
+      getState()?.publicSettings?.adminDraft || payload || {},
+    );
+
+    primePublicSettingsCache(optimisticSettings);
+
     try {
       const response = await axios.put(`${baseUrl}/auth/admin/settings`, payload, {
         headers: getAuthHeaders(),
@@ -58,6 +67,7 @@ export const saveAdminSettings = createAsyncThunk(
         message: response?.data?.message || "Settings saved",
       };
     } catch (error) {
+      primePublicSettingsCache(previousSettings);
       return rejectWithValue(error?.response?.data?.error || "Failed to save settings");
     }
   },
@@ -104,6 +114,8 @@ const publicSettingsSlice = createSlice({
     error: "",
     loaded: false,
     adminDraft: initialSettings,
+    lastCommittedSettings: initialSettings,
+    saveOptimisticSnapshot: null,
     adminStatus: "idle",
     adminError: "",
     saveStatus: "idle",
@@ -183,7 +195,9 @@ const publicSettingsSlice = createSlice({
       };
     },
     mergePublicSettingsState(state, action) {
-      state.settings = normalizePublicSettingsPayload(action.payload || {});
+      const normalized = normalizePublicSettingsPayload(action.payload || {});
+      state.settings = normalized;
+      state.lastCommittedSettings = normalized;
       state.loaded = true;
     },
   },
@@ -194,10 +208,12 @@ const publicSettingsSlice = createSlice({
         state.error = "";
       })
       .addCase(loadPublicSettings.fulfilled, (state, action) => {
+        const normalized = normalizePublicSettingsPayload(action.payload || {});
         state.status = "succeeded";
         state.error = "";
         state.loaded = true;
-        state.settings = normalizePublicSettingsPayload(action.payload || {});
+        state.settings = normalized;
+        state.lastCommittedSettings = normalized;
       })
       .addCase(loadPublicSettings.rejected, (state, action) => {
         state.status = "failed";
@@ -213,6 +229,7 @@ const publicSettingsSlice = createSlice({
         state.adminError = "";
         state.adminDraft = normalized;
         state.settings = normalized;
+        state.lastCommittedSettings = normalized;
         state.loaded = true;
       })
       .addCase(loadAdminSettings.rejected, (state, action) => {
@@ -220,6 +237,11 @@ const publicSettingsSlice = createSlice({
         state.adminError = String(action.payload || action.error?.message || "");
       })
       .addCase(saveAdminSettings.pending, (state) => {
+        state.saveOptimisticSnapshot = normalizePublicSettingsPayload(state.settings || {});
+        state.settings = normalizePublicSettingsPayload(
+          state.adminDraft || state.settings || {},
+        );
+        state.loaded = true;
         state.saveStatus = "loading";
         state.saveError = "";
       })
@@ -229,11 +251,17 @@ const publicSettingsSlice = createSlice({
         state.saveError = "";
         state.settings = normalized;
         state.adminDraft = normalized;
+        state.lastCommittedSettings = normalized;
+        state.saveOptimisticSnapshot = null;
         state.loaded = true;
       })
       .addCase(saveAdminSettings.rejected, (state, action) => {
+        state.settings = normalizePublicSettingsPayload(
+          state.saveOptimisticSnapshot || state.lastCommittedSettings || state.settings || {},
+        );
         state.saveStatus = "failed";
         state.saveError = String(action.payload || action.error?.message || "");
+        state.saveOptimisticSnapshot = null;
       })
       .addCase(uploadAdminLogo.pending, (state) => {
         state.logoUploadStatus = "loading";
@@ -245,6 +273,7 @@ const publicSettingsSlice = createSlice({
         state.logoUploadError = "";
         state.settings = normalized;
         state.adminDraft = normalized;
+        state.lastCommittedSettings = normalized;
         state.loaded = true;
       })
       .addCase(uploadAdminLogo.rejected, (state, action) => {

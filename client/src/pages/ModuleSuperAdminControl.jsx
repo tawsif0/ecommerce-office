@@ -13,6 +13,7 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import {
+  broadcastPublicSettingsUpdated,
   fetchPublicSettings,
   invalidatePublicSettingsCache,
 } from "../utils/publicSettings";
@@ -179,6 +180,7 @@ const ModuleSuperAdminControl = ({ onMarketplaceModeChange }) => {
 
       invalidatePublicSettingsCache();
       await fetchPublicSettings({ force: true });
+      broadcastPublicSettingsUpdated();
       if (typeof onMarketplaceModeChange === "function") {
         onMarketplaceModeChange(control.marketplaceMode);
       }

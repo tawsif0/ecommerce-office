@@ -36,17 +36,17 @@ export default function MyWishlist() {
   };
 
   return (
-    <div className="site-shell py-8">
-      <div className="app-panel p-5 sm:p-6">
-        <div className="flex flex-col gap-4 border-b border-gray-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="mt-1 flex items-center gap-3">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-white sm:h-11 sm:w-11">
-                <FaHeart className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+    <div className="site-shell py-6 sm:py-8 md:py-10">
+      <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3 sm:items-center">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-black text-white sm:h-11 sm:w-11">
+                <FaHeart className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
               </span>
-              <div>
-                <h1 className="text-2xl font-black text-black">Wishlist</h1>
-                <p className="mt-1 text-sm leading-6 text-gray-600 sm:leading-normal">
+              <div className="min-w-0">
+                <h1 className="text-xl font-black text-black sm:text-2xl">Wishlist</h1>
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-gray-600 sm:text-sm sm:leading-6">
                   {sourceLabel}. Logged-in users keep wishlist items in the database, while guests keep them in local storage.
                 </p>
               </div>
@@ -58,7 +58,7 @@ export default function MyWishlist() {
               type="button"
               onClick={handleClear}
               disabled={clearing}
-              className="app-btn-danger px-4 py-2 text-sm disabled:opacity-60"
+              className="app-btn-danger w-full justify-center px-4 py-2 text-sm disabled:opacity-60 sm:w-auto"
             >
               <FiTrash2 className="h-4 w-4" />
               {clearing ? "Clearing..." : "Clear Wishlist"}
@@ -67,11 +67,11 @@ export default function MyWishlist() {
         </div>
 
         {loading ? (
-          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-600">
+          <div className="py-8 text-center text-gray-600">
             Loading wishlist...
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
+          <div className="py-10 text-center sm:py-12">
             <FiHeart className="mx-auto mb-3 h-10 w-10 text-gray-400" />
             <p className="text-gray-600">Your wishlist is empty.</p>
             <Link
@@ -82,7 +82,7 @@ export default function MyWishlist() {
             </Link>
           </div>
         ) : (
-          <div className="storefront-card-grid pt-6">
+          <div className="storefront-card-grid pt-5 sm:pt-6">
             {items.map((product) =>
               product?._id ? (
                 <div
@@ -91,7 +91,7 @@ export default function MyWishlist() {
                 >
                   <StorefrontProductCard
                     product={product}
-                    className="!w-full"
+                    className="w-full!"
                     onViewDetails={() => {
                       navigate(`/product/${product._id}`);
                       window.scrollTo({ top: 0, behavior: "smooth" });

@@ -274,7 +274,6 @@ const ModuleSupportTickets = () => {
               <option value="technical">Technical</option>
               <option value="vendor">Vendor</option>
               <option value="booking">Booking</option>
-              <option value="auction">Auction</option>
             </select>
             <select
               name="priority"

@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FiHeart, FiShuffle } from "react-icons/fi";
+import { FiHeart, FiShoppingBag, FiShuffle } from "react-icons/fi";
 import { toast } from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import { getProductPricingDisplay } from "../../utils/productPricing";
 import {
   getPublicStockBadgeText,
@@ -14,6 +15,7 @@ import {
 } from "../../store/wishlistSlice";
 import { toggleCompareItem } from "../../store/compareSlice";
 import { createProductSnapshot } from "../../utils/productSnapshot";
+import { useCart } from "../../context/CartContext";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -134,6 +136,28 @@ const getCategoryLabel = (product, badgeText = "") => {
   return "General";
 };
 
+const getPreviewColors = (product) => {
+  const directColors = Array.isArray(product?.colors)
+    ? product.colors.filter((color) => /^#[0-9a-fA-F]{6}$/.test(String(color || "").trim()))
+    : [];
+
+  const variantColors = Array.isArray(product?.variantDefinitions)
+    ? product.variantDefinitions
+        .filter(
+          (variant) =>
+            String(variant?.preset || "").trim().toLowerCase() === "color" ||
+            String(variant?.name || "").trim().toLowerCase() === "color",
+        )
+        .flatMap((variant) => variant.options || [])
+        .map((option) =>
+          String(option?.colorHex || option?.value || "").trim().toLowerCase(),
+        )
+        .filter((color) => /^#[0-9a-fA-F]{6}$/.test(color))
+    : [];
+
+  return [...new Set([...variantColors, ...directColors])];
+};
+
 const StorefrontProductCard = ({
   product,
   title,
@@ -146,16 +170,20 @@ const StorefrontProductCard = ({
   onViewDetails,
   showCompareButton = true,
   showWishlistButton = true,
+  showCartButton = true,
 }) => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const { addToCart } = useCart();
   const settings = useSelector(selectPublicSettings);
   const compareItems = useSelector((state) => state.compare.items || []);
   const wishlistItems = useSelector((state) => state.wishlist.items || []);
   const wishlistPendingIds = useSelector(selectWishlistPendingIds);
   const pricing = useMemo(() => getProductPricingDisplay(product), [product]);
   const displayMetaLine = getCardMetaLine(product, metaLine);
-  const previewColors = Array.isArray(product?.colors) ? product.colors.slice(0, 4) : [];
-  const hasMoreColors = Array.isArray(product?.colors) && product.colors.length > 4;
+  const allPreviewColors = useMemo(() => getPreviewColors(product), [product]);
+  const previewColors = allPreviewColors.slice(0, 4);
+  const hasMoreColors = allPreviewColors.length > 4;
   const discountLabel = buildDiscountLabel(pricing);
   const categoryLabel = getCategoryLabel(product, badgeText);
   const sectionBadgeLabel =
@@ -208,13 +236,29 @@ const StorefrontProductCard = ({
     }
   };
 
+  const handleAddToCart = async (event) => {
+    event.stopPropagation();
+
+    const marketplaceType = String(product?.marketplaceType || "simple").trim().toLowerCase();
+    if (["variable", "grouped"].includes(marketplaceType)) {
+      toast("Choose options on the product details page first.");
+      navigate(`/products/${productId || product?._id || product?.id}`);
+      return;
+    }
+
+    const result = await addToCart(product, 1);
+    if (!result?.success && result?.error) {
+      toast.error(result.error);
+    }
+  };
+
   return (
     <article
       role="button"
       tabIndex={0}
       onClick={handleViewDetails}
       onKeyDown={handleKeyDown}
-      className={`storefront-product-card group flex h-full w-full flex-col overflow-hidden rounded-[22px] border border-gray-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-gray-300 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black/40 ${className}`}
+      className={`storefront-product-card group flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[22px] border border-gray-200 bg-white shadow-sm transition duration-300 hover:-translate-y-[2px] hover:border-gray-300 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black/40 ${className}`}
     >
       <div className="relative overflow-hidden bg-linear-to-br from-gray-50 via-white to-gray-100 p-2.5">
         <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-5rem)] flex-col items-start gap-1.5">
@@ -338,6 +382,17 @@ const StorefrontProductCard = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {showCartButton ? (
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-[14px] border border-gray-200 bg-white text-black transition hover:border-black hover:bg-gray-50 sm:h-[42px] sm:w-[42px]"
+                aria-label="Add to cart"
+                title="Add to cart"
+              >
+                <FiShoppingBag className="h-4 w-4" />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={(event) => {
@@ -355,8 +410,8 @@ const StorefrontProductCard = ({
                 disabled={wishlistLoading}
                 className={`inline-flex h-10 w-10 items-center justify-center rounded-[14px] border transition sm:h-[42px] sm:w-[42px] ${
                   isWishlisted
-                    ? "border-red-200 bg-red-50 text-red-600"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-black hover:text-black"
+                    ? "border-red-500 bg-red-50 text-red-600"
+                    : "border-black bg-white text-black hover:border-red-500 hover:text-red-500"
                 } disabled:cursor-not-allowed disabled:opacity-60`}
                 aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
                 title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}

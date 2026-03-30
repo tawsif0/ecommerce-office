@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
-import { FiRefreshCw } from "react-icons/fi";
+import { FiRefreshCw, FiUpload } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
+import RichTextEditor from "../components/RichTextEditor";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -53,6 +54,8 @@ const ModuleAds = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rejectionReasons, setRejectionReasons] = useState({});
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const bannerInputRef = useRef(null);
 
   const isAdmin = user?.userType === "admin";
   const isVendorSide = user?.userType === "vendor" || user?.userType === "staff";
@@ -85,11 +88,44 @@ const ModuleAds = () => {
     }));
   };
 
+  const handleBannerUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setBannerUploading(true);
+      const payload = new FormData();
+      payload.append("banner", file);
+
+      const response = await axios.post(`${baseUrl}/ads/upload-banner`, payload, {
+        headers: getAuthHeaders(),
+      });
+
+      const uploadedUrl = String(response?.data?.bannerUrl || "").trim();
+      if (!uploadedUrl) {
+        throw new Error("Upload failed");
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        bannerUrl: uploadedUrl,
+      }));
+      toast.success(response?.data?.message || "Banner uploaded");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to upload banner");
+    } finally {
+      setBannerUploading(false);
+      if (bannerInputRef.current) {
+        bannerInputRef.current.value = "";
+      }
+    }
+  };
+
   const createAd = async (event) => {
     event.preventDefault();
 
     if (!form.title.trim() || !form.bannerUrl.trim() || !form.startDate || !form.endDate) {
-      toast.error("Title, banner URL, start date and end date are required");
+      toast.error("Title, banner image, start date and end date are required");
       return;
     }
 
@@ -202,13 +238,33 @@ const ModuleAds = () => {
               placeholder="Ad title"
               className="px-3 py-2.5 border border-gray-200 rounded-lg"
             />
-            <input
-              name="bannerUrl"
-              value={form.bannerUrl}
-              onChange={handleForm}
-              placeholder="Banner image URL"
-              className="px-3 py-2.5 border border-gray-200 rounded-lg"
-            />
+            <div className="space-y-2">
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml"
+                onChange={handleBannerUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => bannerInputRef.current?.click()}
+                disabled={bannerUploading}
+                className="inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-60"
+              >
+                <FiUpload className="h-4 w-4" />
+                {bannerUploading ? "Uploading Banner..." : "Upload Banner Image"}
+              </button>
+              {form.bannerUrl ? (
+                <div className="flex h-20 items-center justify-center overflow-hidden rounded-lg border border-dashed border-gray-200 bg-gray-50 p-2">
+                  <img
+                    src={form.bannerUrl}
+                    alt={form.title || "Ad banner"}
+                    className="h-full w-full rounded object-cover"
+                  />
+                </div>
+              ) : null}
+            </div>
             <input
               name="targetUrl"
               value={form.targetUrl}
@@ -283,14 +339,18 @@ const ModuleAds = () => {
             </select>
           </div>
 
-          <textarea
-            name="description"
-            value={form.description}
-            onChange={handleForm}
-            rows={3}
-            placeholder="Ad description"
-            className="mt-4 w-full px-3 py-2.5 border border-gray-200 rounded-lg"
-          />
+          <div className="mt-4">
+            <RichTextEditor
+              value={form.description}
+              onChange={(value) =>
+                setForm((prev) => ({
+                  ...prev,
+                  description: value,
+                }))
+              }
+              placeholder="Ad description"
+            />
+          </div>
 
           <button
             type="submit"

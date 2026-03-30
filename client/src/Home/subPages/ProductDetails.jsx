@@ -1,5 +1,6 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -19,13 +20,14 @@ import {
   FaTruck,
   FaUndo,
 } from "react-icons/fa";
-import { FiShuffle } from "react-icons/fi";
+import { FiHeart, FiShare2, FiShuffle } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../hooks/useAuth";
 import usePublicSettings from "../../hooks/usePublicSettings";
+import StorefrontProductCard from "../components/StorefrontProductCard";
 import { toggleCompareItem } from "../../store/compareSlice";
 import { addRecentlyViewedItem } from "../../store/recentlyViewedSlice";
 import {
@@ -39,10 +41,9 @@ import {
 } from "../../utils/marketingDataLayer";
 import { createProductSnapshot } from "../../utils/productSnapshot";
 import {
-  getPublicStockBadgeText,
   isPublicStockVisible,
 } from "../../utils/publicProduct";
-import StorefrontProductCard from "../components/StorefrontProductCard";
+import { hasHtmlContent, stripHtml } from "../../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -139,6 +140,8 @@ const ProductImage = ({ src, alt, className, isCurrent = false }) => {
       alt={alt}
       className={className}
       onError={handleError}
+      loading={isCurrent ? "eager" : "lazy"}
+      decoding="async"
       crossOrigin={
         imgSrc?.startsWith("http://") || imgSrc?.startsWith("https://")
           ? "anonymous"
@@ -150,8 +153,16 @@ const ProductImage = ({ src, alt, className, isCurrent = false }) => {
 
 const ProductDetails = () => {
   const { id } = useParams();
+  const buildEmptyReviewForm = () => ({
+    rating: 5,
+    title: "",
+    comment: "",
+    reviewerName: "",
+    reviewerEmail: "",
+  });
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState("");
+  const [selectedVariantOptions, setSelectedVariantOptions] = useState({});
   const [selectedVariationId, setSelectedVariationId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -164,11 +175,7 @@ const ProductDetails = () => {
   const [reviewSummary, setReviewSummary] = useState({ ratingAverage: 0, ratingCount: 0 });
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [myReview, setMyReview] = useState(null);
-  const [reviewForm, setReviewForm] = useState({
-    rating: 5,
-    title: "",
-    comment: "",
-  });
+  const [reviewForm, setReviewForm] = useState(buildEmptyReviewForm);
   const [hoverRating, setHoverRating] = useState(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewDeleting, setReviewDeleting] = useState(false);
@@ -196,7 +203,7 @@ const ProductDetails = () => {
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareTitle = product?.title || "Product";
   const shareText = product?.description
-    ? String(product.description).slice(0, 140)
+    ? stripHtml(product.description).slice(0, 140)
     : "Check this product";
   const isCompared = compareItems.some(
     (item) => String(item?._id || "") === String(product?._id || ""),
@@ -377,7 +384,7 @@ const ProductDetails = () => {
   useEffect(() => {
     if (!id || !isLoggedIn) {
       setMyReview(null);
-      setReviewForm({ rating: 5, title: "", comment: "" });
+      setReviewForm(buildEmptyReviewForm());
       return;
     }
 
@@ -393,18 +400,24 @@ const ProductDetails = () => {
             rating: Number(review.rating || 5),
             title: review.title || "",
             comment: review.comment || "",
+            reviewerName: review.reviewerName || user?.name || "",
+            reviewerEmail: review.reviewerEmail || user?.email || "",
           });
         } else {
-          setReviewForm({ rating: 5, title: "", comment: "" });
+          setReviewForm({
+            ...buildEmptyReviewForm(),
+            reviewerName: user?.name || "",
+            reviewerEmail: user?.email || "",
+          });
         }
       } catch (_error) {
         setMyReview(null);
-        setReviewForm({ rating: 5, title: "", comment: "" });
+        setReviewForm(buildEmptyReviewForm());
       }
     };
 
     loadMyReview();
-  }, [id, isLoggedIn]);
+  }, [id, isLoggedIn, user?.email, user?.name]);
 
   // Fetch product details
   useEffect(() => {
@@ -419,9 +432,43 @@ const ProductDetails = () => {
         if (productData) {
           setProduct(productData);
 
-          // Set default selections
-          if (productData.colors && productData.colors.length > 0) {
+          const variantDefaults = {};
+          if (Array.isArray(productData.variantDefinitions)) {
+            productData.variantDefinitions.forEach((definition, index) => {
+              const firstOption = Array.isArray(definition?.options)
+                ? definition.options.find((option) =>
+                    String(option?.label || option?.value || option?.colorHex || "").trim(),
+                  )
+                : null;
+              if (firstOption) {
+                variantDefaults[index] = firstOption;
+              }
+            });
+          }
+          setSelectedVariantOptions(variantDefaults);
+
+          const colorVariantDefinition = Array.isArray(productData.variantDefinitions)
+            ? productData.variantDefinitions.find(
+                (definition) =>
+                  String(definition?.preset || "").trim().toLowerCase() === "color" ||
+                  String(definition?.name || "").trim().toLowerCase() === "color",
+              )
+            : null;
+
+          const firstColorVariant = Array.isArray(colorVariantDefinition?.options)
+            ? colorVariantDefinition.options.find((option) =>
+                String(option?.colorHex || option?.value || "").trim(),
+              )
+            : null;
+
+          if (firstColorVariant) {
+            setSelectedColor(
+              String(firstColorVariant.colorHex || firstColorVariant.value || "").trim(),
+            );
+          } else if (productData.colors && productData.colors.length > 0) {
             setSelectedColor(productData.colors[0]);
+          } else {
+            setSelectedColor("");
           }
 
           if (
@@ -584,12 +631,66 @@ const ProductDetails = () => {
   const isTbaPrice = priceType === "tba";
   const isRecurringProduct = Boolean(product?.isRecurring);
   const showPublicStock = isPublicStockVisible(product, settings);
+  const productVariantDefinitions = useMemo(
+    () =>
+      Array.isArray(product?.variantDefinitions)
+        ? product.variantDefinitions
+            .map((definition) => ({
+              preset: String(definition?.preset || "custom").trim().toLowerCase(),
+              name: String(definition?.name || "").trim(),
+              options: Array.isArray(definition?.options)
+                ? definition.options.filter(
+                    (option) =>
+                      String(option?.label || option?.value || option?.colorHex || "").trim(),
+                  )
+                : [],
+            }))
+            .filter((definition) => definition.options.length > 0)
+        : [],
+    [product?.variantDefinitions],
+  );
+  const hasColorVariantDefinition = productVariantDefinitions.some(
+    (definition) =>
+      definition.preset === "color" || definition.name.toLowerCase() === "color",
+  );
+  const legacyColorOptions = !hasColorVariantDefinition && Array.isArray(product?.colors)
+    ? product.colors
+    : [];
   const selectedVariation =
     marketplaceType === "variable"
       ? (product?.variations || []).find(
           (variation) => String(variation?._id || "") === String(selectedVariationId || ""),
         ) || null
       : null;
+  const selectedVariantLabel = useMemo(
+    () =>
+      productVariantDefinitions
+        .map((definition, index) => {
+          const selected = selectedVariantOptions[index];
+          if (!selected) return "";
+          return `${definition.name || "Variant"}: ${selected.label || selected.value || ""}`;
+        })
+        .filter(Boolean)
+        .join(", "),
+    [productVariantDefinitions, selectedVariantOptions],
+  );
+  const resolvedSelectedColor = useMemo(() => {
+    const colorDefinitionIndex = productVariantDefinitions.findIndex(
+      (definition) =>
+        definition.preset === "color" || definition.name.toLowerCase() === "color",
+    );
+
+    if (colorDefinitionIndex >= 0) {
+      const selectedOption = selectedVariantOptions[colorDefinitionIndex];
+      return String(
+        selectedOption?.colorHex || selectedOption?.value || selectedColor || "",
+      )
+        .trim()
+        .toLowerCase();
+    }
+
+    return String(selectedColor || "").trim().toLowerCase();
+  }, [productVariantDefinitions, selectedColor, selectedVariantOptions]);
 
   // Get current price based on marketplace type
   const getCurrentPrice = () => {
@@ -662,6 +763,11 @@ const ProductDetails = () => {
       return;
     }
 
+    if (productVariantDefinitions.some((_, index) => !selectedVariantOptions[index])) {
+      toast.error("Please select the product variants");
+      return;
+    }
+
     if (!isInStock()) {
       toast.error("This item is currently out of stock");
       return;
@@ -670,9 +776,9 @@ const ProductDetails = () => {
     setLoading(true);
 
     try {
-      const result = await addToCart(product, quantity, selectedColor, "", {
+      const result = await addToCart(product, quantity, resolvedSelectedColor, "", {
         variationId: selectedVariationId || "",
-        variationLabel: selectedVariation?.label || "",
+        variationLabel: selectedVariation?.label || selectedVariantLabel || "",
         unitPrice: getCurrentPrice(),
       });
       if (!result?.success) {
@@ -707,15 +813,20 @@ const ProductDetails = () => {
         return;
       }
 
+      if (productVariantDefinitions.some((_, index) => !selectedVariantOptions[index])) {
+        toast.error("Please select the product variants");
+        return;
+      }
+
       if (!isInStock()) {
         toast.error("This item is currently out of stock");
         return;
       }
 
       // Add to cart first
-      const result = await addToCart(product, quantity, selectedColor, "", {
+      const result = await addToCart(product, quantity, resolvedSelectedColor, "", {
         variationId: selectedVariationId || "",
-        variationLabel: selectedVariation?.label || "",
+        variationLabel: selectedVariation?.label || selectedVariantLabel || "",
         unitPrice: getCurrentPrice(),
       });
 
@@ -891,7 +1002,7 @@ const ProductDetails = () => {
         const max = Math.max(...prices);
         const currentText =
           min !== max
-            ? `${formatPrice(min) || ""} – ${formatPrice(max) || ""}`.trim()
+            ? `${formatPrice(min) || ""} - ${formatPrice(max) || ""}`.trim()
             : formatPrice(min) || "";
 
         return {
@@ -1055,37 +1166,57 @@ const ProductDetails = () => {
   const handleSubmitReview = async (event) => {
     event.preventDefault();
 
-    if (!isLoggedIn) {
-      toast.error("Please login to submit a review");
-      navigate("/login");
-      return;
-    }
-
     if (!reviewForm.comment.trim()) {
       toast.error("Please write your review comment");
       return;
     }
 
+    if (!isLoggedIn && !String(reviewForm.reviewerName || "").trim()) {
+      toast.error("Please enter your name");
+      return;
+    }
+
+    if (
+      !isLoggedIn &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(reviewForm.reviewerEmail || "").trim())
+    ) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
     try {
       setReviewSubmitting(true);
+      const endpoint = isLoggedIn
+        ? `${baseUrl}/products/${id}/reviews`
+        : `${baseUrl}/products/public/${id}/reviews`;
       const response = await axios.post(
-        `${baseUrl}/products/${id}/reviews`,
+        endpoint,
         {
           rating: Number(reviewForm.rating || 5),
           title: String(reviewForm.title || "").trim(),
           comment: String(reviewForm.comment || "").trim(),
+          reviewerName: String(reviewForm.reviewerName || "").trim(),
+          reviewerEmail: String(reviewForm.reviewerEmail || "").trim(),
         },
-        { headers: getAuthHeaders() },
+        isLoggedIn ? { headers: getAuthHeaders() } : undefined,
       );
 
-      if (response.data?.review) {
+      if (isLoggedIn && response.data?.review) {
         setMyReview(response.data.review);
       }
       if (response.data?.summary) {
         setReviewSummary(response.data.summary);
       }
 
-      setReviewForm({ rating: 5, title: "", comment: "" });
+      setReviewForm(
+        isLoggedIn
+          ? {
+              ...buildEmptyReviewForm(),
+              reviewerName: user?.name || "",
+              reviewerEmail: user?.email || "",
+            }
+          : buildEmptyReviewForm(),
+      );
       setHoverRating(null);
       toast.success(response.data?.message || "Review submitted");
       await refreshReviews();
@@ -1105,7 +1236,11 @@ const ProductDetails = () => {
         headers: getAuthHeaders(),
       });
       setMyReview(null);
-      setReviewForm({ rating: 5, title: "", comment: "" });
+      setReviewForm({
+        ...buildEmptyReviewForm(),
+        reviewerName: user?.name || "",
+        reviewerEmail: user?.email || "",
+      });
       if (response.data?.summary) {
         setReviewSummary(response.data.summary);
       }
@@ -1201,6 +1336,71 @@ const ProductDetails = () => {
       variationPriceBounds &&
       variationPriceBounds.min !== variationPriceBounds.max,
   );
+  const categoryLabel = String(
+    typeof product?.category === "object"
+      ? product?.category?.name || ""
+      : product?.category || "",
+  ).trim();
+  const brandLabel = String(product?.brand || "").trim();
+  const vendorLabel = String(product?.vendor?.storeName || "").trim();
+  const vendorSlug = String(product?.vendor?.slug || "").trim();
+  const recurringIntervalLabel = (
+    {
+      daily: "day",
+      weekly: "week",
+      monthly: "month",
+      yearly: "year",
+    }[recurringInterval] || recurringInterval
+  ).trim();
+  const recurringLabel = isRecurringProduct
+    ? `Renews every ${recurringIntervalCount > 1 ? `${recurringIntervalCount} ` : ""}${recurringIntervalLabel}${recurringIntervalCount > 1 ? "s" : ""}${
+        recurringTrialDays > 0 ? ` after a ${recurringTrialDays}-day trial` : ""
+      }${recurringTotalCycles > 0 ? ` for ${recurringTotalCycles} cycles` : ""}`
+    : "";
+  const publicStockText = showPublicStock && currentStock > 0 ? `${currentStock} in stock` : "";
+  const availabilityBadge = (() => {
+    if (isTbaPrice) {
+      return {
+        label: "Price pending",
+        className: "border border-gray-200 bg-gray-50 text-gray-700",
+      };
+    }
+
+    if (
+      marketplaceType === "variable" &&
+      Array.isArray(product?.variations) &&
+      product.variations.length > 0 &&
+      !selectedVariationId
+    ) {
+      return {
+        label: "Select size",
+        className: "border border-gray-200 bg-white text-gray-700",
+      };
+    }
+
+    if (product?.allowBackorder && currentStock <= 0) {
+      return {
+        label: "Backorder available",
+        className: "border border-gray-200 bg-white text-gray-700",
+      };
+    }
+
+    if (!isInStock()) {
+      return {
+        label: "Out of stock",
+        className: "bg-rose-50 text-rose-700",
+      };
+    }
+
+    if (publicStockText) {
+      return {
+        label: publicStockText,
+        className: "bg-emerald-50 text-emerald-700",
+      };
+    }
+
+    return null;
+  })();
   const purchaseActionDisabled =
     loading ||
     cartLoading ||
@@ -1209,13 +1409,41 @@ const ProductDetails = () => {
       Array.isArray(product?.variations) &&
       product.variations.length > 0 &&
       !selectedVariationId);
-  const quantityStatusText = product?.allowBackorder
-    ? "Backorders allowed"
-    : currentStock > 0
-      ? showPublicStock
-        ? `${currentStock} available`
-        : "In stock"
-      : "Out of stock";
+  const quantityStatusText =
+    currentStock > 0
+      ? publicStockText
+      : product?.allowBackorder
+        ? "Backorders allowed"
+        : "Out of stock";
+  const quantityStatusToneClass =
+    currentStock > 0
+      ? "bg-emerald-50 text-emerald-700"
+      : product?.allowBackorder
+        ? "bg-white text-gray-700 shadow-sm"
+        : "bg-rose-50 text-rose-600";
+  const summaryHighlights = [
+    categoryLabel ? { label: "Category", value: categoryLabel } : null,
+    brandLabel ? { label: "Brand", value: brandLabel } : null,
+    {
+      label: "Delivery",
+      value:
+        Number(product?.deliveryMaxDays || 0) > 0
+          ? Number(product?.deliveryMinDays || 0) > 0
+            ? `${product.deliveryMinDays}-${product.deliveryMaxDays} days`
+            : `${product.deliveryMaxDays} days`
+          : "Shown at checkout",
+    },
+    {
+      label: isRecurringProduct ? "Plan" : "Pricing",
+      value: isRecurringProduct
+        ? recurringLabel
+        : priceType === "best"
+          ? "Offer pricing"
+          : priceType === "tba"
+            ? "TBA"
+            : "Standard price",
+    },
+  ].filter(Boolean);
   const additionalInfoRows = (() => {
 	    const rows = [];
 
@@ -1247,41 +1475,16 @@ const ProductDetails = () => {
 
     return rows;
   })();
-  const detailFacts = [
-    {
-      label: "Availability",
-      value: isTbaPrice
-        ? "Price pending"
-        : product?.allowBackorder
-          ? "Backorder enabled"
-          : isInStock()
-            ? "Ready to ship"
-            : "Currently unavailable",
-    },
-    {
-      label: "Buyer view",
-      value: showPublicStock ? "Exact stock shown" : "Stock kept private",
-    },
-    {
-      label: "Delivery",
-      value:
-        Number(product?.deliveryMaxDays || 0) > 0
-          ? Number(product?.deliveryMinDays || 0) > 0
-            ? `${product.deliveryMinDays}-${product.deliveryMaxDays} days`
-            : `${product.deliveryMaxDays} days`
-          : "Shown at checkout",
-    },
-    {
-      label: "Pricing mode",
-      value:
-        priceType === "best"
-          ? "Offer pricing"
-          : priceType === "tba"
-            ? "TBA"
-            : "Standard price",
-    },
-  ];
-
+  const featureColumns = (() => {
+    const items = Array.isArray(product?.features)
+      ? product.features
+          .map((feature) => String(feature || "").trim())
+          .filter(Boolean)
+      : [];
+    if (!items.length) return [];
+    const midpoint = Math.ceil(items.length / 2);
+    return [items.slice(0, midpoint), items.slice(midpoint)].filter((column) => column.length);
+  })();
   // Loading state
   if (productLoading) {
     return (
@@ -1347,7 +1550,7 @@ const ProductDetails = () => {
              animate={{ opacity: 1 }}
              exit={{ opacity: 0 }}
              data-skip-scroll-top
-             className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center p-4"
+             className="fixed inset-0 app-layer-modal bg-black bg-opacity-95 flex items-center justify-center p-4"
              onClick={() => setShowImageModal(false)}
            >
             <div
@@ -1393,72 +1596,44 @@ const ProductDetails = () => {
 
       {/* Main Content */}
       <div className="site-shell py-6 sm:py-8 lg:py-10">
-        <div ref={productTopRef} id="product-top" className="scroll-mt-24" />
+        <div ref={productTopRef} id="product-top" className="scroll-mt-storefront" />
 
         <div className="mb-10 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
           {/* Product images */}
-          <div className="lg:sticky lg:top-6 lg:self-start">
-            <div className="rounded-[32px] border border-gray-200 bg-[radial-gradient(circle_at_top,#ffffff_0%,#f7f8fa_42%,#eef1f5_100%)] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-5">
-              <div className="flex gap-4">
+          <div className="storefront-sticky-offset lg:sticky lg:self-start">
+            <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-start sm:gap-6">
               {product.images && product.images.length > 1 ? (
-                <div className="hidden lg:flex flex-col items-center gap-3">
-                  {thumbnailRailState.canScrollUp ? (
+                <div
+                  ref={verticalThumbsRef}
+                  className="flex gap-3 overflow-x-auto pb-1 sm:max-h-[38rem] sm:w-16 sm:flex-col sm:overflow-y-auto sm:pb-0 sm:pr-1 lg:w-18"
+                >
+                  {product.images.map((image, index) => (
                     <button
+                      key={index}
                       type="button"
                       data-no-scroll-top
-                      onClick={() => scrollVerticalThumbs("up")}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white/90 text-gray-700 shadow-sm transition hover:bg-white"
-                      aria-label="Scroll thumbnails up"
+                      ref={(el) => {
+                        thumbnailButtonRefs.current[index] = el;
+                      }}
+                      onClick={() => setSelectedImage(index)}
+                      className={`aspect-square w-16 shrink-0 overflow-hidden rounded-2xl border bg-white p-2 transition-all active:scale-95 lg:w-[4.5rem] ${
+                        selectedImage === index
+                          ? "border-2 border-black shadow-[0_10px_22px_rgba(0,0,0,0.08)]"
+                          : "border-black/10 hover:border-black/70"
+                      }`}
                     >
-                      <FaChevronLeft className="h-3.5 w-3.5 rotate-90" />
+                      <ProductImage
+                        src={image}
+                        alt={`${product.title} - ${index + 1}`}
+                        className="h-full w-full object-contain mix-blend-multiply"
+                      />
                     </button>
-                  ) : null}
-
-                  <div
-                    ref={verticalThumbsRef}
-                    className="flex max-h-[560px] w-24 flex-col gap-3 overflow-y-auto pr-1"
-                  >
-                    {product.images.map((image, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        data-no-scroll-top
-                        ref={(el) => {
-                          thumbnailButtonRefs.current[index] = el;
-                        }}
-                        onClick={() => setSelectedImage(index)}
-                        className={`h-20 w-20 overflow-hidden rounded-[22px] border bg-white/80 p-1 shadow-sm transition-all ${
-                          selectedImage === index
-                            ? "border-black shadow-[0_12px_24px_rgba(15,23,42,0.12)]"
-                            : "border-gray-200 hover:border-gray-400 hover:bg-white"
-                        }`}
-                      >
-                        <ProductImage
-                          src={image}
-                          alt={`${product.title} - ${index + 1}`}
-                          className="h-full w-full rounded-[18px] bg-linear-to-br from-gray-50 to-white object-contain"
-                        />
-                      </button>
-                    ))}
-                  </div>
-
-                  {thumbnailRailState.canScrollDown ? (
-                    <button
-                      type="button"
-                      data-no-scroll-top
-                      onClick={() => scrollVerticalThumbs("down")}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white/90 text-gray-700 shadow-sm transition hover:bg-white"
-                      aria-label="Scroll thumbnails down"
-                    >
-                      <FaChevronLeft className="h-3.5 w-3.5 -rotate-90" />
-                    </button>
-                  ) : null}
+                  ))}
                 </div>
               ) : null}
 
-              <div className="relative flex-1 overflow-hidden rounded-[30px] border border-white/70 bg-white/80 shadow-[0_20px_45px_rgba(15,23,42,0.10)] backdrop-blur">
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.98),rgba(255,255,255,0))]" />
-
+              <div className="relative flex-1 rounded-[2rem] border border-black/8 bg-[#f8f8f8] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:rounded-[2.25rem] sm:p-8 lg:p-10">
+                <div className="pointer-events-none absolute inset-4 rounded-[1.6rem] border border-black/5 bg-white/80 sm:inset-8 sm:rounded-[1.9rem]" />
                 <button
                   type="button"
                   data-no-scroll-top
@@ -1466,14 +1641,15 @@ const ProductDetails = () => {
                     setCurrentImageIndex(selectedImage);
                     setShowImageModal(true);
                   }}
-                  className="block w-full cursor-zoom-in p-4 sm:p-6"
+                  className="relative z-10 block aspect-square w-full cursor-zoom-in"
                   aria-label="Open product image"
                 >
-                  <div className="relative overflow-hidden rounded-[26px] bg-[radial-gradient(circle_at_top,#ffffff_0%,#f8fafc_55%,#eef2f6_100%)] ring-1 ring-gray-100">
+                  <div className="flex h-full items-center justify-center">
                     <ProductImage
                       src={product.images?.[selectedImage]}
                       alt={product.title}
-                      className="h-[420px] w-full object-contain p-4 sm:h-[560px] sm:p-8"
+                      isCurrent
+                      className="h-full max-h-[34rem] w-full object-contain mix-blend-multiply drop-shadow-[0_30px_35px_rgba(0,0,0,0.14)]"
                     />
                   </div>
                 </button>
@@ -1487,7 +1663,7 @@ const ProductDetails = () => {
                         event.stopPropagation();
                         prevSelectedImage();
                       }}
-                      className="absolute left-4 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/60 text-white shadow-sm transition hover:bg-black/75"
+                      className="absolute left-4 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-sm transition-all hover:scale-110 active:scale-95 sm:left-6 sm:h-11 sm:w-11"
                       aria-label="Previous image"
                     >
                       <FaChevronLeft className="h-4 w-4" />
@@ -1499,7 +1675,7 @@ const ProductDetails = () => {
                         event.stopPropagation();
                         nextSelectedImage();
                       }}
-                      className="absolute right-4 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/60 text-white shadow-sm transition hover:bg-black/75"
+                      className="absolute right-4 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-sm transition-all hover:scale-110 active:scale-95 sm:right-6 sm:h-11 sm:w-11"
                       aria-label="Next image"
                     >
                       <FaChevronRight className="h-4 w-4" />
@@ -1507,39 +1683,12 @@ const ProductDetails = () => {
                   </>
                 ) : null}
               </div>
-              </div>
             </div>
-
-            {product.images && product.images.length > 1 ? (
-              <div className="mt-4 flex gap-3 overflow-x-auto pb-1 lg:hidden">
-                {product.images.map((image, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    data-no-scroll-top
-                    onClick={() => setSelectedImage(index)}
-                    className={`shrink-0 h-20 w-20 overflow-hidden rounded-[22px] border bg-white/80 p-1 shadow-sm transition-all ${
-                      selectedImage === index
-                        ? "border-black shadow-[0_12px_24px_rgba(15,23,42,0.12)]"
-                        : "border-gray-200 hover:border-gray-400 hover:bg-white"
-                    }`}
-                  >
-                    <ProductImage
-                      src={image}
-                      alt={`${product.title} - ${index + 1}`}
-                      className="h-full w-full rounded-[18px] bg-linear-to-br from-gray-50 to-white object-contain"
-                    />
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-
           </div>
 
           {/* Product summary */}
-          <div className="rounded-[32px] border border-gray-200 bg-white p-5 shadow-sm sm:p-6 text-left">
-            <nav aria-label="Breadcrumb" className="text-sm text-gray-600">
+          <div className="rounded-[2rem] border border-black/8 bg-white p-5 text-left shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-6 lg:p-8">
+            <nav aria-label="Breadcrumb" className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
               <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <li>
                   <button
@@ -1594,46 +1743,60 @@ const ProductDetails = () => {
               </ol>
             </nav>
 
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-              {isTbaPrice ? (
-                <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                  Price pending
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              {categoryLabel ? (
+                <span className="inline-flex items-center rounded-full bg-zinc-100 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-black">
+                  {categoryLabel}
                 </span>
-              ) : marketplaceType === "variable" &&
-                Array.isArray(product.variations) &&
-                product.variations.length > 0 &&
-                !selectedVariationId ? (
-                <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-700">
-                  Select size
+              ) : null}
+              {!isTbaPrice && discountPercentForDisplay && discountPercentForDisplay > 0 ? (
+                <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white">
+                  Save {discountPercentForDisplay}%
                 </span>
-              ) : product.allowBackorder && currentStock <= 0 ? (
-                <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
-                  Backorder available
+              ) : null}
+              {availabilityBadge ? (
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${availabilityBadge.className}`}>
+                  {availabilityBadge.label}
                 </span>
-              ) : isInStock() ? (
-                <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  {showPublicStock && currentStock > 0 ? `${currentStock} in stock` : "In stock"}
+              ) : null}
+              {!isTbaPrice ? (
+                <span className="text-[10px] font-medium text-zinc-400 sm:ml-auto">
+                  {liveViewingCount} viewing now
                 </span>
-              ) : (
-                <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
-                  Out of stock
-                </span>
-              )}
+              ) : null}
             </div>
 
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+            <h1 className="mt-5 text-4xl font-bold leading-[1.08] tracking-tight text-black sm:text-5xl">
               {product.title}
             </h1>
 
-            <div className="mt-2">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-400">
+              {brandLabel ? (
+                <span>
+                  Brand: <span className="font-bold text-black">{brandLabel}</span>
+                </span>
+              ) : null}
+              {vendorLabel && vendorSlug ? (
+                <button
+                  type="button"
+                  data-no-scroll-top
+                  onClick={() => navigate(`/store/${vendorSlug}`)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-black transition hover:border-black"
+                >
+                  Sold by <span>{vendorLabel}</span>
+                </button>
+              ) : null}
+            </div>
+
+            <div className="mt-8 rounded-[1.75rem] border border-black/10 bg-white p-6 shadow-[0_12px_30px_rgba(0,0,0,0.04)] sm:p-8">
               <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-                <p className="text-3xl font-black tracking-tight text-gray-950 sm:text-4xl">
+                <p className="text-4xl font-bold tracking-tight text-black">
                   {isTbaPrice ? (
                     <span className="text-gray-700">TBA</span>
                   ) : showVariationPriceRange ? (
                     <>
                       <span>{variationPriceBounds.min.toFixed(2)}</span>
-                      <span className="mx-1 text-gray-400">–</span>
+                      <span className="mx-1 text-gray-400">-</span>
                       <span>{variationPriceBounds.max.toFixed(2)}</span>
                       <span className="ml-1 text-base font-semibold text-gray-700 sm:text-lg">
                         Tk
@@ -1649,35 +1812,56 @@ const ProductDetails = () => {
                   )}
                 </p>
 
-                {!isTbaPrice &&
-                !showVariationPriceRange &&
-                discountPercentForDisplay &&
-                discountPercentForDisplay > 0 ? (
-                  <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-bold text-white shadow-sm">
-                    -{discountPercentForDisplay}%
+                {!isTbaPrice && !showVariationPriceRange && hasDiscountPrice ? (
+                  <span className="inline-flex items-center rounded-md bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600">
+                    Offer price
                   </span>
                 ) : null}
               </div>
 
               {!isTbaPrice && !showVariationPriceRange && hasDiscountPrice ? (
-                <p className="mt-1 text-sm font-medium text-gray-500 line-through">
+                <p className="mt-2 text-sm text-zinc-400 line-through">
                   {regularPriceForDisplay.toFixed(2)} Tk
+                </p>
+              ) : null}
+
+              {isRecurringProduct && recurringLabel ? (
+                <p className="mt-3 text-sm text-zinc-500">
+                  {recurringLabel}
                 </p>
               ) : null}
             </div>
 
-              <div className="mt-3 border-t border-gray-200 pt-3">
+            {summaryHighlights.length > 0 ? (
+              <div className="mt-6 grid grid-cols-1 overflow-hidden rounded-[1.6rem] border border-black/10 bg-black/10 shadow-sm sm:grid-cols-2">
+                {summaryHighlights.map((item) => (
+                  <div
+                    key={`${item.label}-${item.value}`}
+                    className="border-b border-black/10 bg-white p-5 last:border-b-0 sm:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-child(odd)]:border-black/10"
+                  >
+                    <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.24em] text-zinc-400">
+                      {item.label}
+                    </p>
+                    <p className="text-sm font-bold text-black">
+                      {item.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+              <div className="mt-10 border-t border-black/8 pt-8">
               {isTbaPrice ? (
-                <div className="rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
                   Price is TBA for this product. Checkout is disabled until price is updated.
                 </div>
               ) : marketplaceType === "grouped" ? (
-                <div className="rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
                   This is a grouped product. Select an item from the grouped products list.
                 </div>
               ) : (
                 <form
-                  className="space-y-3"
+                  className="space-y-4"
                   onSubmit={(event) => {
                     event.preventDefault();
                     handleAddToCart();
@@ -1690,15 +1874,15 @@ const ProductDetails = () => {
                       <div className="flex items-end justify-between gap-3">
                         <label
                           htmlFor="product-variation"
-                          className="text-sm font-medium text-gray-900"
+                          className="text-[10px] font-bold uppercase tracking-[0.2em] text-black"
                         >
-                          Select size
+                          Select Size
                         </label>
                         <button
                           type="button"
                           data-no-scroll-top
                           onClick={() => setSelectedVariationId("")}
-                          className="text-xs underline decoration-gray-300 underline-offset-2 text-gray-600 hover:text-black"
+                          className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 transition hover:text-black"
                         >
                           Clear
                         </button>
@@ -1711,7 +1895,7 @@ const ProductDetails = () => {
                           setSelectedVariationId(event.target.value);
                           setQuantity(1);
                         }}
-	                        className="mt-1.5 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-black focus:outline-none"
+	                        className="mt-1.5 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
                       >
                         <option value="">Select size</option>
                         {product.variations
@@ -1728,17 +1912,132 @@ const ProductDetails = () => {
                     </div>
                   ) : null}
 
-                  {product.colors && product.colors.length > 0 ? (
+                  {productVariantDefinitions.length > 0 ? (
+                    <div className="space-y-4">
+                      {productVariantDefinitions.map((definition, definitionIndex) => {
+                        const selectedOption = selectedVariantOptions[definitionIndex];
+                        const isColorDefinition =
+                          definition.preset === "color" ||
+                          definition.name.toLowerCase() === "color";
+
+                        return (
+                          <div key={`variant-definition-${definitionIndex}`}>
+                            <div className="flex items-end justify-between gap-3">
+                              <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-black">
+                                {definition.name || "Variant"}
+                              </label>
+                              <button
+                                type="button"
+                                data-no-scroll-top
+                                onClick={() =>
+                                  setSelectedVariantOptions((prev) => ({
+                                    ...prev,
+                                    [definitionIndex]: null,
+                                  }))
+                                }
+                                className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 transition hover:text-black"
+                              >
+                                Clear
+                              </button>
+                            </div>
+
+                            {isColorDefinition ? (
+                              <div className="mt-2 flex flex-wrap gap-3" role="radiogroup">
+                                {definition.options.map((option, optionIndex) => {
+                                  const optionColor = String(
+                                    option?.colorHex || option?.value || "",
+                                  )
+                                    .trim()
+                                    .toLowerCase();
+                                  const isSelected =
+                                    String(
+                                      selectedOption?.colorHex ||
+                                        selectedOption?.value ||
+                                        "",
+                                    ).trim().toLowerCase() === optionColor;
+
+                                  return (
+                                    <button
+                                      key={`variant-color-${definitionIndex}-${optionIndex}`}
+                                      type="button"
+                                      data-no-scroll-top
+                                      onClick={() => {
+                                        setSelectedVariantOptions((prev) => ({
+                                          ...prev,
+                                          [definitionIndex]: option,
+                                        }));
+                                        setSelectedColor(optionColor);
+                                      }}
+                                      className={`group shrink-0 rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-black/40 ${
+                                        isSelected
+                                          ? "ring-2 ring-black ring-offset-2"
+                                          : "hover:scale-110"
+                                      }`}
+                                      title={option?.label || option?.value || `Color ${optionIndex + 1}`}
+                                    >
+                                      <div className="relative h-10 w-10 rounded-full border border-black/10 sm:h-11 sm:w-11">
+                                        <div
+                                          className="absolute inset-0.5 rounded-full"
+                                          style={{ backgroundColor: optionColor }}
+                                        />
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {definition.options.map((option, optionIndex) => {
+                                  const optionValue = String(
+                                    option?.label || option?.value || "",
+                                  ).trim();
+                                  const isSelected =
+                                    String(
+                                      selectedOption?.label ||
+                                        selectedOption?.value ||
+                                        "",
+                                    ).trim() === optionValue;
+
+                                  return (
+                                    <button
+                                      key={`variant-option-${definitionIndex}-${optionIndex}`}
+                                      type="button"
+                                      data-no-scroll-top
+                                      onClick={() =>
+                                        setSelectedVariantOptions((prev) => ({
+                                          ...prev,
+                                          [definitionIndex]: option,
+                                        }))
+                                      }
+                                      className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                                        isSelected
+                                          ? "border-black bg-black text-white"
+                                          : "border-black/10 bg-white text-black hover:border-black"
+                                      }`}
+                                    >
+                                      {optionValue}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {legacyColorOptions && legacyColorOptions.length > 0 ? (
                     <div>
-                      <div className="text-sm font-medium text-gray-900">Color</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-black">Select Color</div>
                       <div
                         className="mt-2 flex flex-wrap gap-3"
                         role="radiogroup"
                         aria-label="Color"
                       >
-                        {product.colors.map((color, index) => {
+                        {legacyColorOptions.map((color, index) => {
                           const isSelected =
-                            (selectedColor || product.colors[0]) === color;
+                            (selectedColor || legacyColorOptions[0]) === color;
                           const label = String(color || "").trim();
                           const displayLabel =
                             label.toLowerCase() === "#000000" ||
@@ -1768,22 +2067,13 @@ const ProductDetails = () => {
                               aria-checked={isSelected}
                               aria-label={displayLabel}
                               title={displayLabel}
-                              className="group shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-black/40"
+                              className={`group shrink-0 rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-black/40 ${
+                                isSelected ? "ring-2 ring-black ring-offset-2" : "hover:scale-110"
+                              }`}
                             >
                               <div className="relative">
                                 <div
-                                  className={`absolute -inset-1 rounded-full bg-linear-to-r from-black/10 via-black/5 to-transparent blur transition-opacity ${
-                                    isSelected
-                                      ? "opacity-60"
-                                      : "opacity-0 group-hover:opacity-50"
-                                  }`}
-                                />
-                                <div
-                                  className={`relative h-10 w-10 rounded-full border-2 transition-all duration-200 sm:h-12 sm:w-12 md:h-14 md:w-14 ${
-                                    isSelected
-                                      ? "border-black shadow-md"
-                                      : "border-gray-300 hover:border-gray-400"
-                                  }`}
+                                  className="relative h-10 w-10 rounded-full border border-black/10 transition-all duration-200 sm:h-11 sm:w-11"
                                 >
                                   <div
                                     className="absolute inset-0.5 rounded-full"
@@ -1821,32 +2111,29 @@ const ProductDetails = () => {
                   ) : null}
 
                   <div className="space-y-4">
-                    <div className="rounded-[24px] border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                    <div className="rounded-[1.5rem] border border-black/10 bg-zinc-50 p-5 sm:p-6">
                       <div className="mb-3 flex items-center justify-between gap-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-black">
                           Quantity
                         </p>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                            currentStock > 0 || product?.allowBackorder
-                              ? "bg-white text-gray-700 shadow-sm"
-                              : "bg-red-50 text-red-600"
-                          }`}
-                        >
-                          {quantityStatusText}
-                        </span>
+                        {quantityStatusText ? (
+                          <span
+                            className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${quantityStatusToneClass}`}
+                          >
+                            {quantityStatusText}
+                          </span>
+                        ) : null}
                       </div>
 
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="inline-flex items-center rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+                      <div className="flex items-center rounded-xl border border-black/10 bg-white shadow-sm w-fit overflow-hidden">
                           <button
                             type="button"
                             data-no-scroll-top
                             onClick={decreaseQuantity}
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-700 transition hover:bg-gray-100 hover:text-black"
+                            className="p-4 text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-black"
                             aria-label="Decrease quantity"
                           >
-                            <FaMinus className="h-3.5 w-3.5" />
+                            <FaMinus className="h-4 w-4" />
                           </button>
                           <label className="sr-only" htmlFor="quantity-input">
                             {product.title} quantity
@@ -1868,7 +2155,7 @@ const ProductDetails = () => {
                               }
                               setQuantity(Math.min(parsed, currentStock));
                             }}
-                            className="h-11 w-16 border-0 bg-transparent text-center text-base font-bold text-gray-950 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            className="h-14 w-18 border-0 bg-transparent text-center text-xl font-bold text-black outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             inputMode="numeric"
                             autoComplete="off"
                           />
@@ -1877,165 +2164,170 @@ const ProductDetails = () => {
                             data-no-scroll-top
                             onClick={increaseQuantity}
                             disabled={!product.allowBackorder && quantity >= currentStock}
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-black text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                            className="m-1 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-black text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
                             aria-label="Increase quantity"
                           >
-                            <FaPlus className="h-3.5 w-3.5" />
+                            <FaPlus className="h-4 w-4" />
                           </button>
-                        </div>
-
-                        <p className="text-xs leading-5 text-gray-500 sm:max-w-[220px] sm:text-right">
-                          Adjust the quantity before adding this item to cart or proceeding directly
-                          to checkout.
-                        </p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <button
                         type="submit"
                         disabled={purchaseActionDisabled}
-                        className="inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-black px-5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(17,24,39,0.18)] transition hover:-translate-y-0.5 hover:bg-gray-900 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none"
+                        className="inline-flex items-center justify-center gap-3 rounded-xl bg-black px-6 py-5 text-sm font-bold uppercase tracking-[0.18em] text-white transition-all hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
                       >
                         <FaShoppingCart className="h-4 w-4" />
-                        {loading || cartLoading ? "Adding..." : "Add to cart"}
+                        {loading || cartLoading ? "Adding..." : "Add to Cart"}
                       </button>
 
                       <button
                         type="button"
+                        data-no-scroll-top
                         onClick={handleBuyNow}
                         disabled={purchaseActionDisabled}
-                        className="inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-black bg-white px-5 text-sm font-semibold text-black shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5 hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:shadow-none"
+                        className="rounded-xl border-2 border-black bg-white px-6 py-5 text-sm font-bold uppercase tracking-[0.18em] text-black transition-all hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400"
                       >
-                        Buy now
+                        Buy Now
                       </button>
                     </div>
                   </div>
                 </form>
               )}
 
-              {product.vendor?.slug ? (
-                <button
-                  type="button"
-                  data-no-scroll-top
-                  onClick={() => navigate(`/store/${product.vendor.slug}`)}
-	                  className="mt-3 block text-sm text-gray-600 hover:text-black"
-                >
-                  Sold by{" "}
-                  <span className="font-medium text-gray-900">
-                    {product.vendor.storeName || "Vendor Store"}
-                  </span>
-                </button>
-              ) : null}
-
-	              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={handleToggleCompare}
-                  className="inline-flex items-center gap-2 text-gray-700 transition hover:text-black"
+                  className="flex-1 rounded-xl border border-black/10 px-4 py-3.5 text-[10px] font-bold uppercase tracking-[0.18em] text-black transition-all hover:border-black"
                 >
-                  <FiShuffle className="h-4 w-4" />
-                  {isCompared ? "Remove from compare" : "Compare"}
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <FiShuffle className="h-4 w-4" />
+                    {isCompared ? "Remove Compare" : "Compare"}
+                  </span>
                 </button>
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={handleToggleWishlist}
                   disabled={wishlistLoading}
-                  className="inline-flex items-center gap-2 text-gray-700 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
+                  className={`sm:flex-[1.4] rounded-xl border-2 px-4 py-3.5 text-[10px] font-bold uppercase tracking-[0.18em] transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isWishlisted
+                      ? "border-red-500 bg-red-50 text-red-600"
+                      : "border-black bg-white text-black hover:bg-black hover:text-white"
+                  }`}
                 >
-                  <FaHeart className={`h-4 w-4 ${isWishlisted ? "text-red-600" : ""}`} />
-                  {isWishlisted ? "Wishlisted" : "Add to wishlist"}
+                  <span className="inline-flex items-center justify-center gap-2">
+                    {isWishlisted ? (
+                      <FaHeart className="h-4 w-4 fill-current" />
+                    ) : (
+                      <FiHeart className="h-4 w-4" />
+                    )}
+                    {isWishlisted ? "Wishlisted" : "Add to Wishlist"}
+                  </span>
                 </button>
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={handleShare}
-                  className="inline-flex items-center gap-2 text-gray-700 transition hover:text-black"
+                  className="flex-1 rounded-xl border border-black/10 px-4 py-3.5 text-[10px] font-bold uppercase tracking-[0.18em] text-black transition-all hover:border-black"
                 >
-                  <FaShare className="h-4 w-4" />
-                  Share
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <FiShare2 className="h-4 w-4" />
+                    Share
+                  </span>
                 </button>
               </div>
 
-	              <div className="mt-4 border-t border-gray-200 pt-4 text-sm text-gray-700">
-                {product.sku ? (
-                  <div className="flex flex-wrap gap-x-2">
-                    <span className="font-medium text-gray-900">SKU:</span>
-                    <span>{product.sku}</span>
-                  </div>
-                ) : null}
-                {product.category ? (
-                  <div className="mt-2 flex flex-wrap gap-x-2">
-                    <span className="font-medium text-gray-900">Category:</span>
-                    <span>
-                      {typeof product.category === "object"
-                        ? product.category?.name || "Category"
-                        : product.category}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
+              <div className="mt-10 rounded-[1.6rem] border border-black/10 bg-white p-5 shadow-sm sm:p-6">
+                <div className="space-y-4 text-[11px] font-bold">
+                  {product.sku ? (
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="uppercase tracking-[0.15em] text-zinc-400">SKU:</span>
+                      <span className="text-right text-black">{product.sku}</span>
+                    </div>
+                  ) : null}
+                  {product.category ? (
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="uppercase tracking-[0.15em] text-zinc-400">Category:</span>
+                      <span className="text-right text-black">
+                        {typeof product.category === "object"
+                          ? product.category?.name || "Category"
+                          : product.category}
+                      </span>
+                    </div>
+                  ) : null}
+                  {vendorLabel ? (
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="uppercase tracking-[0.15em] text-zinc-400">Seller:</span>
+                      <span className="text-right text-black">{vendorLabel}</span>
+                    </div>
+                  ) : null}
+                </div>
 
-	              <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-gray-700">
-                <span className="mr-1 font-medium text-gray-900">Share:</span>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t border-black/8 pt-4 text-sm text-gray-700">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-zinc-400">Social:</span>
+                  <div className="flex gap-3">
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={() => handleSharePlatform("facebook")}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-gray-400 hover:text-black"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 transition-all hover:bg-black hover:text-white hover:scale-110"
                   aria-label="Share on Facebook"
                 >
-                  <FaFacebookF className="h-4 w-4" />
+                  <FaFacebookF className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={() => handleSharePlatform("twitter")}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-gray-400 hover:text-black"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 transition-all hover:bg-black hover:text-white hover:scale-110"
                   aria-label="Share on X"
                 >
-                  <FaTwitter className="h-4 w-4" />
+                  <FaTwitter className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={() => handleSharePlatform("whatsapp")}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-gray-400 hover:text-black"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 transition-all hover:bg-black hover:text-white hover:scale-110"
                   aria-label="Share on WhatsApp"
                 >
-                  <FaWhatsapp className="h-4 w-4" />
+                  <FaWhatsapp className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={() => handleSharePlatform("telegram")}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-gray-400 hover:text-black"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 transition-all hover:bg-black hover:text-white hover:scale-110"
                   aria-label="Share on Telegram"
                 >
-                  <FaPaperPlane className="h-4 w-4" />
+                  <FaPaperPlane className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   data-no-scroll-top
                   onClick={handleCopyShareLink}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:border-gray-400 hover:text-black"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 transition-all hover:bg-black hover:text-white hover:scale-110"
                   aria-label="Copy share link"
                 >
-                  <FaLink className="h-4 w-4" />
+                  <FaLink className="h-3.5 w-3.5" />
                 </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 	        </div>
 	        {/* Tabs */}
-	        <div className="pt-10">
+	        <div className="pt-16 sm:pt-20">
 	          <div className="bg-white">
 		            <div
 		              role="tablist"
 		              aria-label="Product details tabs"
-		              className="flex flex-wrap justify-center gap-8 border-b border-gray-200 px-6"
+		              className="flex min-w-max gap-10 overflow-x-auto border-b border-black/10 px-0"
 		            >
 	              <button
 	                type="button"
@@ -2046,10 +2338,10 @@ const ProductDetails = () => {
                 aria-controls="product-tabpanel-description"
                 tabIndex={activeTab === "description" ? 0 : -1}
                 onClick={() => setActiveTab("description")}
-		                className={`-mb-px border-b-2 py-4 text-sm font-semibold transition ${
+		                className={`-mb-px border-b-2 pb-6 text-xs font-bold uppercase tracking-[0.26em] transition ${
 		                  activeTab === "description"
 		                    ? "border-black text-black"
-		                    : "border-transparent text-gray-600 hover:text-black"
+		                    : "border-transparent text-zinc-400 hover:text-black"
 		                }`}
 	              >
                 Description
@@ -2063,10 +2355,10 @@ const ProductDetails = () => {
                 aria-controls="product-tabpanel-additional"
                 tabIndex={activeTab === "additional" ? 0 : -1}
                 onClick={() => setActiveTab("additional")}
-		                className={`-mb-px border-b-2 py-4 text-sm font-semibold transition ${
+		                className={`-mb-px border-b-2 pb-6 text-xs font-bold uppercase tracking-[0.26em] transition ${
 		                  activeTab === "additional"
 		                    ? "border-black text-black"
-		                    : "border-transparent text-gray-600 hover:text-black"
+		                    : "border-transparent text-zinc-400 hover:text-black"
 		                }`}
 	              >
                 Additional information
@@ -2080,44 +2372,63 @@ const ProductDetails = () => {
                 aria-controls="product-tabpanel-reviews"
                 tabIndex={activeTab === "reviews" ? 0 : -1}
                 onClick={() => setActiveTab("reviews")}
-		                className={`hidden sm:inline-flex -mb-px border-b-2 py-4 text-sm font-semibold transition ${
+		                className={`-mb-px border-b-2 pb-6 text-xs font-bold uppercase tracking-[0.26em] transition ${
 		                  activeTab === "reviews"
 		                    ? "border-black text-black"
-		                    : "border-transparent text-gray-600 hover:text-black"
+		                    : "border-transparent text-zinc-400 hover:text-black"
 		                }`}
 	              >
                 Reviews ({Number(reviewSummary.ratingCount || 0)})
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="pt-12">
               {activeTab === "description" ? (
                 <div
                   id="product-tabpanel-description"
                   role="tabpanel"
                   aria-labelledby="product-tab-description"
-                  className="space-y-8"
+                  className="space-y-14"
                 >
-                  <div className="text-gray-700 leading-relaxed whitespace-pre-line">
-                    {product.description || "No description available."}
-                  </div>
+                  {product.description ? (
+                    hasHtmlContent(product.description) ? (
+                      <div
+                        className="prose max-w-3xl text-zinc-500"
+                        dangerouslySetInnerHTML={{ __html: product.description }}
+                      />
+                    ) : (
+                      <div className="max-w-3xl whitespace-pre-line text-base leading-8 text-zinc-500">
+                        {product.description}
+                      </div>
+                    )
+                  ) : (
+                    <div className="max-w-3xl whitespace-pre-line text-base leading-8 text-zinc-500">
+                      No description available.
+                    </div>
+                  )}
 
-                  {product.features && product.features.length > 0 ? (
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">
-                        Key Features
-                      </h3>
-                      <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {product.features.map((feature, index) => (
-                          <li
-                            key={index}
-                            className="flex items-start gap-3 rounded-lg bg-gray-50 p-3"
-                          >
-                            <div className="mt-2 h-2 w-2 rounded-full bg-black" />
-                            <span className="text-gray-700">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
+                  {featureColumns.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:gap-12">
+                      {featureColumns.map((column, columnIndex) => (
+                        <div key={`feature-column-${columnIndex}`}>
+                          <h3 className="mb-8 text-[10px] font-bold uppercase tracking-[0.4em] text-zinc-400">
+                            {columnIndex === 0 ? "Core Technologies" : "Product Highlights"}
+                          </h3>
+                          <div className="space-y-4">
+                            {column.map((feature) => (
+                              <div
+                                key={`${columnIndex}-${feature}`}
+                                className="group flex items-center gap-4 rounded-xl border border-black/8 bg-zinc-50 p-5 transition-colors hover:border-black"
+                              >
+                                <div className="h-2 w-2 rounded-full bg-black transition-transform group-hover:scale-125" />
+                                <span className="text-xs font-bold uppercase tracking-widest text-black">
+                                  {feature}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : null}
 
@@ -2125,10 +2436,10 @@ const ProductDetails = () => {
                   Array.isArray(product.groupedProducts) &&
                   product.groupedProducts.length > 0 ? (
                     <div>
-                      <h3 className="text-base font-semibold text-gray-900">
+                      <h3 className="mb-6 text-[10px] font-bold uppercase tracking-[0.4em] text-zinc-400">
                         Grouped Products
                       </h3>
-                      <div className="mt-4 space-y-3">
+                      <div className="space-y-4">
                         {product.groupedProducts.map((groupedProduct) => {
                           const groupedPriceType = String(
                             groupedProduct?.priceType || "single",
@@ -2141,18 +2452,18 @@ const ProductDetails = () => {
                           return (
                             <div
                               key={groupedProduct._id}
-                              className="flex items-center gap-3 rounded-xl border border-gray-200 p-3"
+                              className="flex items-center gap-4 rounded-[1.5rem] border border-black/10 bg-white p-4 shadow-sm"
                             >
                               <ProductImage
                                 src={groupedProduct?.images?.[0]}
                                 alt={groupedProduct?.title}
-                                className="h-16 w-16 rounded-lg object-cover"
+                                className="h-20 w-20 rounded-2xl bg-zinc-50 object-contain p-3 mix-blend-multiply"
                               />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate font-medium text-gray-900">
+                                <p className="truncate text-sm font-bold text-black">
                                   {groupedProduct?.title}
                                 </p>
-                                <p className="mt-1 text-sm text-gray-500">
+                                <p className="mt-1 text-sm text-zinc-500">
                                   {groupedPriceType === "tba"
                                     ? "TBA"
                                     : Number.isFinite(groupedPrice)
@@ -2164,7 +2475,7 @@ const ProductDetails = () => {
                                 type="button"
                                 data-no-scroll-top
                                 onClick={() => navigate(`/product/${groupedProduct._id}`)}
-                                className="rounded-lg bg-black px-3 py-2 text-sm text-white hover:bg-gray-900"
+                                className="rounded-xl bg-black px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-white transition hover:bg-zinc-800"
                               >
                                 View
                               </button>
@@ -2183,9 +2494,10 @@ const ProductDetails = () => {
                   aria-labelledby="product-tab-additional"
                 >
                   {additionalInfoRows.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-[560px] w-full text-sm">
-                        <tbody className="divide-y divide-gray-200">
+                    <div className="overflow-hidden rounded-[1.8rem] border border-black/10 bg-white shadow-sm">
+                      <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <tbody className="divide-y divide-black/8">
                           {additionalInfoRows.map((row) => (
                             <tr
                               key={`${row.label}-${row.value}`}
@@ -2193,20 +2505,21 @@ const ProductDetails = () => {
                             >
                               <th
                                 scope="row"
-                                className="w-56 bg-gray-50 px-4 py-3 text-left font-medium text-gray-900"
+                                className="w-56 bg-zinc-50 px-5 py-4 text-left text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-400"
                               >
                                 {row.label}
                               </th>
-                              <td className="px-4 py-3 text-gray-700 whitespace-pre-line">
+                              <td className="px-5 py-4 whitespace-pre-line text-zinc-600">
                                 {row.value}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-zinc-500">
                       No additional information available.
                     </p>
                   )}
@@ -2222,7 +2535,7 @@ const ProductDetails = () => {
                   <section
                     id="reviews"
                     data-review-section
-                    className="scroll-mt-24"
+                    className="scroll-mt-storefront"
                   >
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -2244,11 +2557,11 @@ const ProductDetails = () => {
               ) : reviews.length === 0 ? (
                 <p className="text-gray-600">No reviews yet. Be the first to review.</p>
               ) : (
-                <div className="space-y-4 max-h-[520px] overflow-auto pr-1">
+                <div className="space-y-4 max-h-130 overflow-auto pr-1">
                   {reviews.map((review) => (
                     <div
                       key={review._id}
-                      className="border border-gray-200 rounded-2xl p-4 bg-gradient-to-br from-white via-gray-50 to-white shadow-sm"
+                      className="border border-gray-200 rounded-2xl p-4 bg-linear-to-br from-white via-gray-50 to-white shadow-sm"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
@@ -2279,6 +2592,8 @@ const ProductDetails = () => {
                                     rating: Number(review.rating || 5),
                                     title: review.title || "",
                                     comment: review.comment || "",
+                                    reviewerName: review.reviewerName || user?.name || "",
+                                    reviewerEmail: review.reviewerEmail || user?.email || "",
                                   });
                                   if (typeof document !== "undefined") {
                                     document
@@ -2316,20 +2631,77 @@ const ProductDetails = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 {myReview ? "Update Your Review" : "Write a Review"}
               </h3>
-              {!isLoggedIn ? (
-                <div className="text-sm text-gray-600">
-                  Please{" "}
-                  <button
-                    type="button"
-                    onClick={() => navigate("/login")}
-                    className="text-black font-semibold underline"
-                  >
-                    login
-                  </button>{" "}
-                  to submit a review.
+              {myReview ? (
+                <div
+                  className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+                    String(myReview.moderationStatus || "").toLowerCase() === "approved"
+                      ? "border-green-200 bg-green-50 text-green-700"
+                      : String(myReview.moderationStatus || "").toLowerCase() === "rejected"
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700"
+                  }`}
+                >
+                  {String(myReview.moderationStatus || "").toLowerCase() === "approved"
+                    ? "Your review is approved and visible on the storefront."
+                    : String(myReview.moderationStatus || "").toLowerCase() === "rejected"
+                      ? "Your review was rejected. Update it and resubmit for admin approval."
+                      : "Your review is waiting for admin approval. It will appear publicly after approval."}
                 </div>
-              ) : (
-                <form onSubmit={handleSubmitReview} className="space-y-3">
+              ) : null}
+              <form onSubmit={handleSubmitReview} className="space-y-3">
+                  {!isLoggedIn ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      Guests can review too. Add your name and email below, or{" "}
+                      <button
+                        type="button"
+                        onClick={() => navigate("/login")}
+                        className="font-semibold text-black underline"
+                      >
+                        login
+                      </button>{" "}
+                      to manage your review later from your account.
+                    </div>
+                  ) : null}
+
+                  {!isLoggedIn ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Name
+                        </label>
+                        <input
+                          type="text"
+                          value={reviewForm.reviewerName}
+                          onChange={(event) =>
+                            setReviewForm((prev) => ({
+                              ...prev,
+                              reviewerName: event.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          placeholder="Your name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          value={reviewForm.reviewerEmail}
+                          onChange={(event) =>
+                            setReviewForm((prev) => ({
+                              ...prev,
+                              reviewerEmail: event.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          placeholder="you@example.com"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Rating
@@ -2430,7 +2802,6 @@ const ProductDetails = () => {
                     ) : null}
                   </div>
                 </form>
-              )}
             </div>
           </div>
           </motion.div>
@@ -2441,9 +2812,14 @@ const ProductDetails = () => {
           </div>
         </div>
         {relatedProductsLoading || relatedProducts.length > 0 ? (
-          <section className="mt-10">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <h2 className="text-2xl font-bold text-gray-900">Related products</h2>
+          <section className="mt-32 pb-6">
+            <div className="mb-14 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-3xl font-bold tracking-tight text-black sm:text-4xl">
+                  Related products
+                </h2>
+                <div className="mt-3 h-1 w-12 bg-black" />
+              </div>
               <button
                 type="button"
                 data-no-scroll-top
@@ -2455,70 +2831,32 @@ const ProductDetails = () => {
                   navigate(categoryId ? `/shop?category=${categoryId}` : "/shop");
                   if (typeof window !== "undefined") window.scrollTo(0, 0);
                 }}
-                className="text-sm font-semibold text-gray-700 transition hover:text-black"
+                className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-400 transition-colors hover:text-black"
               >
-                View all
+                View all collection
               </button>
             </div>
 
-            <div className="relative mt-5 group">
-              <div
-                ref={relatedCarouselRef}
-                className="flex gap-3 sm:gap-4 lg:gap-5 overflow-x-auto scroll-smooth pb-2 snap-x snap-mandatory"
-              >
-                {relatedProductsLoading
-                  ? Array.from({ length: 8 }).map((_, index) => (
-                      <div
-                        key={`related-skeleton-${index}`}
-                        className="snap-start shrink-0 w-[48%] sm:w-[31%] md:w-[23%] lg:w-[18.5%] xl:w-[15.5%]"
-                      >
-                        <div className="h-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                          <div className="aspect-square bg-gray-100 animate-pulse" />
-                          <div className="space-y-2 p-3">
-                            <div className="h-3 w-1/2 rounded bg-gray-100 animate-pulse" />
-                            <div className="h-4 w-4/5 rounded bg-gray-100 animate-pulse" />
-                            <div className="h-3 w-3/5 rounded bg-gray-100 animate-pulse" />
-                          </div>
-                          <div className="h-9 bg-gray-100 animate-pulse" />
-                        </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-4">
+              {relatedProductsLoading
+                ? Array.from({ length: 4 }).map((_, index) => (
+                    <div key={`related-skeleton-${index}`} className="animate-pulse">
+                      <div className="aspect-[3/4] rounded-[2rem] bg-zinc-100 p-8" />
+                      <div className="mt-6 space-y-3">
+                        <div className="h-3 w-24 rounded bg-zinc-100" />
+                        <div className="h-4 w-4/5 rounded bg-zinc-100" />
+                        <div className="h-10 w-full rounded bg-zinc-100" />
                       </div>
-                    ))
-                  : relatedProducts.map((entry) => (
-                      <div
-                        key={entry._id}
-                        className="snap-start shrink-0 w-[48%] sm:w-[31%] md:w-[23%] lg:w-[18.5%] xl:w-[15.5%]"
-                      >
-                        <StorefrontProductCard
-                          product={entry}
-                          className="!w-full"
-                          onViewDetails={() => handleNavigateToProduct(entry._id)}
-                        />
-                      </div>
-                    ))}
-              </div>
-
-              {!relatedProductsLoading && relatedCarouselHasOverflow ? (
-                <>
-                  <button
-                    type="button"
-                    data-no-scroll-top
-                    onClick={() => scrollRelatedCarousel(-1)}
-                    className="hidden sm:inline-flex absolute left-2 top-1/2 -translate-y-1/2 h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm opacity-0 transition group-hover:opacity-100 hover:bg-gray-50"
-                    aria-label="Previous related products"
-                  >
-                    <FaChevronLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    data-no-scroll-top
-                    onClick={() => scrollRelatedCarousel(1)}
-                    className="hidden sm:inline-flex absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm opacity-0 transition group-hover:opacity-100 hover:bg-gray-50"
-                    aria-label="Next related products"
-                  >
-                    <FaChevronRight className="h-4 w-4" />
-                  </button>
-                </>
-              ) : null}
+                    </div>
+                  ))
+                : relatedProducts.map((entry) => (
+                    <StorefrontProductCard
+                      key={entry._id}
+                      product={entry}
+                      className="h-full"
+                      onViewDetails={() => handleNavigateToProduct(entry._id)}
+                    />
+                  ))}
             </div>
           </section>
         ) : null}
@@ -2528,6 +2866,7 @@ const ProductDetails = () => {
 };
 
 export default ProductDetails;
+
 
 
 

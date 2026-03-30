@@ -1,6 +1,7 @@
 const Vendor = require("../models/Vendor");
 const Product = require("../models/Product");
 const Order = require("../models/Order");
+const { uploadImageBuffer } = require("../config/cloudinary");
 const { attachImageDataToProducts } = require("../utils/imageUtils");
 const { buildUniqueStoreSlug, isAdmin } = require("../utils/vendorUtils");
 
@@ -199,6 +200,51 @@ exports.updateMyVendorProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while updating vendor profile",
+    });
+  }
+};
+
+exports.uploadMyVendorAsset = async (req, res) => {
+  try {
+    const vendor = await ensureVendor(req, res);
+    if (!vendor) return;
+
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: "Image file is required",
+      });
+    }
+
+    const assetType =
+      String(req.body?.assetType || req.query?.assetType || "logo").trim().toLowerCase() ===
+      "banner"
+        ? "banner"
+        : "logo";
+
+    const uploaded = await uploadImageBuffer(req.file.buffer, {
+      folder: `marketplace/vendors/${assetType}`,
+      resource_type: "image",
+    });
+
+    if (!uploaded?.secure_url) {
+      return res.status(500).json({
+        success: false,
+        message: "Vendor image upload failed",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `${assetType === "banner" ? "Banner" : "Logo"} uploaded successfully`,
+      assetType,
+      url: String(uploaded.secure_url || "").trim(),
+    });
+  } catch (error) {
+    console.error("Upload vendor asset error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while uploading vendor asset",
     });
   }
 };

@@ -726,7 +726,7 @@ const ProductGrid = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {/* Desktop Filters */}
           <div className="lg:col-span-1 hidden lg:block">
-            <div className="site-card sticky top-6 p-4 sm:p-6">
+            <div className="site-card storefront-sticky-offset sticky p-4 sm:p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-bold text-black">Filters</h3>
                 {(selectedCategory !== "all" ||
@@ -1318,8 +1318,8 @@ const ProductGrid = () => {
                                           disabled={wishlistPendingIds.includes(String(product._id || ""))}
                                           className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors disabled:opacity-60 ${
                                             isProductWishlisted(product._id)
-                                              ? "border-red-200 bg-red-50 text-red-600"
-                                              : "border-gray-300 text-gray-600 hover:border-black hover:text-black"
+                                              ? "border-red-500 bg-red-50 text-red-600"
+                                              : "border-black bg-white text-black hover:border-red-500 hover:text-red-500"
                                           }`}
                                         >
                                           <FiHeart
@@ -1381,8 +1381,8 @@ const ProductGrid = () => {
 
       {/* Mobile Filters Modal */}
       {showMobileFilters && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-70 lg:hidden">
-          <div className="absolute right-0 top-0 h-full w-full max-w-xs sm:max-w-sm bg-white overflow-y-auto">
+        <div className="app-layer-drawer-overlay fixed inset-0 bg-black/60 backdrop-blur-sm lg:hidden">
+          <div className="app-layer-drawer absolute right-0 top-0 h-full w-full max-w-xs bg-white overflow-y-auto sm:max-w-sm">
             <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-black">Filters</h3>

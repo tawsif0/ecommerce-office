@@ -16,9 +16,15 @@ import { GLOBAL_TOAST_OPTIONS } from "./utils/globalToast";
 import Navbar from "./Home/components/Navbar";
 import Footer from "./Home/components/Footer";
 import { pushDataLayerEvent } from "./utils/marketingDataLayer";
-import GlobalVoiceAssistant from "./components/GlobalVoiceAssistant";
+import {
+  clearNotifications,
+  fetchNotifications,
+  startNotificationStream,
+  stopNotificationStream,
+} from "./store/notificationsSlice";
 import { loadPublicSettings } from "./store/publicSettingsSlice";
 import { loadWishlist } from "./store/wishlistSlice";
+import { applyPublicSettingsDocument } from "./utils/publicSettings";
 
 const normalizeThemeColor = (value) => {
   const raw = String(value || "")
@@ -49,8 +55,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Registration"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const EcomArcHome = lazy(() => import("./Home/pages/EcomArcHome"));
-const Demo03Home = lazy(() => import("./Home/pages/Demo03Home"));
+const Home = lazy(() => import("./Home/pages/Home"));
 const MarketplaceHomeFloors = lazy(() => import("./Home/pages/MarketplaceHomeFloors"));
 const FAQ = lazy(() => import("./Home/pages/FAQ"));
 const Contact = lazy(() => import("./Home/pages/Contact"));
@@ -68,7 +73,7 @@ const CompareProducts = lazy(() => import("./pages/CompareProducts"));
 const MyWishlist = lazy(() => import("./pages/MyWishlist"));
 
 function HomePage() {
-  return <EcomArcHome />;
+  return <Home />;
 }
 
 function RouteLoadingFallback() {
@@ -99,6 +104,17 @@ function HashScrollHandler() {
   return null;
 }
 
+function RouteScrollHandler() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  return null;
+}
+
 function DashboardTabRedirect({ tab }) {
   try {
     if (tab) localStorage.setItem("dashboardActiveTab", tab);
@@ -114,6 +130,7 @@ function PublicLayout() {
   return (
     <>
       <Navbar />
+      <RouteScrollHandler />
       <HashScrollHandler />
       <main className="min-h-screen">
         <Suspense fallback={<RouteLoadingFallback />}>
@@ -123,8 +140,6 @@ function PublicLayout() {
             <Route path="/home" element={<MarketplaceHomeFloors />} />
             <Route path="/index" element={<Navigate to="/" replace />} />
             <Route path="/index.html" element={<Navigate to="/" replace />} />
-            <Route path="/demo03" element={<Demo03Home />} />
-            <Route path="/demo03-home" element={<Demo03Home />} />
 
             {/* Shop / product listing */}
             <Route path="/shop" element={<ProductGrid />} />
@@ -190,7 +205,7 @@ function PageViewTracker() {
 
 function App() {
   const dispatch = useDispatch();
-  const { user, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const { settings } = usePublicSettings();
 
   useEffect(() => {
@@ -220,6 +235,21 @@ function App() {
   }, [dispatch]);
 
   useEffect(() => {
+    if (!user || !token) {
+      dispatch(stopNotificationStream());
+      dispatch(clearNotifications());
+      return undefined;
+    }
+
+    dispatch(fetchNotifications());
+    dispatch(startNotificationStream());
+
+    return () => {
+      dispatch(stopNotificationStream());
+    };
+  }, [dispatch, token, user]);
+
+  useEffect(() => {
     const website = settings?.website || {};
     const themeColor = normalizeThemeColor(website?.themeColor);
     const fontFamily = normalizeFontFamily(website?.fontFamily);
@@ -228,6 +258,8 @@ function App() {
       document.documentElement.style.setProperty("--brand-theme-color", themeColor);
       document.documentElement.style.setProperty("--brand-font-family", fontFamily);
     }
+
+    applyPublicSettingsDocument(settings);
   }, [settings]);
 
   useEffect(() => {
@@ -345,9 +377,9 @@ function App() {
       <Toaster
         position="top-center"
         gutter={10}
+        containerStyle={{ zIndex: 130000 }}
         toastOptions={GLOBAL_TOAST_OPTIONS}
       />
-      <GlobalVoiceAssistant />
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           {/* Auth routes - redirect if already logged in */}

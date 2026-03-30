@@ -26,6 +26,18 @@ import {
   FaEnvelope,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
+import {
+  canSubmitCancellation,
+  getCancellationActionLabel,
+  getCancellationStatusTone,
+} from "../utils/orderCancellation";
+import {
+  formatOrderEstimatedDeliveryDate,
+  formatOrderEstimatedDeliveryLabel,
+  formatPaymentMethodLabel,
+  formatPaymentStatusLabel,
+  shouldShowPaymentStatus,
+} from "../utils/orderPresentation";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const getFullImageUrl = (imagePath) => {
@@ -118,15 +130,6 @@ const ORDER_PROGRESS_STATUSES = [
   "delivered",
 ];
 
-const formatPaymentMethodLabel = (value) => {
-  const raw = String(value || "").trim();
-  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
-  if (normalized === "cod" || normalized === "cash on delivery") {
-    return "Cash on Delivery";
-  }
-  return raw.replace(/_/g, " ");
-};
-
 const OrderTracking = () => {
   const { orderNumber } = useParams();
   const navigate = useNavigate();
@@ -134,6 +137,9 @@ const OrderTracking = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [trackingInput, setTrackingInput] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const submitTrackingLookup = () => {
     const value = String(trackingInput || "").trim();
@@ -184,6 +190,35 @@ const OrderTracking = () => {
     if (order?.orderNumber) {
       navigator.clipboard.writeText(order.orderNumber);
       toast.success("Order number copied!");
+    }
+  };
+
+  const submitCancellation = async () => {
+    if (!order?.orderNumber) return;
+
+    try {
+      setCancelLoading(true);
+      const response = await axios.patch(
+        `${baseUrl}/orders/track/${order.orderNumber}/cancel`,
+        { reason: cancelReason },
+      );
+
+      if (response.data?.success) {
+        setOrder(response.data.order);
+        toast.success(
+          response.data.message || "Cancellation request updated successfully",
+        );
+        setShowCancelModal(false);
+        setCancelReason("");
+      } else {
+        toast.error("Failed to update cancellation");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to update cancellation",
+      );
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -271,18 +306,6 @@ const OrderTracking = () => {
       weekday: "long",
       year: "numeric",
       month: "long",
-      day: "numeric",
-    });
-  };
-
-  // Get estimated delivery date
-  const getEstimatedDelivery = () => {
-    if (!order?.createdAt) return "N/A";
-    const orderDate = new Date(order.createdAt);
-    const estimatedDate = new Date(orderDate);
-    estimatedDate.setDate(estimatedDate.getDate() + 5); // 5 days from order date
-    return estimatedDate.toLocaleDateString("en-US", {
-      month: "short",
       day: "numeric",
     });
   };
@@ -391,6 +414,10 @@ const OrderTracking = () => {
 
   const statusInfo = getStatusInfo(order.orderStatus);
   const StatusIcon = statusInfo.icon;
+  const cancellation = order.cancellation || {};
+  const showPaymentStatus = shouldShowPaymentStatus(order);
+  const estimatedDeliveryLabel = formatOrderEstimatedDeliveryLabel(order);
+  const estimatedDeliveryDate = formatOrderEstimatedDeliveryDate(order);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 md:py-12">
@@ -467,7 +494,7 @@ const OrderTracking = () => {
               {/* Tracking Timeline */}
               <div className="relative">
                 {/* Timeline bar FIRST - naturally behind content */}
-                <div className="absolute top-6 left-6 right-6 h-1">
+                <div className="absolute left-6 right-6 top-6 z-0 h-1">
                   <div className="absolute inset-0 bg-gray-200 rounded-full"></div>
                   <div
                     className="absolute h-full bg-black rounded-full transition-all duration-500"
@@ -487,7 +514,7 @@ const OrderTracking = () => {
                 </div>
 
                 {/* Icons container - appears on top naturally */}
-                <div className="flex justify-between items-center relative">
+                <div className="relative z-10 flex items-center justify-between">
                   {ORDER_PROGRESS_STATUSES.map((status, index) => {
                       const isActive = (() => {
                         const currentIndex = ORDER_PROGRESS_STATUSES.indexOf(
@@ -504,9 +531,9 @@ const OrderTracking = () => {
                       const StepIcon = stepStatusInfo.icon;
 
                       return (
-                        <div key={status} className="text-center">
+                        <div key={status} className="relative z-10 text-center">
                           <div
-                            className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${
+                            className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full ${
                               isActive
                                 ? "bg-black shadow-lg"
                                 : "bg-white border border-gray-300"
@@ -567,6 +594,68 @@ const OrderTracking = () => {
               ) : null}
             </motion.div>
 
+            {order.cancellation ? (
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.05 }}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 md:p-6"
+              >
+                <div
+                  className={`rounded-2xl border p-4 ${getCancellationStatusTone(
+                    cancellation,
+                  )}`}
+                >
+                  <h3 className="text-base font-semibold">
+                    {getCancellationActionLabel(cancellation)}
+                  </h3>
+                  <p className="mt-2 text-sm">
+                    {cancellation.disabledReason ||
+                      (cancellation.actionType === "request_cancel"
+                        ? "Paid orders need admin approval before they can be cancelled."
+                        : "You can cancel this order directly while the active cancellation window lasts.")}
+                  </p>
+                  {cancellation.showExpiryInfo && cancellation.expiresAt ? (
+                    <p className="mt-2 text-sm">
+                      {cancellation.expiryLabel || "Cancellation window ends on"}{" "}
+                      {formatDate(cancellation.expiresAt)}
+                    </p>
+                  ) : null}
+                  {cancellation.requestReason ? (
+                    <p className="mt-2 text-sm">
+                      Reason: {cancellation.requestReason}
+                    </p>
+                  ) : null}
+                  {cancellation.resolutionNote ? (
+                    <p className="mt-2 text-sm">
+                      Admin note: {cancellation.resolutionNote}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCancelModal(true)}
+                      disabled={!canSubmitCancellation(cancellation)}
+                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        canSubmitCancellation(cancellation)
+                          ? "bg-black text-white hover:bg-gray-800"
+                          : "bg-white/80 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      {getCancellationActionLabel(cancellation)}
+                    </button>
+                    <a
+                      href="/policy/cancellation"
+                      className="rounded-lg border border-current px-4 py-2 text-sm font-medium"
+                    >
+                      Read policy
+                    </a>
+                  </div>
+                </div>
+              </motion.div>
+            ) : null}
+
             {/* Order Details */}
             <motion.div
               initial={{ y: 20, opacity: 0 }}
@@ -621,20 +710,26 @@ const OrderTracking = () => {
                         {formatPaymentMethodLabel(order.paymentMethod)}
                       </span>
                     </p>
-                    <p className="text-sm">
-                      <span className="text-gray-600">Status:</span>{" "}
-                      <span
-                        className={`font-medium ${
-                          order.paymentStatus === "completed"
-                            ? "text-green-600"
-                            : order.paymentStatus === "pending"
-                              ? "text-yellow-600"
-                              : "text-red-600"
-                        }`}
-                      >
-                        {order.paymentStatus}
-                      </span>
-                    </p>
+                    {showPaymentStatus ? (
+                      <p className="text-sm">
+                        <span className="text-gray-600">Status:</span>{" "}
+                        <span
+                          className={`font-medium ${
+                            order.paymentStatus === "completed"
+                              ? "text-green-600"
+                              : order.paymentStatus === "pending"
+                                ? "text-yellow-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {formatPaymentStatusLabel(order.paymentStatus)}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        Cash on Delivery is collected when the order reaches the customer.
+                      </p>
+                    )}
                     {order.transactionId && order.transactionId !== "N/A" && (
                       <p className="text-sm">
                         <span className="text-gray-600">Transaction ID:</span>{" "}
@@ -825,7 +920,12 @@ const OrderTracking = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Estimated Delivery</span>
-                  <span className="font-medium">{getEstimatedDelivery()}</span>
+                  <div className="text-right">
+                    <p className="font-medium">{estimatedDeliveryDate}</p>
+                    {estimatedDeliveryLabel !== "To be confirmed" ? (
+                      <p className="text-xs text-gray-500">{estimatedDeliveryLabel}</p>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Items</span>
@@ -882,6 +982,14 @@ const OrderTracking = () => {
                 >
                   Continue Shopping
                 </button>
+                {canSubmitCancellation(cancellation) ? (
+                  <button
+                    onClick={() => setShowCancelModal(true)}
+                    className="w-full py-3 border border-red-200 text-red-700 font-medium rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    {getCancellationActionLabel(cancellation)}
+                  </button>
+                ) : null}
                 <button
                   onClick={() => navigate("/")}
                   className="w-full py-3 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 transition-colors"
@@ -893,6 +1001,70 @@ const OrderTracking = () => {
           </div>
         </div>
       </div>
+
+      {showCancelModal && (
+        <div className="fixed inset-0 app-layer-modal flex items-center justify-center bg-black/50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg rounded-2xl bg-white p-6"
+          >
+            <h3 className="text-xl font-bold text-black">
+              {cancellation.actionType === "request_cancel"
+                ? "Request order cancellation"
+                : "Cancel order"}
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              {cancellation.actionType === "request_cancel"
+                ? "This order has a completed payment, so your cancellation needs admin approval."
+                : "This order will be cancelled immediately if you continue."}
+            </p>
+
+            <label className="mt-5 block text-sm font-medium text-gray-700">
+              Reason for cancellation
+            </label>
+            <textarea
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              placeholder="Add a cancellation reason (optional)"
+              rows={4}
+              className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
+            />
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <a
+                href="/policy/cancellation"
+                className="text-sm font-medium text-gray-600 underline"
+              >
+                Read cancellation policy
+              </a>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCancelModal(false);
+                    setCancelReason("");
+                  }}
+                  disabled={cancelLoading}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={submitCancellation}
+                  disabled={cancelLoading}
+                  className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                >
+                  {cancelLoading
+                    ? "Submitting..."
+                    : getCancellationActionLabel(cancellation)}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

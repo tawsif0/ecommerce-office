@@ -20,6 +20,12 @@ const categorySchema = new mongoose.Schema({
     ],
     default: "General",
   },
+  description: {
+    type: String,
+    trim: true,
+    default: "",
+    maxlength: [1000, "Category description cannot exceed 1000 characters"],
+  },
   image: {
     type: String,
     trim: true,

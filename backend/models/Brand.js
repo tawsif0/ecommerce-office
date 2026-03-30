@@ -35,6 +35,7 @@ const brandSchema = new mongoose.Schema(
       lowercase: true,
       maxlength: 160,
       index: true,
+      select: false,
     },
     description: {
       type: String,

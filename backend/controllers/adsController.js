@@ -1,4 +1,5 @@
 const VendorAd = require("../models/VendorAd");
+const { uploadImageBuffer } = require("../config/cloudinary");
 const { isAdmin, getUserId, getVendorForUser } = require("../utils/marketplaceAccess");
 
 const normalizeStatus = (value) => String(value || "").toLowerCase().trim();
@@ -153,6 +154,38 @@ exports.createVendorAd = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while creating ad",
+    });
+  }
+};
+
+exports.uploadVendorAdBanner = async (req, res) => {
+  try {
+    const access = await ensureVendorAdAccess(req, res);
+    if (!access?.vendor) return;
+
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: "Ad banner image is required",
+      });
+    }
+
+    const uploaded = await uploadImageBuffer(req.file.buffer, {
+      folder: "ecommerce-office/ads",
+      resource_type: "image",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Ad banner uploaded successfully",
+      bannerUrl: String(uploaded?.secure_url || "").trim(),
+      publicId: String(uploaded?.public_id || "").trim(),
+    });
+  } catch (error) {
+    console.error("Upload vendor ad banner error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while uploading ad banner",
     });
   }
 };

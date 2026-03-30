@@ -1,5 +1,6 @@
 const validator = require("validator");
 const ContactSubmission = require("../models/ContactSubmission");
+const { pushNotificationsToOperationalUsers } = require("../utils/notificationUtils");
 
 const stripHtml = (value) =>
   String(value || "")
@@ -52,6 +53,20 @@ exports.createContactSubmission = async (req, res) => {
       subject: String(subject || "").trim(),
       message: String(message || "").trim(),
     });
+
+    await Promise.allSettled([
+      pushNotificationsToOperationalUsers({
+        type: "contact_submission",
+        title: "New contact submission",
+        message: `${submission.name} sent a message about "${submission.subject}".`,
+        link: "/dashboard",
+        meta: {
+          targetTab: "contacted-list",
+          submissionId: String(submission._id || ""),
+          status: submission.status || "new",
+        },
+      }),
+    ]);
 
     return res.status(201).json({
       success: true,

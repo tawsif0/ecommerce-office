@@ -30,6 +30,15 @@ const {
   createRecurringSubscriptionsFromOrder,
 } = require("../utils/recurringSubscriptionUtils");
 const { initiateGatewayPayment } = require("../utils/paymentGatewayUtils");
+const {
+  calculateCustomerMetrics,
+  getRiskLevel,
+  shouldAutoBlacklistByCancellation,
+} = require("../utils/customerRiskUtils");
+const {
+  pushNotificationsToOperationalUsers,
+  pushNotificationsToUsers,
+} = require("../utils/notificationUtils");
 
 // Generate order number
 const generateOrderNumber = () => {
@@ -168,6 +177,268 @@ const isAdminUser = (user) =>
   String(user?.role || user?.userType || "")
     .trim()
     .toLowerCase() === "admin";
+
+const toStartCase = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const uniqueNotificationUserIds = (values = []) =>
+  [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+
+const getOrderCustomerNotificationUserIds = (order = {}) =>
+  uniqueNotificationUserIds([order?.user?._id || order?.user || ""]);
+
+const getOrderVendorNotificationUserIds = async (order = {}) => {
+  const vendorIds = uniqueNotificationUserIds(
+    Array.isArray(order?.items)
+      ? order.items.map((item) => item?.vendor || item?.product?.vendor || "")
+      : [],
+  );
+
+  if (!vendorIds.length) return [];
+
+  const vendors = await Vendor.find({
+    _id: { $in: vendorIds },
+  })
+    .select("user")
+    .lean();
+
+  return uniqueNotificationUserIds(vendors.map((vendor) => vendor?.user || ""));
+};
+
+const formatOrderMoneyLabel = (value) =>
+  `Tk ${roundMoney(value || 0).toFixed(2)}`;
+
+const getOrderCustomerName = (order = {}) => {
+  const shipping = order?.shippingAddress || {};
+  const fullName = `${String(shipping.firstName || "").trim()} ${String(
+    shipping.lastName || "",
+  ).trim()}`.trim();
+  return fullName || String(order?.user?.name || "").trim() || "Customer";
+};
+
+const buildOrderNotificationMeta = (order = {}, targetTab = "dashboard", extra = {}) => ({
+  targetTab,
+  orderId: String(order?._id || "").trim(),
+  orderNumber: String(order?.orderNumber || "").trim(),
+  ...extra,
+});
+
+const notifyAdminsAboutOrderCreated = async (order = {}) => {
+  const isManualReviewOrder =
+    isManualPaymentOrder(order) && !isCashOnDeliveryOrder(order);
+
+  return pushNotificationsToOperationalUsers({
+    type: "admin_order_created",
+    title: isManualReviewOrder ? "Manual payment order received" : "New order received",
+    message: `${String(order?.orderNumber || "").trim()} from ${getOrderCustomerName(
+      order,
+    )} for ${formatOrderMoneyLabel(order?.total || 0)}${
+      isManualReviewOrder
+        ? ". Admin payment verification is still pending."
+        : "."
+    }`,
+    link: "/dashboard",
+    meta: buildOrderNotificationMeta(order, "order-list", {
+      paymentMethod: String(order?.paymentMethod || "").trim(),
+    }),
+  });
+};
+
+const notifyCustomerAboutOrderCreated = async (order = {}) => {
+  const customerIds = getOrderCustomerNotificationUserIds(order);
+  if (!customerIds.length) return [];
+
+  return pushNotificationsToUsers(customerIds, {
+    type: "order_created",
+    title: "Order placed successfully",
+    message: `${String(order?.orderNumber || "").trim()} has been placed for ${formatOrderMoneyLabel(
+      order?.total || 0,
+    )}.`,
+    link: "/dashboard",
+    meta: buildOrderNotificationMeta(order, "my-orders"),
+  });
+};
+
+const notifyVendorsAboutOrderCreated = async (order = {}) => {
+  const vendorUserIds = await getOrderVendorNotificationUserIds(order);
+  if (!vendorUserIds.length) return [];
+
+  return pushNotificationsToUsers(vendorUserIds, {
+    type: "vendor_order_created",
+    title: "New vendor order received",
+    message: `${String(order?.orderNumber || "").trim()} includes products from your store.`,
+    link: "/dashboard",
+    meta: buildOrderNotificationMeta(order, "vendor-orders"),
+  });
+};
+
+const notifyOrderStatusUpdated = async (
+  order = {},
+  oldStatus = "",
+  newStatus = "",
+  {
+    notifyCustomers = true,
+    notifyVendors = true,
+  } = {},
+) => {
+  const nextStatus = normalizeOrderStatus(newStatus);
+  if (!nextStatus) return [];
+
+  const tasks = [];
+  const title = `Order ${toStartCase(nextStatus)}`;
+  const message = `${String(order?.orderNumber || "").trim()} moved from ${toStartCase(
+    oldStatus || "pending",
+  )} to ${toStartCase(nextStatus)}.`;
+
+  if (notifyCustomers) {
+    const customerIds = getOrderCustomerNotificationUserIds(order);
+    if (customerIds.length) {
+      tasks.push(
+        pushNotificationsToUsers(customerIds, {
+          type: "order_status_updated",
+          title,
+          message,
+          link: "/dashboard",
+          meta: buildOrderNotificationMeta(order, "my-orders", {
+            oldStatus: normalizeOrderStatus(oldStatus),
+            status: nextStatus,
+          }),
+        }),
+      );
+    }
+  }
+
+  if (notifyVendors) {
+    tasks.push(
+      (async () => {
+        const vendorUserIds = await getOrderVendorNotificationUserIds(order);
+        if (!vendorUserIds.length) return [];
+        return pushNotificationsToUsers(vendorUserIds, {
+          type: "order_status_updated",
+          title,
+          message,
+          link: "/dashboard",
+          meta: buildOrderNotificationMeta(order, "vendor-orders", {
+            oldStatus: normalizeOrderStatus(oldStatus),
+            status: nextStatus,
+          }),
+        });
+      })(),
+    );
+  }
+
+  return Promise.all(tasks);
+};
+
+const notifyCustomerAboutPaymentStatusUpdated = async (order = {}, paymentStatus = "") => {
+  const customerIds = getOrderCustomerNotificationUserIds(order);
+  if (!customerIds.length) return [];
+
+  const normalizedPaymentStatus = String(paymentStatus || "").trim().toLowerCase();
+
+  return pushNotificationsToUsers(customerIds, {
+    type: "payment_status_updated",
+    title: `Payment ${toStartCase(normalizedPaymentStatus || "updated")}`,
+    message: `${String(order?.orderNumber || "").trim()} payment is now ${toStartCase(
+      normalizedPaymentStatus || "updated",
+    )}.`,
+    link: "/dashboard",
+    meta: buildOrderNotificationMeta(order, "my-orders", {
+      paymentStatus: normalizedPaymentStatus,
+    }),
+  });
+};
+
+const notifyAdminsAboutCancellationRequest = async (
+  order = {},
+  source = "customer",
+  action = "requested",
+) =>
+  pushNotificationsToOperationalUsers({
+    type:
+      String(action || "").trim().toLowerCase() === "cancelled"
+        ? "order_cancelled"
+        : "order_cancellation_requested",
+    title:
+      String(action || "").trim().toLowerCase() === "cancelled"
+        ? "Order cancelled"
+        : "Cancellation request received",
+    message:
+      String(action || "").trim().toLowerCase() === "cancelled"
+        ? `${String(order?.orderNumber || "").trim()} was cancelled from ${source}.`
+        : `${String(order?.orderNumber || "").trim()} has a pending cancellation request from ${source}.`,
+    link: "/dashboard",
+    meta: buildOrderNotificationMeta(order, "order-list", {
+      requestStatus:
+        String(action || "").trim().toLowerCase() === "cancelled"
+          ? "cancelled"
+          : "pending",
+      requestSource: source,
+    }),
+  });
+
+const notifyCustomerAboutCancellationUpdate = async (
+  order = {},
+  resolution = "updated",
+  note = "",
+) => {
+  const customerIds = getOrderCustomerNotificationUserIds(order);
+  if (!customerIds.length) return [];
+
+  const normalizedResolution = String(resolution || "").trim().toLowerCase();
+  const title =
+    normalizedResolution === "rejected"
+      ? "Cancellation request rejected"
+      : normalizedResolution === "approved"
+        ? "Order cancelled"
+        : "Cancellation updated";
+
+  return pushNotificationsToUsers(customerIds, {
+    type: "order_cancellation_updated",
+    title,
+    message:
+      normalizedResolution === "rejected"
+        ? `${String(order?.orderNumber || "").trim()} cancellation request was rejected.${note ? ` ${note}` : ""}`
+        : `${String(order?.orderNumber || "").trim()} cancellation is now ${toStartCase(
+            normalizedResolution || "updated",
+          )}.${note ? ` ${note}` : ""}`,
+    link: "/dashboard",
+    meta: buildOrderNotificationMeta(order, "my-orders", {
+      resolution: normalizedResolution,
+    }),
+  });
+};
+
+const CANCELLABLE_ORDER_STATUSES = new Set(["pending"]);
+const TERMINAL_ORDER_STATUSES = new Set(["cancelled", "delivered", "returned"]);
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+const normalizeLongText = (value, maxLength = 1200) =>
+  String(value || "")
+    .trim()
+    .slice(0, maxLength);
+
+const getCancellationSettings = async () => {
+  const admin = await User.findOne({ userType: "admin" })
+    .select("adminSettings.policies")
+    .lean();
+
+  const policies = admin?.adminSettings?.policies || {};
+  const rawWindow = Number(policies?.cancellationWindowDays);
+
+  return {
+    windowDays: Number.isFinite(rawWindow) ? Math.max(0, Math.round(rawWindow)) : 1,
+    policyHtml: normalizeLongText(policies?.cancellationPolicy, 10000),
+  };
+};
+
+const getCancellationExpiryDate = (createdAt, windowDays) => {
+  if (!createdAt || windowDays <= 0) return null;
+  return new Date(new Date(createdAt).getTime() + windowDays * DAY_IN_MS);
+};
 
 const getPrimaryAdminCourierSettings = async () => {
   const admin = await User.findOne({ userType: "admin" })
@@ -496,13 +767,16 @@ const classifyCustomerRiskLevel = ({
   successRate = 0,
   totalOrders = 0,
   isBlacklisted = false,
+  cancelledOrders = 0,
+  returnedOrders = 0,
 } = {}) => {
-  if (isBlacklisted) return "blacklisted";
-  if (!Number.isFinite(totalOrders) || totalOrders <= 0) return "new";
-  if (successRate >= 80) return "trusted";
-  if (successRate >= 60) return "medium";
-  if (successRate >= 40) return "high";
-  return "blacklisted";
+  return getRiskLevel({
+    successRate,
+    totalOrders,
+    isBlacklisted,
+    cancelledOrders,
+    returnedOrders,
+  });
 };
 
 const getCustomerOrderInsights = async ({
@@ -569,48 +843,31 @@ const getCustomerOrderInsights = async ({
     (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
   );
 
-  let deliveredOrders = 0;
-  let cancelledOrders = 0;
-  let returnedOrders = 0;
-  let totalRevenue = 0;
-
-  dedupedOrders.forEach((order) => {
-    const status = String(order?.orderStatus || "").trim().toLowerCase();
-    if (status === "delivered") {
-      deliveredOrders += 1;
-      totalRevenue += toNumber(order?.total, 0);
-      return;
-    }
-    if (status === "cancelled") {
-      cancelledOrders += 1;
-      return;
-    }
-    if (status === "returned") {
-      returnedOrders += 1;
-    }
-  });
-
-  const totalOrders = dedupedOrders.length;
-  const successRate =
-    totalOrders > 0
-      ? roundMoney((deliveredOrders / totalOrders) * 100)
-      : 0;
+  const metrics = calculateCustomerMetrics(dedupedOrders);
+  const totalRevenue = roundMoney(
+    dedupedOrders.reduce((sum, order) => {
+      const status = String(order?.orderStatus || "").trim().toLowerCase();
+      return status === "delivered" ? sum + toNumber(order?.total, 0) : sum;
+    }, 0),
+  );
 
   const blacklistedUser = matchedUsers.find((entry) => Boolean(entry?.isBlacklisted));
   const isBlacklisted = Boolean(blacklistedUser);
   const blacklistReason = String(blacklistedUser?.blacklistReason || "").trim();
 
   return {
-    totalOrders,
-    deliveredOrders,
-    cancelledOrders,
-    returnedOrders,
-    successRate,
-    totalRevenue: roundMoney(totalRevenue),
+    totalOrders: metrics.totalOrders,
+    deliveredOrders: metrics.deliveredOrders,
+    cancelledOrders: metrics.cancelledOrders,
+    returnedOrders: metrics.returnedOrders,
+    successRate: roundMoney(metrics.successRate),
+    totalRevenue,
     riskLevel: classifyCustomerRiskLevel({
-      successRate,
-      totalOrders,
+      successRate: metrics.successRate,
+      totalOrders: metrics.totalOrders,
       isBlacklisted,
+      cancelledOrders: metrics.cancelledOrders,
+      returnedOrders: metrics.returnedOrders,
     }),
     isBlacklisted,
     blacklistReason,
@@ -776,6 +1033,129 @@ const applyOrderInventoryAdjustment = async ({
   };
 };
 
+const maybeAutoBlacklistUserForCancellations = async (order = {}) => {
+  const userId = String(order?.user?._id || order?.user || "").trim();
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return;
+
+  try {
+    const user = await User.findById(userId).select("isBlacklisted blacklistReason adminNotes");
+    if (!user || user.isBlacklisted) return;
+
+    const orders = await Order.find({ user: user._id })
+      .select("orderStatus total")
+      .lean();
+    const metrics = calculateCustomerMetrics(orders);
+
+    if (!shouldAutoBlacklistByCancellation(metrics)) {
+      return;
+    }
+
+    const note = `Auto-blacklisted on ${new Date().toISOString().slice(0, 10)} due to repeated cancellations (${metrics.cancelledOrders}/${metrics.totalOrders} orders cancelled).`;
+
+    user.isBlacklisted = true;
+    user.blacklistReason = user.blacklistReason || "Repeated order cancellations";
+    user.adminNotes = user.adminNotes ? `${user.adminNotes}\n${note}` : note;
+    await user.save();
+  } catch (error) {
+    console.error("Failed to auto-blacklist customer:", error);
+  }
+};
+
+const finalizeOrderCancellation = async (
+  order,
+  {
+    reason = "",
+    resolutionNote = "",
+    markRequestApproved = false,
+    requestedBy = null,
+    requestSource = "",
+    actorUser = null,
+  } = {},
+) => {
+  const oldStatus = normalizeOrderStatus(order?.orderStatus || "pending");
+  const inventoryState = getOrderInventoryState(order);
+
+  if (
+    oldStatus !== "cancelled" &&
+    inventoryState.deducted &&
+    !inventoryState.restored
+  ) {
+    const inventoryRestore = await applyOrderInventoryAdjustment({
+      items: order.items,
+      direction: 1,
+    });
+
+    if (!inventoryRestore.success) {
+      const error = new Error(
+        inventoryRestore.message || "Failed to restore stock for cancelled order",
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    setOrderInventoryState(order, {
+      restored: true,
+      restoredAt: new Date(),
+      restoredReason: "cancelled",
+    });
+  }
+
+  order.orderStatus = "cancelled";
+  order.paymentStatus = "failed";
+  order.cancelledAt = new Date();
+
+  const noteParts = [
+    resolutionNote ? normalizeLongText(resolutionNote) : "",
+    reason ? `Reason: ${normalizeLongText(reason)}` : "",
+  ].filter(Boolean);
+
+  if (order.cancellationRequest?.status && order.cancellationRequest.status !== "none") {
+    if (markRequestApproved || order.cancellationRequest.status === "pending") {
+      order.cancellationRequest.status = "approved";
+      order.cancellationRequest.resolvedAt = new Date();
+      if (reason && !order.cancellationRequest.reason) {
+        order.cancellationRequest.reason = normalizeLongText(reason);
+      }
+      if (resolutionNote) {
+        order.cancellationRequest.resolutionNote = normalizeLongText(resolutionNote);
+      }
+    }
+  } else {
+    order.cancellationRequest = {
+      status: markRequestApproved ? "approved" : "none",
+      reason: normalizeLongText(reason),
+      requestSource: String(requestSource || "").trim(),
+      requestedAt: markRequestApproved ? new Date() : null,
+      requestedBy: requestedBy || null,
+      resolutionNote: normalizeLongText(resolutionNote),
+      resolvedAt: markRequestApproved ? new Date() : null,
+    };
+  }
+
+  appendOrderStatusTimelineEntry({
+    order,
+    status: "cancelled",
+    note:
+      noteParts.join(" | ") ||
+      (markRequestApproved
+        ? "Cancellation request approved by admin"
+        : "Order cancelled"),
+    user: actorUser,
+  });
+
+  await order.save();
+
+  try {
+    await sendOrderStatusEmail(order, "cancelled", oldStatus);
+  } catch (emailError) {
+    console.error("Failed to send cancellation email:", emailError);
+  }
+
+  await maybeAutoBlacklistUserForCancellations(order);
+
+  return order;
+};
+
 const extractPaymentMethod = (paymentMethod, paymentDetails = {}) => {
   const candidates = [
     paymentDetails?.method,
@@ -810,12 +1190,234 @@ const extractPaymentMethod = (paymentMethod, paymentDetails = {}) => {
 const isCashOnDeliveryValue = (value) =>
   /\bcod\b|cash[\s_-]*on[\s_-]*delivery/i.test(String(value || "").trim());
 
+const isCashOnDeliveryOrder = (order = {}) => {
+  const paymentCategory = String(order?.paymentDetails?.paymentCategory || "")
+    .trim()
+    .toLowerCase();
+  const providerType = String(order?.paymentDetails?.providerType || "")
+    .trim()
+    .toLowerCase();
+  const paymentLookup = `${order?.paymentMethod || ""} ${order?.paymentDetails?.method || ""}`;
+
+  return (
+    paymentCategory === "cash_on_delivery" ||
+    providerType === "cod" ||
+    isCashOnDeliveryValue(paymentLookup)
+  );
+};
+
+const getPaymentProviderType = (order = {}) =>
+  String(order?.paymentDetails?.providerType || "")
+    .trim()
+    .toLowerCase();
+
+const isGatewayOrder = (order = {}) =>
+  GATEWAY_CHANNELS.has(getPaymentProviderType(order));
+
+const isManualPaymentOrder = (order = {}) =>
+  !isCashOnDeliveryOrder(order) && !isGatewayOrder(order);
+
+const normalizeStoredPaymentStatus = (value) => {
+  const normalized = String(value || "pending").trim().toLowerCase();
+  return ["pending", "completed", "failed"].includes(normalized) ? normalized : "pending";
+};
+
+const syncStoredPaymentStatusForLifecycle = (order, nextOrderStatus = "") => {
+  if (!order) return "pending";
+
+  const normalizedStatus = normalizeOrderStatus(nextOrderStatus || order.orderStatus || "pending");
+  const currentPaymentStatus = normalizeStoredPaymentStatus(order.paymentStatus);
+
+  if (["cancelled", "returned"].includes(normalizedStatus)) {
+    order.paymentStatus = "failed";
+    return order.paymentStatus;
+  }
+
+  if (isCashOnDeliveryOrder(order)) {
+    order.paymentStatus = normalizedStatus === "delivered" ? "completed" : "pending";
+    return order.paymentStatus;
+  }
+
+  if (isGatewayOrder(order)) {
+    order.paymentStatus = currentPaymentStatus;
+    return order.paymentStatus;
+  }
+
+  order.paymentStatus = currentPaymentStatus;
+  return order.paymentStatus;
+};
+
+const resolveEffectivePaymentStatus = (order = {}) => {
+  if (isCashOnDeliveryOrder(order)) {
+    if (String(order?.orderStatus || "").trim().toLowerCase() === "delivered") {
+      return "completed";
+    }
+    if (String(order?.orderStatus || "").trim().toLowerCase() === "cancelled") {
+      return "failed";
+    }
+  }
+
+  return String(order?.paymentStatus || "pending").trim().toLowerCase() || "pending";
+};
+
+const getOrderCancellationMeta = (order = {}, settings = {}) => {
+  const request = order?.cancellationRequest || {};
+  const requestStatus = String(request?.status || "none").trim().toLowerCase() || "none";
+  const orderStatus = String(order?.orderStatus || "pending").trim().toLowerCase() || "pending";
+  const paymentStatus = resolveEffectivePaymentStatus(order);
+  const isPaid = paymentStatus === "completed" && !isCashOnDeliveryOrder(order);
+  const windowDays = Number.isFinite(Number(settings?.windowDays))
+    ? Math.max(0, Math.round(Number(settings.windowDays)))
+    : 1;
+  const expiresAt = getCancellationExpiryDate(order?.createdAt, windowDays);
+  const withinWindow = expiresAt ? Date.now() <= expiresAt.getTime() : false;
+  const isTerminal = TERMINAL_ORDER_STATUSES.has(orderStatus);
+  const isCancellableStage = CANCELLABLE_ORDER_STATUSES.has(orderStatus);
+
+  const canDirectCancel =
+    isCancellableStage &&
+    withinWindow &&
+    !isTerminal &&
+    !isPaid &&
+    requestStatus !== "pending";
+  const canRequestCancellation =
+    isCancellableStage &&
+    withinWindow &&
+    !isTerminal &&
+    isPaid &&
+    !["pending", "approved"].includes(requestStatus);
+
+  let disabledReason = "";
+  if (orderStatus === "cancelled") {
+    disabledReason = "Order already cancelled";
+  } else if (isTerminal) {
+    disabledReason = "Cancellation is no longer available for this order";
+  } else if (!isCancellableStage) {
+    disabledReason = "Cancellation is only available while the order is still pending";
+  } else if (!withinWindow) {
+    disabledReason =
+      windowDays > 0
+        ? `Cancellation window expired after ${windowDays} day${windowDays === 1 ? "" : "s"}`
+        : "Customer cancellation is disabled";
+  } else if (requestStatus === "pending") {
+    disabledReason = "Cancellation request is pending admin approval";
+  } else if (requestStatus === "approved") {
+    disabledReason = "Cancellation request was approved";
+  } else if (requestStatus === "rejected") {
+    disabledReason = "Cancellation request was rejected";
+  }
+
+  return {
+    windowDays,
+    expiresAt,
+    isWindowExpired: !withinWindow,
+    showExpiryInfo: isCancellableStage,
+    expiryLabel: withinWindow
+      ? "Cancellation window ends on"
+      : "Cancellation window ended on",
+    requiresApproval: isPaid,
+    actionType: canDirectCancel
+      ? "direct_cancel"
+      : canRequestCancellation
+        ? "request_cancel"
+        : "none",
+    canDirectCancel,
+    canRequestCancellation,
+    requestStatus,
+    requestReason: String(request?.reason || "").trim(),
+    requestSource: String(request?.requestSource || "").trim(),
+    requestedAt: request?.requestedAt || null,
+    requestedBy: request?.requestedBy || null,
+    resolutionNote: String(request?.resolutionNote || "").trim(),
+    resolvedAt: request?.resolvedAt || null,
+    policyHtml: String(settings?.policyHtml || "").trim(),
+    disabledReason,
+  };
+};
+
+const decorateOrderForClient = (order, cancellationSettings = {}) => {
+  const orderData = order?.toObject ? order.toObject() : { ...order };
+  orderData.paymentStatus = resolveEffectivePaymentStatus(orderData);
+  orderData.cancellationRequest = orderData.cancellationRequest || {
+    status: "none",
+    reason: "",
+    requestSource: "",
+    requestedAt: null,
+    requestedBy: null,
+    resolutionNote: "",
+    resolvedAt: null,
+  };
+  orderData.cancellation = getOrderCancellationMeta(orderData, cancellationSettings);
+  return orderData;
+};
+
+const decorateOrdersForClient = (orders = [], cancellationSettings = {}) =>
+  (Array.isArray(orders) ? orders : [orders]).map((order) =>
+    decorateOrderForClient(order, cancellationSettings),
+  );
+
+const buildTrackedOrderResponse = async (order, cancellationSettings = {}) => {
+  const orderData = decorateOrderForClient(order, cancellationSettings);
+  const products = (orderData.items || [])
+    .map((item) => item.product)
+    .filter(Boolean);
+  await attachImageDataToProducts(products);
+
+  return {
+    _id: orderData._id,
+    orderNumber: orderData.orderNumber,
+    createdAt: orderData.createdAt,
+    orderStatus: orderData.orderStatus,
+    paymentStatus: orderData.paymentStatus,
+    paymentMethod: orderData.paymentMethod,
+    transactionId: orderData.paymentDetails?.transactionId || "N/A",
+    items: (orderData.items || []).map((item) => ({
+      product: item.product
+        ? {
+            _id: item.product._id,
+            title: item.product.title,
+            image: item.product.images?.[0] || null,
+            price: item.price,
+          }
+        : {
+            title: "Product information not available",
+            price: item.price,
+          },
+      quantity: item.quantity,
+      variationLabel: item.variationLabel || "",
+      sku: item.sku || "",
+      color: item.color,
+      dimensions: item.dimensions,
+      itemTotal: item.quantity * item.price,
+    })),
+    shippingAddress: orderData.shippingAddress,
+    subtotal: orderData.subtotal,
+    shippingFee: orderData.shippingFee,
+    discount: orderData.discount,
+    total: orderData.total,
+    isGuest: !orderData.user,
+    customerName: orderData.user?.name
+      ? orderData.user.name
+      : `${orderData.shippingAddress?.firstName || ""} ${orderData.shippingAddress?.lastName || ""}`.trim(),
+    courier: getOrderCourierMeta(orderData),
+    statusTimeline: getOrderStatusTimeline(orderData),
+    adminNotes: String(orderData.adminNotes || ""),
+    cancellation: orderData.cancellation,
+    cancellationRequest: orderData.cancellationRequest,
+  };
+};
+
 const normalizePaymentDetails = (
   paymentMethod,
   paymentDetails = {},
   { providerType = "", defaultAccountNo = "" } = {},
 ) => ({
   method: extractPaymentMethod(paymentMethod, paymentDetails),
+  paymentCategory:
+    String(providerType || "").trim().toLowerCase() === "cod" ||
+    isCashOnDeliveryValue(extractPaymentMethod(paymentMethod, paymentDetails))
+      ? "cash_on_delivery"
+      : "online",
   providerType: String(providerType || "").trim().toLowerCase(),
   transactionId: String(paymentDetails?.transactionId || "").trim(),
   gatewayPaymentId: String(paymentDetails?.gatewayPaymentId || "").trim(),
@@ -902,22 +1504,28 @@ const resolvePaymentMethodSelection = async ({
   const channelType = String(methodDoc?.channelType || "manual")
     .trim()
     .toLowerCase();
-  const inferredCod = !methodDoc && isCashOnDeliveryValue(requestedMethod);
-  const inferredChannel = methodDoc ? channelType : inferredCod ? "cod" : "manual";
-  const resolvedMethodName = String(
-    methodDoc?.type || (inferredCod ? "Cash on Delivery" : requestedMethod || ""),
-  ).trim();
+  if (!methodDoc && (normalizedMethodId || requestedCanonical)) {
+    const error = new Error(
+      "Selected payment method is not active or is no longer available",
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const inferredChannel = methodDoc ? channelType : "manual";
+  const resolvedMethodName = String(methodDoc?.type || requestedMethod || "").trim();
 
   return {
     methodDoc,
     methodName: resolvedMethodName,
     channelType: inferredChannel,
     defaultAccountNo: String(methodDoc?.accountNo || "").trim(),
+    shippingCost: Math.max(0, Number(methodDoc?.shippingCost || 0)),
     requiresTransactionProof: methodDoc
       ? methodDoc.requiresTransactionProof === undefined
         ? true
         : Boolean(methodDoc.requiresTransactionProof)
-      : !inferredCod,
+      : true,
   };
 };
 
@@ -1055,10 +1663,12 @@ const buildOrderItems = async (
   const nonPurchasableTypes = new Set(["grouped"]);
   const globalCommission =
     globalCommissionSettings || (await getGlobalCommissionSettings());
+  let estimatedMinDays = 0;
+  let estimatedMaxDays = 0;
 
   for (const item of normalizedItems) {
     const product = await Product.findById(item.productId).select(
-      "title price salePrice priceType vendor category isActive approvalStatus marketplaceType stock allowBackorder variations commissionType commissionValue commissionFixed",
+      "title price salePrice priceType vendor category isActive approvalStatus marketplaceType stock allowBackorder variations commissionType commissionValue commissionFixed deliveryMinDays deliveryMaxDays",
     );
 
     if (!product) {
@@ -1135,6 +1745,14 @@ const buildOrderItems = async (
     const availableStock = variationContext
       ? variationContext.stock
       : Math.max(parseInt(product.stock, 10) || 0, 0);
+    const itemDeliveryMinDays = Math.max(
+      0,
+      parseInt(product.deliveryMinDays, 10) || 0,
+    );
+    const itemDeliveryMaxDays = Math.max(
+      itemDeliveryMinDays,
+      parseInt(product.deliveryMaxDays, 10) || itemDeliveryMinDays,
+    );
 
     if (!allowBackorder && item.quantity > availableStock) {
       return {
@@ -1224,6 +1842,9 @@ const buildOrderItems = async (
       vendorCommissionFixed: commissionFixed,
       vendorNetAmount: net,
     });
+
+    estimatedMinDays = Math.max(estimatedMinDays, itemDeliveryMinDays);
+    estimatedMaxDays = Math.max(estimatedMaxDays, itemDeliveryMaxDays);
   }
 
   const subtotal = roundMoney(
@@ -1237,7 +1858,48 @@ const buildOrderItems = async (
     success: true,
     orderItems,
     subtotal,
+    estimatedMinDays,
+    estimatedMaxDays,
   };
+};
+
+const mergeEstimatedDeliveryIntoShippingMeta = (
+  shippingMeta = {},
+  orderItemsMeta = {},
+) => {
+  const normalizedShippingMeta =
+    shippingMeta && typeof shippingMeta === "object" ? { ...shippingMeta } : {};
+
+  const currentMinDays = Math.max(
+    0,
+    parseInt(normalizedShippingMeta.estimatedMinDays, 10) || 0,
+  );
+  const currentMaxDays = Math.max(
+    currentMinDays,
+    parseInt(normalizedShippingMeta.estimatedMaxDays, 10) || currentMinDays,
+  );
+
+  if (currentMaxDays > 0) {
+    normalizedShippingMeta.estimatedMinDays = currentMinDays;
+    normalizedShippingMeta.estimatedMaxDays = currentMaxDays;
+    return normalizedShippingMeta;
+  }
+
+  const fallbackMinDays = Math.max(
+    0,
+    parseInt(orderItemsMeta?.estimatedMinDays, 10) || 0,
+  );
+  const fallbackMaxDays = Math.max(
+    fallbackMinDays,
+    parseInt(orderItemsMeta?.estimatedMaxDays, 10) || fallbackMinDays,
+  );
+
+  if (fallbackMaxDays > 0) {
+    normalizedShippingMeta.estimatedMinDays = fallbackMinDays;
+    normalizedShippingMeta.estimatedMaxDays = fallbackMaxDays;
+  }
+
+  return normalizedShippingMeta;
 };
 
 const calculateOrderPricing = async ({
@@ -1314,6 +1976,10 @@ exports.createOrder = async (req, res) => {
       paymentMethod,
       paymentDetails,
     });
+    const resolvedShippingFee =
+      paymentSelection.channelType === "cod"
+        ? Math.max(0, Number(paymentSelection.shippingCost || 0))
+        : shippingFee;
 
     const normalizedPaymentDetails = normalizePaymentDetails(
       paymentSelection.methodName,
@@ -1377,7 +2043,7 @@ exports.createOrder = async (req, res) => {
 
     const pricing = await calculateOrderPricing({
       subtotal: builtItems.subtotal,
-      shippingFee,
+      shippingFee: resolvedShippingFee,
       couponCode: normalizeCouponCode(couponCode),
       items: builtItems.orderItems,
     });
@@ -1394,6 +2060,10 @@ exports.createOrder = async (req, res) => {
       source,
       landingPageSlug,
     });
+    const mergedShippingMeta = mergeEstimatedDeliveryIntoShippingMeta(
+      shippingMeta,
+      builtItems,
+    );
 
     const order = await Order.create({
       orderNumber,
@@ -1402,7 +2072,7 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       subtotal: pricing.subtotal,
       shippingFee: pricing.shippingFee,
-      shippingMeta: shippingMeta || {},
+      shippingMeta: mergedShippingMeta,
       discount: pricing.discount,
       couponCode: pricing.couponCode,
       total: pricing.total,
@@ -1504,7 +2174,7 @@ exports.createOrder = async (req, res) => {
     const populatedOrder = await Order.findById(order._id)
       .populate({
         path: "items.product",
-        select: "title images price dimensions vendor",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
       })
       .lean();
 
@@ -1518,6 +2188,12 @@ exports.createOrder = async (req, res) => {
     sendOrderPlacedEmail(populatedOrder).catch((emailError) => {
       console.error("Order confirmation email error:", emailError);
     });
+
+    await Promise.allSettled([
+      notifyAdminsAboutOrderCreated(populatedOrder),
+      notifyCustomerAboutOrderCreated(populatedOrder),
+      notifyVendorsAboutOrderCreated(populatedOrder),
+    ]);
 
     res.status(201).json({
       success: true,
@@ -1539,14 +2215,15 @@ exports.createOrder = async (req, res) => {
 // Get user's orders
 exports.getUserOrders = async (req, res) => {
   try {
+    const cancellationSettings = await getCancellationSettings();
     const orders = await Order.find({ user: req.user.id })
       .populate({
         path: "items.product",
-        select: "title images price dimensions vendor",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
       })
       .sort({ createdAt: -1 });
 
-    const ordersData = orders.map((order) => order.toObject());
+    const ordersData = decorateOrdersForClient(orders, cancellationSettings);
     const products = ordersData
       .flatMap((order) => order.items || [])
       .map((item) => item.product)
@@ -1569,9 +2246,10 @@ exports.getUserOrders = async (req, res) => {
 // Get single order
 exports.getOrder = async (req, res) => {
   try {
+    const cancellationSettings = await getCancellationSettings();
     const order = await Order.findById(req.params.id).populate({
       path: "items.product",
-      select: "title images price dimensions vendor",
+      select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
     });
 
     if (!order) {
@@ -1593,7 +2271,7 @@ exports.getOrder = async (req, res) => {
       });
     }
 
-    const orderData = order.toObject();
+    const orderData = decorateOrderForClient(order, cancellationSettings);
     const products = (orderData.items || [])
       .map((item) => item.product)
       .filter(Boolean);
@@ -1614,6 +2292,8 @@ exports.getOrder = async (req, res) => {
 exports.getAllOrders = async (req, res) => {
   try {
     const { status, page = 1, limit = 20, search } = req.query;
+    const cancellationSettings = await getCancellationSettings();
+    const trimmedSearch = String(search || "").trim();
 
     if (req.user.role !== "admin" && req.user.userType !== "admin") {
       return res.status(403).json({
@@ -1629,14 +2309,28 @@ exports.getAllOrders = async (req, res) => {
       query.orderStatus = status;
     }
 
-    // Search by order number or customer name/email
-    if (search) {
-      query.$or = [
-        { orderNumber: { $regex: search, $options: "i" } },
-        { "shippingAddress.email": { $regex: search, $options: "i" } },
-        { "shippingAddress.firstName": { $regex: search, $options: "i" } },
-        { "shippingAddress.lastName": { $regex: search, $options: "i" } },
+    // Search by order number, customer info, or payment reference
+    if (trimmedSearch) {
+      const searchFilters = [
+        { orderNumber: { $regex: trimmedSearch, $options: "i" } },
+        { "shippingAddress.email": { $regex: trimmedSearch, $options: "i" } },
+        { "shippingAddress.firstName": { $regex: trimmedSearch, $options: "i" } },
+        { "shippingAddress.lastName": { $regex: trimmedSearch, $options: "i" } },
+        { "shippingAddress.phone": { $regex: trimmedSearch, $options: "i" } },
+        { "shippingAddress.alternativePhone": { $regex: trimmedSearch, $options: "i" } },
+        { paymentMethod: { $regex: trimmedSearch, $options: "i" } },
+        { "paymentDetails.method": { $regex: trimmedSearch, $options: "i" } },
+        { "paymentDetails.transactionId": { $regex: trimmedSearch, $options: "i" } },
+        { "paymentDetails.gatewayPaymentId": { $regex: trimmedSearch, $options: "i" } },
+        { "paymentDetails.sentFrom": { $regex: trimmedSearch, $options: "i" } },
+        { "paymentDetails.sentTo": { $regex: trimmedSearch, $options: "i" } },
       ];
+
+      if (mongoose.Types.ObjectId.isValid(trimmedSearch)) {
+        searchFilters.push({ _id: new mongoose.Types.ObjectId(trimmedSearch) });
+      }
+
+      query.$or = searchFilters;
     }
 
     const pageNum = parseInt(page);
@@ -1654,7 +2348,7 @@ exports.getAllOrders = async (req, res) => {
       })
       .populate({
         path: "items.product",
-        select: "title images price dimensions vendor",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
       })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -1694,7 +2388,7 @@ exports.getAllOrders = async (req, res) => {
       couponCode: order.couponCode || "",
       total: order.total,
       orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus,
+      paymentStatus: resolveEffectivePaymentStatus(order),
       paymentMethod: order.paymentMethod,
       transactionId: order.paymentDetails?.transactionId || "N/A",
       shippingAddress: order.shippingAddress,
@@ -1702,6 +2396,16 @@ exports.getAllOrders = async (req, res) => {
       courier: getOrderCourierMeta(order),
       adminNotes: order.adminNotes || "",
       statusTimeline: getOrderStatusTimeline(order),
+      cancellation: getOrderCancellationMeta(order, cancellationSettings),
+      cancellationRequest: order.cancellationRequest || {
+        status: "none",
+        reason: "",
+        requestSource: "",
+        requestedAt: null,
+        requestedBy: null,
+        resolutionNote: "",
+        resolvedAt: null,
+      },
     }));
 
     res.json({
@@ -1850,6 +2554,7 @@ exports.getAdminProductReports = async (req, res) => {
 exports.trackOrder = async (req, res) => {
   try {
     const { orderNumber } = req.params;
+    const cancellationSettings = await getCancellationSettings();
 
     if (!orderNumber) {
       return res.status(400).json({
@@ -1861,7 +2566,7 @@ exports.trackOrder = async (req, res) => {
     const order = await Order.findOne({ orderNumber })
       .populate({
         path: "items.product",
-        select: "title images price category dimensions vendor",
+        select: "title images price category dimensions vendor deliveryMinDays deliveryMaxDays",
       })
       .populate({
         path: "user",
@@ -1875,53 +2580,7 @@ exports.trackOrder = async (req, res) => {
       });
     }
 
-    // Format response for tracking
-    const orderData = order.toObject();
-    const products = (orderData.items || [])
-      .map((item) => item.product)
-      .filter(Boolean);
-    await attachImageDataToProducts(products);
-
-    const trackingInfo = {
-      _id: order._id,
-      orderNumber: order.orderNumber,
-      createdAt: order.createdAt,
-      orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus,
-      paymentMethod: order.paymentMethod,
-      transactionId: order.paymentDetails?.transactionId || "N/A",
-      items: orderData.items.map((item) => ({
-        product: item.product
-          ? {
-              _id: item.product._id,
-              title: item.product.title,
-              image: item.product.images?.[0] || null,
-              price: item.price,
-            }
-          : {
-              title: "Product information not available",
-              price: item.price,
-            },
-        quantity: item.quantity,
-        variationLabel: item.variationLabel || "",
-        sku: item.sku || "",
-        color: item.color,
-        dimensions: item.dimensions,
-        itemTotal: item.quantity * item.price,
-      })),
-      shippingAddress: order.shippingAddress,
-      subtotal: order.subtotal,
-      shippingFee: order.shippingFee,
-      discount: order.discount,
-      total: order.total,
-      isGuest: !order.user,
-      customerName: order.user
-        ? order.user.name
-        : `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`,
-      courier: getOrderCourierMeta(orderData),
-      statusTimeline: getOrderStatusTimeline(orderData),
-      adminNotes: String(orderData.adminNotes || ""),
-    };
+    const trackingInfo = await buildTrackedOrderResponse(order, cancellationSettings);
 
     res.json({
       success: true,
@@ -1939,7 +2598,7 @@ exports.trackOrder = async (req, res) => {
 // Search orders for navbar suggestions
 exports.searchOrders = async (req, res) => {
   try {
-    const { query } = req.query;
+    const query = String(req.query?.query || "").trim();
 
     if (!query || query.length < 3) {
       return res.json({
@@ -1986,6 +2645,7 @@ exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, notes } = req.body;
+    const cancellationSettings = await getCancellationSettings();
     const requestedStatus = normalizeOrderStatus(status);
     const noteText = String(notes || "").trim();
 
@@ -2014,7 +2674,7 @@ exports.updateOrderStatus = async (req, res) => {
     const order = await Order.findById(id)
       .populate({
         path: "items.product",
-        select: "title images price dimensions vendor",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
       })
       .populate({
         path: "user",
@@ -2042,6 +2702,66 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
+    if (requestedStatus === "cancelled" && oldStatus !== "cancelled") {
+      const hadPendingCancellationRequest =
+        String(order?.cancellationRequest?.status || "").trim().toLowerCase() === "pending";
+      if (
+        oldStatus !== "pending" &&
+        !hadPendingCancellationRequest
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Direct cancellation is only available while the order is pending",
+        });
+      }
+
+      if (noteText) {
+        order.adminNotes = noteText;
+      }
+
+      await finalizeOrderCancellation(order, {
+        resolutionNote: noteText || "Order cancelled by admin",
+        markRequestApproved: order.cancellationRequest?.status === "pending",
+        actorUser: req.user,
+      });
+
+      await Promise.allSettled([
+        notifyOrderStatusUpdated(order, oldStatus, "cancelled"),
+        notifyCustomerAboutCancellationUpdate(
+          order,
+          hadPendingCancellationRequest ? "approved" : "cancelled",
+          noteText ||
+            (hadPendingCancellationRequest
+              ? "Admin approved the cancellation request."
+              : "Admin cancelled the order."),
+        ),
+      ]);
+
+      const decoratedOrder = decorateOrderForClient(order, cancellationSettings);
+
+      return res.json({
+        success: true,
+        message:
+          order.cancellationRequest?.status === "approved"
+            ? "Cancellation request approved and order cancelled"
+            : "Order cancelled successfully",
+        order: {
+          _id: decoratedOrder._id,
+          orderNumber: decoratedOrder.orderNumber,
+          status: decoratedOrder.orderStatus,
+          orderStatus: decoratedOrder.orderStatus,
+          paymentStatus: decoratedOrder.paymentStatus,
+          courier: getOrderCourierMeta(decoratedOrder),
+          customerEmail: decoratedOrder.shippingAddress?.email,
+          updatedAt: new Date(),
+          statusTimeline: getOrderStatusTimeline(decoratedOrder),
+          adminNotes: decoratedOrder.adminNotes || "",
+          cancellation: decoratedOrder.cancellation,
+          cancellationRequest: decoratedOrder.cancellationRequest,
+        },
+      });
+    }
+
     // Update order
     order.orderStatus = requestedStatus;
 
@@ -2061,21 +2781,11 @@ exports.updateOrderStatus = async (req, res) => {
       }
     }
 
-    // Keep payment in sync with operational status
-    if (
-      ["confirmed", "processing", "shipped", "delivered"].includes(requestedStatus) &&
-      order.paymentStatus === "pending"
-    ) {
-      order.paymentStatus = "completed";
-    }
-
-    if (["cancelled", "returned"].includes(requestedStatus)) {
-      order.paymentStatus = "failed";
-    }
+    syncStoredPaymentStatusForLifecycle(order, requestedStatus);
 
     if (
       oldStatus !== requestedStatus &&
-      ["cancelled", "returned"].includes(requestedStatus)
+      ["returned"].includes(requestedStatus)
     ) {
       const inventoryState = getOrderInventoryState(order);
       if (inventoryState.deducted && !inventoryState.restored) {
@@ -2128,22 +2838,30 @@ exports.updateOrderStatus = async (req, res) => {
         console.error("Failed to send status email:", emailError);
         // Don't fail the request if email fails
       }
+
+      await Promise.allSettled([
+        notifyOrderStatusUpdated(order, oldStatus, requestedStatus),
+      ]);
     }
+
+    const decoratedOrder = decorateOrderForClient(order, cancellationSettings);
 
     res.json({
       success: true,
       message: `Order status updated to ${requestedStatus}`,
       order: {
-        _id: order._id,
-        orderNumber: order.orderNumber,
-        status: order.orderStatus,
-        orderStatus: order.orderStatus,
-        paymentStatus: order.paymentStatus,
-        courier: getOrderCourierMeta(order),
-        customerEmail: order.shippingAddress?.email,
+        _id: decoratedOrder._id,
+        orderNumber: decoratedOrder.orderNumber,
+        status: decoratedOrder.orderStatus,
+        orderStatus: decoratedOrder.orderStatus,
+        paymentStatus: decoratedOrder.paymentStatus,
+        courier: getOrderCourierMeta(decoratedOrder),
+        customerEmail: decoratedOrder.shippingAddress?.email,
         updatedAt: new Date(),
-        statusTimeline: getOrderStatusTimeline(order),
-        adminNotes: order.adminNotes || "",
+        statusTimeline: getOrderStatusTimeline(decoratedOrder),
+        adminNotes: decoratedOrder.adminNotes || "",
+        cancellation: decoratedOrder.cancellation,
+        cancellationRequest: decoratedOrder.cancellationRequest,
       },
     });
   } catch (error) {
@@ -2151,6 +2869,125 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while updating order status",
+    });
+  }
+};
+
+exports.updatePaymentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rawRequestedPaymentStatus = String(req.body?.paymentStatus || "")
+      .trim()
+      .toLowerCase();
+    const requestedPaymentStatus = normalizeStoredPaymentStatus(rawRequestedPaymentStatus);
+    const noteText = String(req.body?.notes || "").trim();
+    const cancellationSettings = await getCancellationSettings();
+
+    if (!req.user || !isAdminUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin access required",
+      });
+    }
+
+    if (!["pending", "completed", "failed"].includes(rawRequestedPaymentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment status",
+      });
+    }
+
+    const order = await Order.findById(id)
+      .populate({
+        path: "items.product",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
+      })
+      .populate({
+        path: "user",
+        select: "email name",
+      });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (isCashOnDeliveryOrder(order)) {
+      return res.status(400).json({
+        success: false,
+        message: "Cash on Delivery payment status is managed automatically from the order status",
+      });
+    }
+
+    const orderStatus = normalizeOrderStatus(order.orderStatus || "pending");
+    if (["cancelled", "returned"].includes(orderStatus) && requestedPaymentStatus === "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Cancelled or returned orders cannot be marked as paid",
+      });
+    }
+
+    if (
+      requestedPaymentStatus === "completed" &&
+      isManualPaymentOrder(order) &&
+      !String(order?.paymentDetails?.transactionId || "").trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Manual payments need a transaction ID before they can be marked as paid",
+      });
+    }
+
+    const previousPaymentStatus = normalizeStoredPaymentStatus(order.paymentStatus);
+    order.paymentStatus = requestedPaymentStatus;
+    if (noteText) {
+      order.adminNotes = noteText;
+    }
+
+    appendOrderStatusTimelineEntry({
+      order,
+      status: orderStatus || "pending",
+      note: noteText
+        ? `Payment status updated to ${requestedPaymentStatus}. ${noteText}`
+        : `Payment status updated to ${requestedPaymentStatus}`,
+      user: req.user,
+    });
+
+    await order.save();
+
+    if (previousPaymentStatus !== requestedPaymentStatus) {
+      await Promise.allSettled([
+        notifyCustomerAboutPaymentStatusUpdated(order, requestedPaymentStatus),
+      ]);
+    }
+
+    const decoratedOrder = decorateOrderForClient(order, cancellationSettings);
+
+    return res.json({
+      success: true,
+      message: `Payment status updated to ${requestedPaymentStatus}`,
+      order: {
+        _id: decoratedOrder._id,
+        orderNumber: decoratedOrder.orderNumber,
+        status: decoratedOrder.orderStatus,
+        orderStatus: decoratedOrder.orderStatus,
+        paymentStatus: decoratedOrder.paymentStatus,
+        courier: getOrderCourierMeta(decoratedOrder),
+        customerEmail: decoratedOrder.shippingAddress?.email,
+        updatedAt: new Date(),
+        statusTimeline: getOrderStatusTimeline(decoratedOrder),
+        adminNotes: decoratedOrder.adminNotes || "",
+        cancellation: decoratedOrder.cancellation,
+        cancellationRequest: decoratedOrder.cancellationRequest,
+      },
+    });
+  } catch (error) {
+    console.error("Update payment status error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while updating payment status",
     });
   }
 };
@@ -2362,16 +3199,7 @@ exports.syncCourierTracking = async (req, res) => {
     ) {
       order.orderStatus = nextOrderStatus;
 
-      if (
-        ["confirmed", "processing", "shipped", "delivered"].includes(nextOrderStatus) &&
-        order.paymentStatus === "pending"
-      ) {
-        order.paymentStatus = "completed";
-      }
-
-      if (["cancelled", "returned"].includes(nextOrderStatus)) {
-        order.paymentStatus = "failed";
-      }
+      syncStoredPaymentStatusForLifecycle(order, nextOrderStatus);
 
       appendOrderStatusTimelineEntry({
         order,
@@ -2473,7 +3301,16 @@ exports.getCourierLabel = async (req, res) => {
 // Cancel order
 exports.cancelOrder = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const cancellationSettings = await getCancellationSettings();
+    const order = await Order.findById(req.params.id)
+      .populate({
+        path: "items.product",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
+      })
+      .populate({
+        path: "user",
+        select: "email name",
+      });
 
     if (!order) {
       return res.status(404).json({
@@ -2483,44 +3320,277 @@ exports.cancelOrder = async (req, res) => {
     }
 
     // Check if user owns this order
-    if (!order.user || String(order.user) !== String(req.user._id || req.user.id)) {
+    if (
+      !order.user ||
+      String(order.user?._id || order.user) !== String(req.user._id || req.user.id)
+    ) {
       return res.status(403).json({
         success: false,
         message: "Not authorized to cancel this order",
       });
     }
 
-    if (!canTransitionOrderStatus(order.orderStatus, "cancelled")) {
+    const cancellation = getOrderCancellationMeta(order, cancellationSettings);
+    if (cancellation.actionType === "none") {
       return res.status(400).json({
         success: false,
-        message: "Order can no longer be cancelled from current status",
+        message:
+          cancellation.disabledReason || "Cancellation is not available for this order",
       });
     }
 
-    // Update order status to cancelled
-    order.orderStatus = "cancelled";
-    order.paymentStatus = "failed";
-    appendOrderStatusTimelineEntry({
-      order,
-      status: "cancelled",
-      note: "Order cancelled by customer",
-      user: req.user,
+    const reason = normalizeLongText(req.body?.reason || "");
+
+    if (cancellation.actionType === "request_cancel") {
+      order.cancellationRequest = {
+        status: "pending",
+        reason,
+        requestSource: "customer",
+        requestedAt: new Date(),
+        requestedBy: req.user?._id || req.user?.id || null,
+        resolutionNote: "",
+        resolvedAt: null,
+      };
+      appendOrderStatusTimelineEntry({
+        order,
+        status: normalizeOrderStatus(order.orderStatus || "pending"),
+        note: reason
+          ? `Customer requested cancellation. Reason: ${reason}`
+          : "Customer requested cancellation",
+        user: req.user,
+      });
+      await order.save();
+
+      await Promise.allSettled([
+        notifyAdminsAboutCancellationRequest(order, "customer"),
+      ]);
+
+      return res.json({
+        success: true,
+        mode: "requested",
+        message: "Cancellation request submitted successfully",
+        order: await buildTrackedOrderResponse(order, cancellationSettings),
+      });
+    }
+
+    await finalizeOrderCancellation(order, {
+      reason,
+      requestedBy: req.user?._id || req.user?.id || null,
+      requestSource: "customer",
+      actorUser: req.user,
     });
-    await order.save();
+
+    await Promise.allSettled([
+      notifyAdminsAboutCancellationRequest(order, "customer", "cancelled"),
+      notifyOrderStatusUpdated(order, "pending", "cancelled", {
+        notifyCustomers: false,
+      }),
+    ]);
 
     res.json({
       success: true,
       message: "Order cancelled successfully",
-      order: {
-        ...order.toObject(),
-        courier: getOrderCourierMeta(order),
-      },
+      mode: "cancelled",
+      order: decorateOrderForClient(order, cancellationSettings),
     });
   } catch (error) {
     console.error("Cancel order error:", error);
     res.status(500).json({
       success: false,
       message: "Server error while cancelling order",
+    });
+  }
+};
+
+exports.cancelTrackedOrder = async (req, res) => {
+  try {
+    const cancellationSettings = await getCancellationSettings();
+    const order = await Order.findOne({ orderNumber: req.params.orderNumber })
+      .populate({
+        path: "items.product",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
+      })
+      .populate({
+        path: "user",
+        select: "email name",
+      });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    const cancellation = getOrderCancellationMeta(order, cancellationSettings);
+    if (cancellation.actionType === "none") {
+      return res.status(400).json({
+        success: false,
+        message:
+          cancellation.disabledReason || "Cancellation is not available for this order",
+      });
+    }
+
+    const reason = normalizeLongText(req.body?.reason || "");
+
+    if (cancellation.actionType === "request_cancel") {
+      order.cancellationRequest = {
+        status: "pending",
+        reason,
+        requestSource: "tracking",
+        requestedAt: new Date(),
+        requestedBy: null,
+        resolutionNote: "",
+        resolvedAt: null,
+      };
+      appendOrderStatusTimelineEntry({
+        order,
+        status: normalizeOrderStatus(order.orderStatus || "pending"),
+        note: reason
+          ? `Guest requested cancellation from tracking. Reason: ${reason}`
+          : "Guest requested cancellation from tracking",
+        user: null,
+      });
+      await order.save();
+
+      await Promise.allSettled([
+        notifyAdminsAboutCancellationRequest(order, "tracking"),
+      ]);
+
+      return res.json({
+        success: true,
+        mode: "requested",
+        message: "Cancellation request submitted successfully",
+        order: decorateOrderForClient(order, cancellationSettings),
+      });
+    }
+
+    await finalizeOrderCancellation(order, {
+      reason,
+      requestSource: "tracking",
+      actorUser: null,
+    });
+
+    await Promise.allSettled([
+      notifyAdminsAboutCancellationRequest(order, "tracking", "cancelled"),
+      notifyOrderStatusUpdated(order, "pending", "cancelled", {
+        notifyCustomers: false,
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      mode: "cancelled",
+      message: "Order cancelled successfully",
+      order: await buildTrackedOrderResponse(order, cancellationSettings),
+    });
+  } catch (error) {
+    console.error("Tracked cancel order error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while cancelling order",
+    });
+  }
+};
+
+exports.reviewCancellationRequest = async (req, res) => {
+  try {
+    if (!isAdminUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin access required",
+      });
+    }
+
+    const action = String(req.body?.action || "").trim().toLowerCase();
+    const notes = normalizeLongText(req.body?.notes || "");
+
+    if (!["approve", "reject"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid cancellation action is required",
+      });
+    }
+
+    const order = await Order.findById(req.params.id)
+      .populate({
+        path: "items.product",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
+      })
+      .populate({
+        path: "user",
+        select: "email name",
+      });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (String(order?.cancellationRequest?.status || "").trim().toLowerCase() !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "This order does not have a pending cancellation request",
+      });
+    }
+
+    const cancellationSettings = await getCancellationSettings();
+
+    if (action === "reject") {
+      order.cancellationRequest.status = "rejected";
+      order.cancellationRequest.resolutionNote = notes;
+      order.cancellationRequest.resolvedAt = new Date();
+      if (notes) {
+        order.adminNotes = notes;
+      }
+      appendOrderStatusTimelineEntry({
+        order,
+        status: normalizeOrderStatus(order.orderStatus || "pending"),
+        note: notes
+          ? `Cancellation request rejected. ${notes}`
+          : "Cancellation request rejected",
+        user: req.user,
+      });
+      await order.save();
+
+      await Promise.allSettled([
+        notifyCustomerAboutCancellationUpdate(order, "rejected", notes),
+      ]);
+
+      return res.json({
+        success: true,
+        message: "Cancellation request rejected",
+        order: decorateOrderForClient(order, cancellationSettings),
+      });
+    }
+
+    if (notes) {
+      order.adminNotes = notes;
+    }
+
+    await finalizeOrderCancellation(order, {
+      resolutionNote: notes,
+      markRequestApproved: true,
+      actorUser: req.user,
+    });
+
+    await Promise.allSettled([
+      notifyOrderStatusUpdated(order, "pending", "cancelled"),
+      notifyCustomerAboutCancellationUpdate(order, "approved", notes),
+    ]);
+
+    return res.json({
+      success: true,
+      message: "Cancellation request approved and order cancelled",
+      order: decorateOrderForClient(order, cancellationSettings),
+    });
+  } catch (error) {
+    console.error("Review cancellation request error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while reviewing cancellation request",
     });
   }
 };
@@ -2546,6 +3616,10 @@ exports.guestCheckout = async (req, res) => {
       paymentMethod,
       paymentDetails,
     });
+    const resolvedShippingFee =
+      paymentSelection.channelType === "cod"
+        ? Math.max(0, Number(paymentSelection.shippingCost || 0))
+        : shippingFee;
 
     const normalizedPaymentDetails = normalizePaymentDetails(
       paymentSelection.methodName,
@@ -2603,7 +3677,7 @@ exports.guestCheckout = async (req, res) => {
 
     const pricing = await calculateOrderPricing({
       subtotal: builtItems.subtotal,
-      shippingFee,
+      shippingFee: resolvedShippingFee,
       couponCode: normalizeCouponCode(couponCode),
       items: builtItems.orderItems,
     });
@@ -2620,6 +3694,10 @@ exports.guestCheckout = async (req, res) => {
       source,
       landingPageSlug,
     });
+    const mergedShippingMeta = mergeEstimatedDeliveryIntoShippingMeta(
+      shippingMeta,
+      builtItems,
+    );
 
     // Create order for guest
     const order = await Order.create({
@@ -2628,7 +3706,7 @@ exports.guestCheckout = async (req, res) => {
       shippingAddress,
       subtotal: pricing.subtotal,
       shippingFee: pricing.shippingFee,
-      shippingMeta: shippingMeta || {},
+      shippingMeta: mergedShippingMeta,
       discount: pricing.discount,
       couponCode: pricing.couponCode,
       total: pricing.total,
@@ -2724,7 +3802,7 @@ exports.guestCheckout = async (req, res) => {
     const populatedOrder = await Order.findById(order._id)
       .populate({
         path: "items.product",
-        select: "title images price dimensions vendor",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
       })
       .lean();
 
@@ -2738,6 +3816,11 @@ exports.guestCheckout = async (req, res) => {
     sendOrderPlacedEmail(populatedOrder).catch((emailError) => {
       console.error("Order confirmation email error:", emailError);
     });
+
+    await Promise.allSettled([
+      notifyAdminsAboutOrderCreated(populatedOrder),
+      notifyVendorsAboutOrderCreated(populatedOrder),
+    ]);
 
     res.status(201).json({
       success: true,
@@ -2931,6 +4014,10 @@ exports.createAdminOrder = async (req, res) => {
       paymentMethod,
       paymentDetails,
     });
+    const resolvedShippingFee =
+      paymentSelection.channelType === "cod"
+        ? Math.max(0, Number(paymentSelection.shippingCost || 0))
+        : shippingFee;
 
     const normalizedPaymentDetails = normalizePaymentDetails(
       paymentSelection.methodName,
@@ -2971,7 +4058,7 @@ exports.createAdminOrder = async (req, res) => {
 
     const pricing = await calculateOrderPricing({
       subtotal: builtItems.subtotal,
-      shippingFee,
+      shippingFee: resolvedShippingFee,
       couponCode: normalizeCouponCode(couponCode),
       items: builtItems.orderItems,
     });
@@ -2997,6 +4084,10 @@ exports.createAdminOrder = async (req, res) => {
     mergedShippingMeta.createdByAdmin = true;
     mergedShippingMeta.createdByUser =
       req.user?._id || req.user?.id || null;
+    const finalizedShippingMeta = mergeEstimatedDeliveryIntoShippingMeta(
+      mergedShippingMeta,
+      builtItems,
+    );
 
     const order = await Order.create({
       orderNumber: generateOrderNumber(),
@@ -3005,7 +4096,7 @@ exports.createAdminOrder = async (req, res) => {
       shippingAddress: normalizedShippingAddress,
       subtotal: pricing.subtotal,
       shippingFee: pricing.shippingFee,
-      shippingMeta: mergedShippingMeta,
+      shippingMeta: finalizedShippingMeta,
       discount: pricing.discount,
       couponCode: pricing.couponCode,
       total: pricing.total,
@@ -3083,7 +4174,7 @@ exports.createAdminOrder = async (req, res) => {
     const populatedOrder = await Order.findById(order._id)
       .populate({
         path: "items.product",
-        select: "title images price dimensions vendor",
+        select: "title images price dimensions vendor deliveryMinDays deliveryMaxDays",
       })
       .lean();
 
@@ -3097,6 +4188,12 @@ exports.createAdminOrder = async (req, res) => {
     sendOrderPlacedEmail(populatedOrder).catch((emailError) => {
       console.error("Manual order confirmation email error:", emailError);
     });
+
+    await Promise.allSettled([
+      notifyAdminsAboutOrderCreated(populatedOrder),
+      notifyCustomerAboutOrderCreated(populatedOrder),
+      notifyVendorsAboutOrderCreated(populatedOrder),
+    ]);
 
     return res.status(201).json({
       success: true,

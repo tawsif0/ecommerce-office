@@ -17,6 +17,16 @@ import {
   FiXCircle,
 } from "react-icons/fi";
 import { motion } from "framer-motion";
+import {
+  canSubmitCancellation,
+  getCancellationActionLabel,
+  getCancellationStatusTone,
+} from "../utils/orderCancellation";
+import {
+  formatPaymentMethodLabel,
+  formatPaymentStatusLabel,
+  shouldShowPaymentStatus,
+} from "../utils/orderPresentation";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 // Update the getFullImageUrl function in UserOrders.jsx
@@ -56,15 +66,6 @@ const ORDER_PROGRESS_STATUSES = [
   "shipped",
   "delivered",
 ];
-
-const formatPaymentMethodLabel = (value) => {
-  const raw = String(value || "").trim();
-  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
-  if (normalized === "cod" || normalized === "cash on delivery") {
-    return "Cash on Delivery";
-  }
-  return raw.replace(/_/g, " ");
-};
 
 // In ProductImage component, update the error handling
 const ProductImage = ({ src, alt, className }) => {
@@ -163,6 +164,10 @@ const UserOrders = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // Fetch user's orders
   const fetchUserOrders = async () => {
@@ -203,6 +208,61 @@ const UserOrders = () => {
   const viewOrderDetails = (order) => {
     setSelectedOrder(order);
     setShowDetailsModal(true);
+  };
+
+  const syncUpdatedOrder = (updatedOrder) => {
+    if (!updatedOrder?._id) return;
+
+    setOrders((prev) =>
+      prev.map((order) => (order._id === updatedOrder._id ? updatedOrder : order)),
+    );
+    setSelectedOrder((prev) =>
+      prev?._id === updatedOrder._id ? updatedOrder : prev,
+    );
+    setCancelTarget((prev) =>
+      prev?._id === updatedOrder._id ? updatedOrder : prev,
+    );
+  };
+
+  const openCancelModal = (order) => {
+    if (!canSubmitCancellation(order?.cancellation)) return;
+    setCancelTarget(order);
+    setCancelReason("");
+    setShowCancelModal(true);
+  };
+
+  const submitCancellation = async () => {
+    if (!cancelTarget?._id) return;
+
+    try {
+      setCancelLoading(true);
+      const token = localStorage.getItem("token");
+      const response = await axios.patch(
+        `${baseUrl}/orders/${cancelTarget._id}/cancel`,
+        { reason: cancelReason },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (response.data?.success) {
+        syncUpdatedOrder(response.data.order);
+        toast.success(
+          response.data.message || "Cancellation request updated successfully",
+        );
+        setShowCancelModal(false);
+        setCancelTarget(null);
+        setCancelReason("");
+      } else {
+        toast.error("Failed to update cancellation");
+      }
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to update cancellation",
+      );
+    } finally {
+      setCancelLoading(false);
+    }
   };
 
   // Get status icon and color
@@ -330,6 +390,10 @@ const UserOrders = () => {
           {orders.map((order) => {
             const statusInfo = getStatusInfo(order.orderStatus);
             const StatusIcon = statusInfo.icon;
+            const cancellation = order.cancellation || {};
+            const canCancel = canSubmitCancellation(cancellation);
+            const cancelLabel = getCancellationActionLabel(cancellation);
+            const showPaymentStatus = shouldShowPaymentStatus(order);
 
             return (
               <motion.div
@@ -433,6 +497,20 @@ const UserOrders = () => {
 
                     {/* Actions */}
                     <div className="flex flex-col sm:flex-row gap-2">
+                      {(canCancel || cancellation.requestStatus === "pending") && (
+                        <button
+                          onClick={() => openCancelModal(order)}
+                          disabled={!canCancel}
+                          className={`px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                            canCancel
+                              ? "border border-red-200 text-red-700 hover:bg-red-50"
+                              : "border border-amber-200 text-amber-700 bg-amber-50 cursor-not-allowed"
+                          }`}
+                        >
+                          <FiXCircle className="w-4 h-4" />
+                          {cancelLabel}
+                        </button>
+                      )}
                       <button
                         onClick={() => viewOrderDetails(order)}
                         className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
@@ -454,7 +532,7 @@ const UserOrders = () => {
                 {/* Shipping Info */}
                 {order.shippingAddress && (
                   <div className="px-4 md:px-6 py-3 bg-gray-50 border-t border-gray-100">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div className="text-sm">
                         <span className="text-gray-600">Shipping to: </span>
                         <span className="font-medium">
@@ -470,16 +548,33 @@ const UserOrders = () => {
                         <span className="font-medium">
                           {formatPaymentMethodLabel(order.paymentMethod)}
                         </span>
-                        <span
-                          className={`ml-2 ${
-                            order.paymentStatus === "completed"
-                              ? "text-green-600"
-                              : "text-yellow-600"
-                          }`}
-                        >
-                          ({order.paymentStatus})
-                        </span>
+                        {showPaymentStatus ? (
+                          <span
+                            className={`ml-2 ${
+                              order.paymentStatus === "completed"
+                                ? "text-green-600"
+                                : "text-yellow-600"
+                            }`}
+                          >
+                            ({formatPaymentStatusLabel(order.paymentStatus)})
+                          </span>
+                        ) : null}
                       </div>
+                      {(cancellation.requestStatus === "pending" ||
+                        cancellation.disabledReason ||
+                        canCancel) && (
+                        <div
+                          className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getCancellationStatusTone(
+                            cancellation,
+                          )}`}
+                        >
+                          {cancellation.requestStatus === "pending"
+                            ? "Cancellation pending review"
+                            : canCancel
+                              ? cancelLabel
+                              : cancellation.disabledReason}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -491,7 +586,7 @@ const UserOrders = () => {
 
       {/* Order Details Modal */}
       {showDetailsModal && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div className="fixed inset-0 app-layer-modal flex items-center justify-center p-4 bg-black/50">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -728,6 +823,9 @@ const UserOrders = () => {
                   Payment Information
                 </h3>
                 <div className="bg-gray-50 p-4 rounded-lg">
+                  {(() => {
+                    const showPaymentStatus = shouldShowPaymentStatus(selectedOrder);
+                    return (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-600">Payment Method</p>
@@ -735,44 +833,192 @@ const UserOrders = () => {
                         {formatPaymentMethodLabel(selectedOrder.paymentMethod)}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Payment Status</p>
-                      <p
-                        className={`font-medium ${
-                          selectedOrder.paymentStatus === "completed"
-                            ? "text-green-600"
-                            : "text-yellow-600"
-                        }`}
-                      >
-                        {selectedOrder.paymentStatus}
-                      </p>
-                    </div>
+                    {showPaymentStatus ? (
+                      <div>
+                        <p className="text-sm text-gray-600">Payment Status</p>
+                        <p
+                          className={`font-medium ${
+                            selectedOrder.paymentStatus === "completed"
+                              ? "text-green-600"
+                              : "text-yellow-600"
+                          }`}
+                        >
+                          {formatPaymentStatusLabel(selectedOrder.paymentStatus)}
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm text-gray-600">Payment Note</p>
+                        <p className="font-medium text-gray-800">
+                          Pay cash when the order is delivered.
+                        </p>
+                      </div>
+                    )}
                     {selectedOrder.paymentDetails?.transactionId && (
                       <div className="col-span-2">
                         <p className="text-sm text-gray-600">Transaction ID</p>
                         <p className="font-medium">
-                          {selectedOrder.paymentDetails.transitionId}
+                          {selectedOrder.paymentDetails.transactionId}
                         </p>
                       </div>
                     )}
                   </div>
+                    );
+                  })()}
                 </div>
               </div>
 
+              {selectedOrder.cancellation ? (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-black mb-3">
+                    Cancellation
+                  </h3>
+                  <div
+                    className={`rounded-lg border p-4 ${getCancellationStatusTone(
+                      selectedOrder.cancellation,
+                    )}`}
+                  >
+                    <p className="font-semibold">
+                      {getCancellationActionLabel(selectedOrder.cancellation)}
+                    </p>
+                    <p className="mt-1 text-sm">
+                      {selectedOrder.cancellation.disabledReason ||
+                        (selectedOrder.cancellation.actionType === "request_cancel"
+                          ? "Paid orders need admin approval before they can be cancelled."
+                          : "You can cancel this order directly while the cancellation window stays active.")}
+                    </p>
+                    {selectedOrder.cancellation.showExpiryInfo &&
+                    selectedOrder.cancellation.expiresAt ? (
+                      <p className="mt-2 text-sm">
+                        {selectedOrder.cancellation.expiryLabel || "Cancellation window ends on"}{" "}
+                        {formatDate(selectedOrder.cancellation.expiresAt)}
+                      </p>
+                    ) : null}
+                    {selectedOrder.cancellation.requestReason ? (
+                      <p className="mt-2 text-sm">
+                        Reason: {selectedOrder.cancellation.requestReason}
+                      </p>
+                    ) : null}
+                    {selectedOrder.cancellation.resolutionNote ? (
+                      <p className="mt-2 text-sm">
+                        Admin note: {selectedOrder.cancellation.resolutionNote}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        onClick={() => openCancelModal(selectedOrder)}
+                        disabled={!canSubmitCancellation(selectedOrder.cancellation)}
+                        className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                          canSubmitCancellation(selectedOrder.cancellation)
+                            ? "bg-black text-white hover:bg-gray-800"
+                            : "bg-white/80 text-gray-500 cursor-not-allowed"
+                        }`}
+                      >
+                        {getCancellationActionLabel(selectedOrder.cancellation)}
+                      </button>
+                      <a
+                        href="/policy/cancellation"
+                        className="rounded-lg border border-current px-4 py-2 text-sm font-medium"
+                      >
+                        Read policy
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               {/* Actions */}
-              <div className="flex justify-between items-center">
-                <button
-                  onClick={() => trackOrder(selectedOrder.orderNumber)}
-                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-                >
-                  <FiTruck className="w-4 h-4" />
-                  Track Order
-                </button>
+              <div className="flex flex-wrap justify-between items-center gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => trackOrder(selectedOrder.orderNumber)}
+                    className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+                  >
+                    <FiTruck className="w-4 h-4" />
+                    Track Order
+                  </button>
+                  {canSubmitCancellation(selectedOrder.cancellation) ? (
+                    <button
+                      onClick={() => openCancelModal(selectedOrder)}
+                      className="px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2"
+                    >
+                      <FiXCircle className="w-4 h-4" />
+                      {getCancellationActionLabel(selectedOrder.cancellation)}
+                    </button>
+                  ) : null}
+                </div>
                 <button
                   onClick={() => setShowDetailsModal(false)}
                   className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showCancelModal && cancelTarget && (
+        <div className="fixed inset-0 app-layer-modal flex items-center justify-center bg-black/50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg rounded-2xl bg-white p-6"
+          >
+            <h3 className="text-xl font-bold text-black">
+              {cancelTarget.cancellation?.actionType === "request_cancel"
+                ? "Request order cancellation"
+                : "Cancel order"}
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Order <strong>{cancelTarget.orderNumber}</strong>{" "}
+              {cancelTarget.cancellation?.actionType === "request_cancel"
+                ? "has a completed payment, so admin approval is needed before cancellation."
+                : "will be cancelled immediately if you continue."}
+            </p>
+
+            <label className="mt-5 block text-sm font-medium text-gray-700">
+              Reason for cancellation
+            </label>
+            <textarea
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              placeholder="Add a cancellation reason (optional)"
+              rows={4}
+              className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-black"
+            />
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <a
+                href="/policy/cancellation"
+                className="text-sm font-medium text-gray-600 underline"
+              >
+                Read cancellation policy
+              </a>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCancelModal(false);
+                    setCancelTarget(null);
+                    setCancelReason("");
+                  }}
+                  disabled={cancelLoading}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={submitCancellation}
+                  disabled={cancelLoading}
+                  className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                >
+                  {cancelLoading
+                    ? "Submitting..."
+                    : getCancellationActionLabel(cancelTarget.cancellation)}
                 </button>
               </div>
             </div>

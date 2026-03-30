@@ -81,6 +81,11 @@ const normalizePaymentMethodValue = (value) => {
   return "";
 };
 
+const isCashOnDeliveryMethod = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "cod" || normalized === "cash on delivery";
+};
+
 const isGatewayPaymentMethod = (method) =>
   ["stripe", "paypal", "sslcommerz"].includes(
     String(method?.channelType || "").trim().toLowerCase(),
@@ -227,20 +232,42 @@ const CheckOut = () => {
   const paymentMethodChannel = String(
     selectedPaymentMethod?.channelType || "manual",
   ).toLowerCase();
+  const selectedPaymentIsGateway = isGatewayPaymentMethod(selectedPaymentMethod);
+  const selectedPaymentIsCod =
+    paymentMethodChannel === "cod" || isCashOnDeliveryMethod(paymentMethodValue);
   const requiresTransactionProof =
-    selectedPaymentMethod?.requiresTransactionProof === undefined
+    !selectedPaymentMethod
+      ? false
+      : selectedPaymentMethod?.requiresTransactionProof === undefined
       ? true
       : Boolean(selectedPaymentMethod?.requiresTransactionProof);
   const selectedPaymentAccount = String(selectedPaymentMethod?.accountNo || "").trim();
-  const isExternalGateway = isGatewayPaymentMethod(selectedPaymentMethod);
+  const selectedCodShippingCost =
+    selectedPaymentIsCod && selectedPaymentMethod
+      ? Math.max(0, Number(selectedPaymentMethod?.shippingCost || 0))
+      : 0;
 
   const discount = Math.min(
     Number(appliedCoupon?.discount || 0),
     Number(subtotal || 0),
   );
   const isFreeShippingCoupon = Boolean(appliedCoupon?.freeShipping);
-  const effectiveShippingFee = isFreeShippingCoupon ? 0 : shippingFee;
+  const effectiveShippingFee = isFreeShippingCoupon
+    ? 0
+    : selectedPaymentIsCod
+      ? selectedCodShippingCost
+      : shippingFee;
   const total = Math.max(subtotal + effectiveShippingFee - discount, 0);
+  const shippingFeeStatusLabel = isFreeShippingCoupon
+    ? "FREE"
+    : selectedPaymentIsCod
+      ? formatCurrency(selectedCodShippingCost)
+      : isEstimatingShipping
+        ? "Calculating..."
+      : shippingEstimate
+        ? formatCurrency(shippingFee)
+        : "Set address to calculate";
+  const paymentActionLabel = selectedPaymentIsGateway ? "Proceed to Payment" : "Place Order";
 
   const getItemData = (item) => {
     const product = typeof item.product === "object" ? item.product : null;
@@ -516,6 +543,12 @@ const CheckOut = () => {
   }, []);
 
   useEffect(() => {
+    if (!requiresTransactionProof && transactionId) {
+      setTransactionId("");
+    }
+  }, [requiresTransactionProof, transactionId]);
+
+  useEffect(() => {
     let mounted = true;
     const loadLocationOptions = async () => {
       try {
@@ -659,6 +692,11 @@ const CheckOut = () => {
       return;
     }
 
+    if (selectedPaymentIsCod) {
+      setShippingEstimate(null);
+      return;
+    }
+
     const timeoutId = setTimeout(() => {
       estimateShipping(formData, true);
     }, 300);
@@ -666,7 +704,7 @@ const CheckOut = () => {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [cartItems, estimateShipping, formData]);
+  }, [cartItems, estimateShipping, formData, selectedPaymentIsCod]);
 
   useEffect(() => {
     if (cartItems.length === 0) {
@@ -712,14 +750,23 @@ const CheckOut = () => {
   const fetchPaymentMethods = async () => {
     try {
       const response = await axios.get(`${baseUrl}/auth/payment-methods`);
-      const methods = response.data || [];
+      const methods = Array.isArray(response.data) ? response.data : [];
       setPaymentMethods(methods);
+      setSelectedPaymentMethodId((currentId) => {
+        const hasCurrentMethod = methods.some(
+          (method) => String(method?._id || "") === String(currentId || ""),
+        );
 
-      if (methods.length > 0) {
-        setSelectedPaymentMethodId(String(methods[0]?._id || ""));
-      }
+        if (hasCurrentMethod) {
+          return String(currentId || "");
+        }
+
+        return String(methods[0]?._id || "");
+      });
     } catch (error) {
       console.error("Error fetching payment methods:", error);
+      setPaymentMethods([]);
+      setSelectedPaymentMethodId("");
       toast.error("Failed to load payment methods");
     }
   };
@@ -791,13 +838,27 @@ const CheckOut = () => {
         }
       }
 
-      const shippingResult = await estimateShipping(formData, false);
+      const shippingResult = selectedPaymentIsCod
+        ? {
+            success: true,
+            shippingFee: selectedCodShippingCost,
+            shippingMeta: {
+              source: "cod_payment_method",
+              configuredShippingCost: selectedCodShippingCost,
+            },
+          }
+        : await estimateShipping(formData, false);
+
       if (!shippingResult.success) {
         return;
       }
 
       const estimatedShippingFee = Number(shippingResult.shippingFee || 0);
-      const finalShippingFee = isFreeShippingCoupon ? 0 : estimatedShippingFee;
+      const finalShippingFee = isFreeShippingCoupon
+        ? 0
+        : selectedPaymentIsCod
+          ? selectedCodShippingCost
+          : estimatedShippingFee;
       const finalTotal = Math.max(subtotal + finalShippingFee - discount, 0);
       const attribution = getLandingAttribution();
 
@@ -831,7 +892,7 @@ const CheckOut = () => {
           };
         }),
         subtotal,
-        shippingFee: estimatedShippingFee,
+        shippingFee: finalShippingFee,
         shippingMeta: shippingResult.shippingMeta,
         discount,
         total: finalTotal,
@@ -864,6 +925,7 @@ const CheckOut = () => {
 
       const order = response.data.order;
       const paymentRedirectUrl = String(response.data?.paymentRedirectUrl || "").trim();
+      const gatewayInitError = String(response.data?.gatewayInitError || "").trim();
       hasPlacedOrderRef.current = true;
 
       pushDataLayerEvent("purchase", {
@@ -893,6 +955,12 @@ const CheckOut = () => {
       if (paymentRedirectUrl) {
         toast.success("Redirecting to payment gateway...");
         window.location.href = paymentRedirectUrl;
+        return;
+      }
+
+      if (isGatewayPaymentMethod(resolvedMethod) && gatewayInitError) {
+        toast.error(`${gatewayInitError}. The order is saved in pending payment status.`);
+        navigate("/thank-you", { state: { orderId: order?._id, order } });
         return;
       }
 
@@ -1165,10 +1233,11 @@ const CheckOut = () => {
               <div className="space-y-3">
                 {paymentMethods.map((method) => {
                   const methodValue = normalizePaymentMethodValue(method);
+                  const methodIsCod = isCashOnDeliveryMethod(methodValue);
+                  const methodIsGateway = isGatewayPaymentMethod(method);
                   const accountValue = String(
                     method?.accountNo || method?.accountNumber || "",
                   ).trim();
-                  const channelType = String(method?.channelType || "manual").toLowerCase();
                   const methodRequiresProof =
                     method?.requiresTransactionProof === undefined
                       ? true
@@ -1177,9 +1246,9 @@ const CheckOut = () => {
                   return (
                     <label
                       key={method._id}
-                      className={`block cursor-pointer rounded-2xl border p-4 transition ${
+                      className={`block cursor-pointer rounded-[24px] border p-4 transition ${
                         selectedPaymentMethodId === String(method?._id || "")
-                          ? "border-black bg-[#fafafa] shadow-sm"
+                          ? "border-black bg-[#f7f7f7] shadow-sm"
                           : "border-gray-200 bg-white hover:border-gray-300"
                       }`}
                     >
@@ -1208,25 +1277,47 @@ const CheckOut = () => {
                               <span className="h-2.5 w-2.5 rounded-full bg-black" />
                             ) : null}
                           </span>
-                          <div>
+                          <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-semibold text-black">{methodValue}</span>
-                              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                                {channelType}
-                              </span>
+                              {methodIsCod ? (
+                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                                  COD
+                                </span>
+                              ) : null}
+                              {methodIsGateway ? (
+                                <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-700">
+                                  Gateway
+                                </span>
+                              ) : null}
                               {methodRequiresProof ? (
                                 <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-700">
-                                  Proof required
+                                  Transaction ID
                                 </span>
                               ) : null}
                             </div>
-                            <p className="mt-1 text-xs leading-5 text-gray-500">
-                              {accountValue
-                                ? `Payment account: ${accountValue}`
-                                : "No account number required"}
+                            <p className="text-xs leading-5 text-gray-500">
+                              {methodIsCod
+                                ? "Pay when your order is delivered."
+                                : methodIsGateway
+                                  ? `Continue to ${methodValue || "secure"} checkout after placing the order.`
+                                : accountValue
+                                  ? `Send payment to: ${accountValue}`
+                                  : "Manual payment instructions will appear below."}
                             </p>
+                            {methodIsCod ? (
+                              <p className="text-xs leading-5 text-gray-500">
+                                Delivery charge:{" "}
+                                <span className="font-semibold text-black">
+                                  {shippingFeeStatusLabel}
+                                </span>
+                              </p>
+                            ) : null}
                           </div>
                         </div>
+                        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+                          <FiCreditCard className="h-4 w-4 text-black" />
+                        </span>
                       </div>
                     </label>
                   );
@@ -1240,25 +1331,40 @@ const CheckOut = () => {
               ) : null}
 
               {selectedPaymentMethod?.instructions ? (
-                <p className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3 text-xs leading-5 text-gray-600">
+                <p className="mt-4 rounded-[22px] border border-gray-200 bg-gray-50 p-4 text-xs leading-5 text-gray-600">
                   {selectedPaymentMethod.instructions}
                 </p>
               ) : null}
 
-              {requiresTransactionProof ? (
-                <input
-                  value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  placeholder="Transaction ID*"
-                  className={`mt-4 ${inputClassName}`}
-                />
-              ) : (
-                <p className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-700">
-                  {isExternalGateway
-                    ? "You will be redirected to secure payment gateway after placing order."
-                    : "No transaction ID needed for this payment method."}
-                </p>
-              )}
+              {selectedPaymentMethod ? (
+                requiresTransactionProof ? (
+                  <div className="mt-4 space-y-2">
+                    <input
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value)}
+                      placeholder="Transaction ID*"
+                      className={inputClassName}
+                    />
+                    <p className="text-xs leading-5 text-gray-500">
+                      Add the wallet or bank transaction reference so admin can verify this
+                      payment quickly.
+                    </p>
+                  </div>
+                ) : selectedPaymentIsGateway ? (
+                  <p className="mt-4 rounded-[22px] border border-sky-100 bg-sky-50 p-4 text-xs leading-5 text-sky-700">
+                    You will be redirected to the payment gateway after placing the order. Once
+                    payment is confirmed, admin can track it from order management.
+                  </p>
+                ) : selectedPaymentIsCod ? (
+                  <p className="mt-4 rounded-[22px] border border-emerald-100 bg-emerald-50 p-4 text-xs leading-5 text-emerald-700">
+                    No transaction ID is needed for Cash on Delivery orders.
+                  </p>
+                ) : (
+                  <p className="mt-4 rounded-[22px] border border-emerald-100 bg-emerald-50 p-4 text-xs leading-5 text-emerald-700">
+                    No transaction ID is needed for this payment method.
+                  </p>
+                )
+              ) : null}
             </div>
 
             <div className={sectionCardClass}>
@@ -1282,7 +1388,7 @@ const CheckOut = () => {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || paymentMethods.length === 0}
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-black px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
@@ -1290,16 +1396,14 @@ const CheckOut = () => {
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                     Processing...
                   </>
-                ) : isExternalGateway ? (
-                  "Proceed to Payment"
                 ) : (
-                  "Place Order"
+                  paymentActionLabel
                 )}
               </button>
             </div>
           </form>
 
-          <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="storefront-sticky-offset space-y-4 lg:sticky lg:self-start">
             <div className={sectionCardClass}>
               <h3 className="text-xl font-semibold text-gray-900">Order Summary</h3>
               <p className="mt-1 text-sm text-gray-500">
@@ -1348,11 +1452,7 @@ const CheckOut = () => {
                 <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3">
                   <span className="text-gray-600">Shipping</span>
                   <span className="font-medium text-black">
-                    {isEstimatingShipping
-                      ? "Calculating..."
-                      : isFreeShippingCoupon
-                        ? "FREE"
-                        : formatCurrency(shippingFee)}
+                    {shippingFeeStatusLabel}
                   </span>
                 </div>
                 {isFreeShippingCoupon ? (

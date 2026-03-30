@@ -9,6 +9,11 @@ const TAB_META = {
     title: "Payment Methods",
     description: "Configure the payment options customers can use at checkout.",
   },
+  notifications: {
+    section: "Updates",
+    title: "Notifications",
+    description: "Review live order, payment, review, and contact updates from one place.",
+  },
   "vendors-admin": {
     section: "Marketplace",
     title: "Vendor Management",
@@ -104,6 +109,11 @@ const TAB_META = {
     title: "Review Moderation",
     description: "Moderate marketplace reviews and quality feedback.",
   },
+  "product-reviews": {
+    section: "Catalog & Inventory",
+    title: "Product Reviews",
+    description: "Approve, reject, and monitor product review submissions before they go live.",
+  },
   "customer-risk": {
     section: "Reports & Insights",
     title: "Customer Risk",
@@ -138,11 +148,6 @@ const TAB_META = {
     section: "Advanced Modules",
     title: "Bookings",
     description: "Coordinate booking availability, reservations, and customer activity.",
-  },
-  "module-auctions": {
-    section: "Advanced Modules",
-    title: "Auctions",
-    description: "Monitor auction listings, bids, and winner settlement flows.",
   },
   "module-staff": {
     section: "Advanced Modules",
@@ -208,11 +213,6 @@ const TAB_META = {
     section: "Growth & Marketing",
     title: "Campaign Center",
     description: "Configure offers, campaigns, and promotional merchandising rules.",
-  },
-  "module-voice": {
-    section: "Advanced Modules",
-    title: "Voice Assistant",
-    description: "Control dashboard workflows through the configured admin voice planner.",
   },
   "module-admin-users": {
     section: "Administration",

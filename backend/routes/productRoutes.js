@@ -18,6 +18,8 @@ const {
   getMyProductReview,
   createOrUpdateProductReview,
   deleteMyProductReview,
+  getAdminProductReviews,
+  updateProductReviewStatus,
 } = require("../controllers/productEngagementController.js");
 const auth = require("../middlewares/auth.js");
 const { upload, handleMulterError } = require("../middlewares/upload.js");
@@ -29,11 +31,14 @@ const router = express.Router();
 router.get("/public/search", responseCache(15000), searchProducts);
 router.get("/public/suggestions", responseCache(15000), getSearchSuggestions);
 router.get("/public/:id/reviews", getProductReviews);
+router.post("/public/:id/reviews", createOrUpdateProductReview);
 router.get("/public", responseCache(30000), getActiveProducts);
 router.get("/public/type/:productType", responseCache(30000), getProductsByType);
 router.get("/public/:id", responseCache(30000), getProduct); // Parameterized routes LAST
 
 // Protected routes
+router.get("/admin/reviews", auth, getAdminProductReviews);
+router.patch("/admin/reviews/:id/status", auth, updateProductReviewStatus);
 router.get("/:id/reviews/me", auth, getMyProductReview);
 router.post("/:id/reviews", auth, createOrUpdateProductReview);
 router.delete("/:id/reviews/me", auth, deleteMyProductReview);

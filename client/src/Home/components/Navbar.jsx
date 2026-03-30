@@ -11,6 +11,7 @@ import {
   FiHeart,
   FiLogOut,
   FiMenu,
+  FiPackage,
   FiSearch,
   FiShuffle,
   FiShoppingBag,
@@ -44,6 +45,13 @@ const hexToRgba = (value, alpha) => {
 
 const normalizeLogoMode = (value) =>
   String(value || "").trim().toLowerCase() === "text" ? "text" : "image";
+
+const normalizeOrderLookup = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/^order\s*#?\s*/i, "")
+    .replace(/^#/, "")
+    .trim();
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -181,16 +189,38 @@ const Navbar = () => {
       return;
     }
     try {
-      const response = await axios.get(`${baseUrl}/products/public/suggestions`, {
-        params: { query: trimmed, limit: 8 },
-      });
-      const products = Array.isArray(response.data?.suggestions?.products)
-        ? response.data.suggestions.products.map((item) => ({ ...item, resultType: "product" }))
+      const normalizedOrderQuery = normalizeOrderLookup(trimmed);
+      const [productResponse, orderResponse] = await Promise.allSettled([
+        axios.get(`${baseUrl}/products/public/suggestions`, {
+          params: { query: trimmed, limit: 8 },
+        }),
+        normalizedOrderQuery.length >= 3
+          ? axios.get(`${baseUrl}/orders/search`, {
+              params: { query: normalizedOrderQuery },
+            })
+          : Promise.resolve({ data: { suggestions: [] } }),
+      ]);
+
+      const productPayload =
+        productResponse.status === "fulfilled" ? productResponse.value.data : {};
+      const orderPayload =
+        orderResponse.status === "fulfilled" ? orderResponse.value.data : {};
+
+      const products = Array.isArray(productPayload?.suggestions?.products)
+        ? productPayload.suggestions.products.map((item) => ({ ...item, resultType: "product" }))
         : [];
-      const nextCategories = Array.isArray(response.data?.suggestions?.categories)
-        ? response.data.suggestions.categories.map((item) => ({ ...item, resultType: "category" }))
+      const nextCategories = Array.isArray(productPayload?.suggestions?.categories)
+        ? productPayload.suggestions.categories.map((item) => ({ ...item, resultType: "category" }))
         : [];
-      setSuggestions([...products, ...nextCategories]);
+      const orders = Array.isArray(orderPayload?.suggestions)
+        ? orderPayload.suggestions.map((item) => ({ ...item, resultType: "order" }))
+        : [];
+      const prioritizeOrders = /^ord-/i.test(normalizedOrderQuery);
+      setSuggestions(
+        prioritizeOrders
+          ? [...orders, ...products, ...nextCategories]
+          : [...products, ...nextCategories, ...orders],
+      );
     } catch (_error) {
       setSuggestions([]);
     }
@@ -209,11 +239,39 @@ const Navbar = () => {
     timeoutRef.current = setTimeout(() => loadSuggestions(value), 180);
   };
 
-  const handleSearchSubmit = (event) => {
+  const handleSearchSubmit = async (event) => {
     event.preventDefault();
     const trimmed = query.trim();
     if (!trimmed) return;
-    navigate(`/shop?search=${encodeURIComponent(trimmed)}`);
+
+    let navigatedToOrder = false;
+    const normalizedOrderQuery = normalizeOrderLookup(trimmed);
+
+    if (normalizedOrderQuery.length >= 3) {
+      try {
+        const response = await axios.get(`${baseUrl}/orders/search`, {
+          params: { query: normalizedOrderQuery },
+        });
+        const orderSuggestions = Array.isArray(response.data?.suggestions)
+          ? response.data.suggestions
+          : [];
+        const exactOrderMatch = orderSuggestions.find(
+          (item) =>
+            String(item?.orderNumber || "").trim().toLowerCase() ===
+            normalizedOrderQuery.toLowerCase(),
+        );
+        if (exactOrderMatch?.orderNumber) {
+          navigate(`/track-order/${encodeURIComponent(exactOrderMatch.orderNumber)}`);
+          navigatedToOrder = true;
+        }
+      } catch (_error) {
+        navigatedToOrder = false;
+      }
+    }
+
+    if (!navigatedToOrder) {
+      navigate(`/shop?search=${encodeURIComponent(trimmed)}`);
+    }
     setQuery("");
     setShowSuggestions(false);
     setMobileSearchOpen(false);
@@ -225,7 +283,9 @@ const Navbar = () => {
     navigate(
       item.resultType === "product"
         ? `/product/${item._id}`
-        : `/shop?category=${item._id}`,
+        : item.resultType === "order"
+          ? `/track-order/${encodeURIComponent(item.orderNumber)}`
+          : `/shop?category=${item._id}`,
     );
     setQuery("");
     setShowSuggestions(false);
@@ -289,19 +349,19 @@ const Navbar = () => {
           value={query}
           onChange={handleSearchChange}
           onFocus={() => query.trim() && setShowSuggestions(true)}
-          placeholder="Search for products, brands, and categories..."
+          placeholder="Search products, categories, or order ID..."
           autoComplete="off"
           className="h-12 w-full rounded-full border border-slate-200 bg-slate-50 pl-11 pr-24 text-sm text-slate-900 outline-none transition-all focus:border-slate-300 focus:bg-white focus:shadow-lg"
         />
       </form>
 
       {showSuggestions && query.trim() ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.75rem)] z-[11030] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="absolute left-0 right-0 top-[calc(100%+0.75rem)] z-11030 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
           {suggestions.length > 0 ? (
-            <div className="max-h-[400px] overflow-y-auto p-2">
+            <div className="max-h-100 overflow-y-auto p-2">
               {suggestions.map((item) => (
                 <button
-                  key={`${item.resultType}-${item._id}`}
+                  key={`${item.resultType}-${item._id || item.orderNumber}`}
                   type="button"
                   onClick={() => handleSuggestionClick(item)}
                   className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition hover:bg-slate-50"
@@ -310,14 +370,28 @@ const Navbar = () => {
                     className="flex h-12 w-12 items-center justify-center rounded-xl"
                     style={{ backgroundColor: accentSoft, color: accent }}
                   >
-                    {item.resultType === "product" ? <FiShoppingBag className="h-5 w-5" /> : <FiGrid className="h-5 w-5" />}
+                    {item.resultType === "product" ? (
+                      <FiShoppingBag className="h-5 w-5" />
+                    ) : item.resultType === "order" ? (
+                      <FiPackage className="h-5 w-5" />
+                    ) : (
+                      <FiGrid className="h-5 w-5" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-slate-900">
-                      {item.resultType === "product" ? item.title : item.name}
+                      {item.resultType === "product"
+                        ? item.title
+                        : item.resultType === "order"
+                          ? item.orderNumber
+                          : item.name}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {item.resultType === "product" ? item.brand || "Product" : item.type || "Category"}
+                      {item.resultType === "product"
+                        ? item.brand || "Product"
+                        : item.resultType === "order"
+                          ? `${item.status || "Order"}${item.productName ? ` - ${item.productName}` : ""}`
+                          : item.type || "Category"}
                     </p>
                   </div>
                   <FiArrowRight className="h-4 w-4 text-slate-400" />
@@ -333,7 +407,7 @@ const Navbar = () => {
   );
 
   return (
-    <header className={`sticky top-0 z-[12000] bg-white transition-shadow duration-300 ${scrolled ? "shadow-lg" : "shadow-sm"}`}>
+    <header className={`app-layer-header sticky top-0 bg-white transition-shadow duration-300 ${scrolled ? "shadow-lg" : "shadow-sm"}`}>
       <div className="site-shell">
         <div className="grid grid-cols-[40px_minmax(0,1fr)_182px] items-center gap-3 py-3 lg:hidden">
           <button
@@ -350,7 +424,7 @@ const Navbar = () => {
           </button>
           <Link to="/" onClick={scrollToTop} className="flex min-w-0 items-center justify-center">
             {logo ? (
-              <img src={logo} alt={brandName} className="h-9 w-auto max-w-[150px] object-contain" />
+              <img src={logo} alt={brandName} className="h-9 w-auto max-w-37.5 object-contain" />
             ) : (
               <p className="truncate text-lg font-bold tracking-tight" style={{ color: accent }}>
                 {brandLogoText}
@@ -420,7 +494,7 @@ const Navbar = () => {
               <img
                 src={logo}
                 alt={brandName}
-                className="h-10 w-auto max-w-[150px] object-contain sm:h-11 sm:max-w-[170px] lg:h-12 lg:max-w-[180px]"
+                className="h-10 w-auto max-w-37.5 object-contain sm:h-11 sm:max-w-42.5 lg:h-12 lg:max-w-45"
               />
             ) : (
               <p className="truncate text-xl font-bold tracking-tight" style={{ color: accent }}>
@@ -532,7 +606,7 @@ const Navbar = () => {
         </AnimatePresence>
       </div>
 
-      <div className="hidden border-t border-slate-100 bg-gradient-to-r from-slate-50 to-white lg:block">
+      <div className="hidden border-t border-slate-100 bg-linear-to-r from-slate-50 to-white lg:block">
         <div className="site-shell flex items-center gap-6 py-3">
           <div className="relative">
             <button
@@ -547,7 +621,7 @@ const Navbar = () => {
             </button>
 
             {categoryOpen ? (
-              <div className="absolute left-0 top-[calc(100%+0.85rem)] z-[11010] w-[640px] max-w-[calc(100vw-4rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+              <div className="absolute left-0 top-[calc(100%+0.85rem)] z-11010 w-160 max-w-[calc(100vw-4rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
                 <div className="grid grid-cols-[240px_minmax(0,1fr)]">
                   <div className="border-r border-slate-100 px-6 py-8" style={{ backgroundColor: accentSoft }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Collections</p>
@@ -557,7 +631,7 @@ const Navbar = () => {
                       <FiArrowRight className="h-4 w-4" />
                     </Link>
                   </div>
-                  <div className="flex max-h-[400px] flex-wrap content-start items-start gap-2.5 overflow-y-auto p-5">
+                  <div className="flex max-h-100 flex-wrap content-start items-start gap-2.5 overflow-y-auto p-5">
                     {loading ? <div className="text-sm text-slate-500">Loading categories...</div> : visibleCategories.slice(0, 16).map((category) => (
                       <button
                         key={category._id}
@@ -565,8 +639,8 @@ const Navbar = () => {
                         onClick={() => handleCategoryClick(category._id)}
                         className="inline-flex w-fit max-w-full shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
                       >
-                        <span className="max-w-[140px] truncate font-semibold text-slate-900">{category.name}</span>
-                        <span className="whitespace-nowrap text-[10px] uppercase tracking-[0.1em] text-slate-400">{category.type || "General"}</span>
+                        <span className="max-w-35 truncate font-semibold text-slate-900">{category.name}</span>
+                        <span className="whitespace-nowrap text-[10px] uppercase tracking-widest text-slate-400">{category.type || "General"}</span>
                       </button>
                     ))}
                   </div>
@@ -607,7 +681,7 @@ const Navbar = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileMenuOpen(false)}
-              className="fixed inset-0 z-[12030] bg-slate-950/30 lg:hidden"
+              className="app-layer-drawer-overlay fixed inset-0 bg-slate-950/30"
               aria-label="Close menu overlay"
             />
             <motion.div
@@ -615,12 +689,12 @@ const Navbar = () => {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "tween", duration: 0.24 }}
-              className="fixed inset-y-0 left-0 z-[12040] w-[88vw] max-w-sm border-r border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.24)] lg:hidden"
+              className="app-layer-drawer fixed inset-y-0 left-0 w-[88vw] max-w-sm border-r border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.24)]"
             >
                 <div className="flex h-full flex-col">
                   <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
                     <Link to="/" onClick={handleMobileRouteClick} className="flex min-w-0 items-center">
-                      {logo ? <img src={logo} alt={brandName} className="h-9 w-auto max-w-[150px] object-contain" /> : <p className="truncate text-lg font-bold tracking-tight" style={{ color: accent }}>{brandLogoText}</p>}
+                      {logo ? <img src={logo} alt={brandName} className="h-9 w-auto max-w-37.5 object-contain" /> : <p className="truncate text-lg font-bold tracking-tight" style={{ color: accent }}>{brandLogoText}</p>}
                     </Link>
                   <button type="button" onClick={() => setMobileMenuOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm">
                     <FiX className="h-5 w-5" />
@@ -634,40 +708,6 @@ const Navbar = () => {
                         <FiArrowRight className="h-4 w-4 text-slate-400" />
                       </Link>
                     ))}
-                    <button
-                      type="button"
-                      onClick={handleCompareClick}
-                      className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 shadow-sm"
-                    >
-                      <span className="inline-flex items-center gap-3">
-                        <FiShuffle className="h-4 w-4" />
-                        Compare
-                      </span>
-                      {safeCompareCount > 0 ? (
-                        <span className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-bold text-white">
-                          {safeCompareCount > 99 ? "99+" : safeCompareCount}
-                        </span>
-                      ) : (
-                        <FiArrowRight className="h-4 w-4 text-slate-400" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleWishlistClick}
-                      className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 shadow-sm"
-                    >
-                      <span className="inline-flex items-center gap-3">
-                        <FiHeart className="h-4 w-4" />
-                        Wishlist
-                      </span>
-                      {safeWishlistCount > 0 ? (
-                        <span className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-bold text-white">
-                          {safeWishlistCount > 99 ? "99+" : safeWishlistCount}
-                        </span>
-                      ) : (
-                        <FiArrowRight className="h-4 w-4 text-slate-400" />
-                      )}
-                    </button>
                   </div>
                   <div className="mt-8">
                     <div className="mb-3 flex items-center justify-between">
@@ -683,7 +723,7 @@ const Navbar = () => {
                           className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700"
                         >
                           <span className="truncate">{category.name}</span>
-                          <span className="ml-3 shrink-0 rounded-full bg-white px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-slate-500">{category.type || "General"}</span>
+                          <span className="ml-3 shrink-0 rounded-full bg-white px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">{category.type || "General"}</span>
                         </button>
                       ))}
                     </div>

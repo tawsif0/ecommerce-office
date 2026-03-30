@@ -5,6 +5,7 @@ import { FiGlobe, FiSave, FiSettings, FiUpload, FiX } from "react-icons/fi";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
 import { toPublicAssetUrl } from "../utils/publicSettings";
+import RichTextEditor from "../components/RichTextEditor";
 import {
   loadAdminSettings,
   saveAdminSettings,
@@ -48,13 +49,21 @@ const ModuleWebsiteSetup = () => {
   const saving = saveStatus === "loading";
   const logoUploading = logoUploadStatus === "loading";
   const logoInputRef = useRef(null);
+  const headerIconInputRef = useRef(null);
 
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [iconUploading, setIconUploading] = useState(false);
   const logoMode = normalizeLogoMode(settings?.website?.logoMode);
   const logoPreviewUrl = useMemo(
     () => toPublicAssetUrl(settings?.website?.logoUrl || ""),
     [settings?.website?.logoUrl],
+  );
+  const headerIconPreviewUrl = useMemo(
+    () => toPublicAssetUrl(
+      settings?.website?.headerIconUrl || settings?.website?.logoUrl || "",
+    ),
+    [settings?.website?.headerIconUrl, settings?.website?.logoUrl],
   );
   const publicStockCategoryIds = useMemo(
     () => parseIdList(settings?.publicStockCategoryIds || settings?.marketplace?.publicStockCategoryIds),
@@ -63,7 +72,6 @@ const ModuleWebsiteSetup = () => {
   const publicStockSummaryEnabled = Boolean(
     settings?.publicStockSummaryEnabled ?? settings?.marketplace?.publicStockSummaryEnabled,
   );
-
   const isAdmin = useMemo(
     () => String(user?.userType || "").toLowerCase() === "admin",
     [user?.userType],
@@ -132,6 +140,36 @@ const ModuleWebsiteSetup = () => {
     }
   };
 
+  const handleHeaderIconUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIconUploading(true);
+      const formData = new FormData();
+      formData.append("icon", file);
+
+      const response = await axios.post(
+        `${baseUrl}/auth/admin/settings/header-icon-upload`,
+        formData,
+        {
+          headers: getAuthHeaders(),
+        },
+      );
+
+      const uploadedUrl = String(response?.data?.headerIconUrl || "").trim();
+      updateNested("website", "headerIconUrl", uploadedUrl);
+      toast.success(response?.data?.message || "Header icon uploaded");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to upload header icon");
+    } finally {
+      setIconUploading(false);
+      if (headerIconInputRef.current) {
+        headerIconInputRef.current.value = "";
+      }
+    }
+  };
+
   const togglePublicStockCategory = (categoryId) => {
     const normalizedId = String(categoryId || "").trim();
     if (!normalizedId) return;
@@ -142,6 +180,28 @@ const ModuleWebsiteSetup = () => {
         ? publicStockCategoryIds.filter((id) => id !== normalizedId)
         : [...publicStockCategoryIds, normalizedId],
     );
+  };
+
+  const generateSitemap = async () => {
+    try {
+      const response = await axios.get(`${baseUrl}/auth/admin/settings/sitemap.xml`, {
+        headers: getAuthHeaders(),
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "application/xml" });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = "sitemap.xml";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      toast.success("Sitemap generated");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to generate sitemap");
+    }
   };
 
   const saveSettings = async (event) => {
@@ -158,8 +218,14 @@ const ModuleWebsiteSetup = () => {
           ...(settings.storefront || {}),
           footerCaption: String(settings?.storefront?.footerCaption || "").trim(),
         },
+        marketplace: {
+          ...(settings?.marketplace || {}),
+          publicStockSummaryEnabled,
+          publicStockCategoryIds,
+        },
         publicStockSummaryEnabled,
         publicStockCategoryIds,
+        courier: { ...(settings.courier || {}) },
       };
 
       const result = await dispatch(saveAdminSettings(payload)).unwrap();
@@ -245,12 +311,6 @@ const ModuleWebsiteSetup = () => {
                   />
                 ) : (
                   <div className="space-y-3">
-                    <input
-                      value={settings.website.logoUrl}
-                      onChange={(event) => updateNested("website", "logoUrl", event.target.value)}
-                      placeholder="Logo URL or upload a file below"
-                      className={inputClass}
-                    />
                     <div className="flex flex-col gap-3 md:flex-row md:items-center">
                       <input
                         ref={logoInputRef}
@@ -308,6 +368,60 @@ const ModuleWebsiteSetup = () => {
                   placeholder="Font family"
                   className={inputClass}
                 />
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_150px]">
+                  <div>
+                    <p className="text-sm font-semibold text-black">Browser / Header Icon</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      This controls the browser tab favicon and branding icon. Leave it empty to
+                      fall back to the main website logo.
+                    </p>
+                    <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
+                      <input
+                        ref={headerIconInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml"
+                        onChange={handleHeaderIconUpload}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => headerIconInputRef.current?.click()}
+                        disabled={iconUploading}
+                        className="app-btn-secondary h-11 px-4 text-sm font-semibold disabled:opacity-60"
+                      >
+                        <FiUpload className="h-4 w-4" />
+                        {iconUploading ? "Uploading..." : "Upload Icon"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateNested("website", "headerIconUrl", "")}
+                        className="h-11 rounded-xl border border-gray-200 px-4 text-sm font-semibold text-gray-700 transition hover:border-black"
+                      >
+                        Use Logo Fallback
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Icon Preview</p>
+                    <div className="mt-3 flex h-[110px] items-center justify-center rounded-[18px] border border-black/8 bg-white p-4">
+                      {headerIconPreviewUrl ? (
+                        <img
+                          src={headerIconPreviewUrl}
+                          alt={`${String(settings?.website?.storeName || "Website").trim() || "Website"} icon`}
+                          className="h-14 w-14 rounded-2xl object-contain"
+                        />
+                      ) : (
+                        <p className="text-center text-xs text-gray-500">
+                          Main logo fallback
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -544,38 +658,179 @@ const ModuleWebsiteSetup = () => {
             </section>
           </div>
 
-          <div className="grid grid-cols-1 gap-5">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <section className={sectionClass}>
+              <h2 className="text-lg font-semibold text-black">Courier Integration</h2>
+              <p className="text-sm text-gray-600">
+                Save courier API credentials and endpoint paths for booking and tracking flows.
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <input
+                  value={settings?.courier?.providerName || ""}
+                  onChange={(event) => updateNested("courier", "providerName", event.target.value)}
+                  placeholder="Courier provider name"
+                  className={inputClass}
+                />
+                <input
+                  value={settings?.courier?.apiBaseUrl || ""}
+                  onChange={(event) => updateNested("courier", "apiBaseUrl", event.target.value)}
+                  placeholder="API base URL"
+                  className={inputClass}
+                />
+                <input
+                  value={settings?.courier?.apiToken || ""}
+                  onChange={(event) => updateNested("courier", "apiToken", event.target.value)}
+                  placeholder="API token"
+                  className={inputClass}
+                />
+                <input
+                  value={settings?.courier?.apiKey || ""}
+                  onChange={(event) => updateNested("courier", "apiKey", event.target.value)}
+                  placeholder="API key"
+                  className={inputClass}
+                />
+                <input
+                  value={settings?.courier?.apiSecret || ""}
+                  onChange={(event) => updateNested("courier", "apiSecret", event.target.value)}
+                  placeholder="API secret"
+                  className={inputClass}
+                />
+                <input
+                  type="number"
+                  min="1000"
+                  step="500"
+                  value={settings?.courier?.timeoutMs || 12000}
+                  onChange={(event) => updateNested("courier", "timeoutMs", event.target.value)}
+                  placeholder="Timeout (ms)"
+                  className={inputClass}
+                />
+                <input
+                  value={settings?.courier?.consignmentPath || ""}
+                  onChange={(event) =>
+                    updateNested("courier", "consignmentPath", event.target.value)
+                  }
+                  placeholder="Consignment path"
+                  className={inputClass}
+                />
+                <input
+                  value={settings?.courier?.trackingPath || ""}
+                  onChange={(event) =>
+                    updateNested("courier", "trackingPath", event.target.value)
+                  }
+                  placeholder="Tracking path"
+                  className={inputClass}
+                />
+                <input
+                  value={settings?.courier?.labelPath || ""}
+                  onChange={(event) => updateNested("courier", "labelPath", event.target.value)}
+                  placeholder="Label path"
+                  className={inputClass}
+                />
+                <label className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings?.courier?.enabled)}
+                    onChange={(event) => updateNested("courier", "enabled", event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Enable courier API integration
+                </label>
+              </div>
+            </section>
+
+            <section className={sectionClass}>
+              <h2 className="text-lg font-semibold text-black">Sitemap</h2>
+              <p className="text-sm text-gray-600">
+                Generate and download the latest XML sitemap for the public storefront in one click.
+              </p>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                <button
+                  type="button"
+                  onClick={generateSitemap}
+                  className="app-btn-secondary h-11 px-5 text-sm font-semibold"
+                >
+                  Generate & Download Sitemap XML
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <section className={sectionClass}>
+              <h2 className="text-lg font-semibold text-black">Order Cancellation</h2>
+              <p className="text-sm text-gray-600">
+                Control how long customers can cancel an order from the storefront. Once the
+                time limit expires, or once the order moves out of pending, the cancel button
+                turns off automatically.
+              </p>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-black">
+                      Cancellation Time Limit
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={settings?.policies?.cancellationWindowDays ?? 1}
+                      onChange={(event) =>
+                        updateNested("policies", "cancellationWindowDays", event.target.value)
+                      }
+                      placeholder="Days"
+                      className={inputClass}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Use days. Set `0` to disable customer cancellation completely.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-black">
+                      Cancellation Policy
+                    </label>
+                    <RichTextEditor
+                      value={settings?.policies?.cancellationPolicy || ""}
+                      onChange={(value) => updateNested("policies", "cancellationPolicy", value)}
+                      placeholder="Explain the cancellation rules customers should see"
+                      minHeight={180}
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <section className={sectionClass}>
               <h2 className="text-lg font-semibold text-black">Policies & Footer</h2>
-              <textarea
+              <RichTextEditor
                 value={settings.policies.shipmentPolicy}
-                onChange={(event) => updateNested("policies", "shipmentPolicy", event.target.value)}
+                onChange={(value) => updateNested("policies", "shipmentPolicy", value)}
                 placeholder="Shipment policy"
-                className={textareaClass}
+                minHeight={160}
               />
-              <textarea
+              <RichTextEditor
                 value={settings.policies.deliveryPolicy}
-                onChange={(event) => updateNested("policies", "deliveryPolicy", event.target.value)}
+                onChange={(value) => updateNested("policies", "deliveryPolicy", value)}
                 placeholder="Delivery policy"
-                className={textareaClass}
+                minHeight={160}
               />
-              <textarea
+              <RichTextEditor
                 value={settings.policies.termsConditions}
-                onChange={(event) => updateNested("policies", "termsConditions", event.target.value)}
+                onChange={(value) => updateNested("policies", "termsConditions", value)}
                 placeholder="Terms and conditions"
-                className={textareaClass}
+                minHeight={160}
               />
-              <textarea
+              <RichTextEditor
                 value={settings.policies.returnPolicy}
-                onChange={(event) => updateNested("policies", "returnPolicy", event.target.value)}
+                onChange={(value) => updateNested("policies", "returnPolicy", value)}
                 placeholder="Return policy"
-                className={textareaClass}
+                minHeight={160}
               />
-              <textarea
+              <RichTextEditor
                 value={settings.policies.privacyPolicy}
-                onChange={(event) => updateNested("policies", "privacyPolicy", event.target.value)}
+                onChange={(value) => updateNested("policies", "privacyPolicy", value)}
                 placeholder="Privacy policy"
-                className={textareaClass}
+                minHeight={160}
               />
               <input
                 value={settings?.storefront?.footerCaption || ""}

@@ -15,6 +15,7 @@ import {
 import { FaFacebookF, FaTwitter, FaWhatsapp, FaPaperPlane } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth";
 import StorefrontProductCard from "../Home/components/StorefrontProductCard";
+import { hasHtmlContent, stripHtml } from "../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -77,7 +78,7 @@ const VendorStore = () => {
 
   const storeUrl = typeof window !== "undefined" ? window.location.href : "";
   const storeShareText = vendor?.description
-    ? String(vendor.description).slice(0, 140)
+    ? stripHtml(vendor.description).slice(0, 140)
     : `Visit ${vendor?.storeName || "this store"} on our marketplace`;
 
   const hasPolicies = useMemo(() => {
@@ -89,6 +90,14 @@ const VendorStore = () => {
         policies.termsConditions,
     );
   }, [vendor]);
+
+  const renderRichText = (value, className) => {
+    if (!String(value || "").trim()) return null;
+    if (hasHtmlContent(value)) {
+      return <div className={className} dangerouslySetInnerHTML={{ __html: value }} />;
+    }
+    return <p className={className}>{value}</p>;
+  };
 
   useEffect(() => {
     if (user) {
@@ -363,9 +372,16 @@ const VendorStore = () => {
                   <h1 className="mt-4 text-3xl font-bold tracking-tight text-black md:text-4xl">
                     {vendor.storeName}
                   </h1>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600 md:text-base">
-                    {vendor.description || "Marketplace vendor with curated catalog, direct messaging, and customer reviews."}
-                  </p>
+                  {vendor.description ? (
+                    renderRichText(
+                      vendor.description,
+                      "mt-3 max-w-3xl text-sm leading-6 text-gray-600 md:text-base",
+                    )
+                  ) : (
+                    <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600 md:text-base">
+                      Marketplace vendor with curated catalog, direct messaging, and customer reviews.
+                    </p>
+                  )}
 
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
                     <div className="inline-flex items-center gap-2 rounded-full bg-[#fafafa] px-3 py-1.5">
@@ -688,33 +704,37 @@ const VendorStore = () => {
                   {vendor.storePolicies?.shippingPolicy ? (
                     <div>
                       <h3 className="font-semibold text-gray-900">Shipping Policy</h3>
-                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
-                        {vendor.storePolicies.shippingPolicy}
-                      </p>
+                      {renderRichText(
+                        vendor.storePolicies.shippingPolicy,
+                        "mt-1 leading-6 text-gray-600",
+                      )}
                     </div>
                   ) : null}
                   {vendor.storePolicies?.refundPolicy ? (
                     <div>
                       <h3 className="font-semibold text-gray-900">Refund Policy</h3>
-                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
-                        {vendor.storePolicies.refundPolicy}
-                      </p>
+                      {renderRichText(
+                        vendor.storePolicies.refundPolicy,
+                        "mt-1 leading-6 text-gray-600",
+                      )}
                     </div>
                   ) : null}
                   {vendor.storePolicies?.privacyPolicy ? (
                     <div>
                       <h3 className="font-semibold text-gray-900">Privacy Policy</h3>
-                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
-                        {vendor.storePolicies.privacyPolicy}
-                      </p>
+                      {renderRichText(
+                        vendor.storePolicies.privacyPolicy,
+                        "mt-1 leading-6 text-gray-600",
+                      )}
                     </div>
                   ) : null}
                   {vendor.storePolicies?.termsConditions ? (
                     <div>
                       <h3 className="font-semibold text-gray-900">Terms and Conditions</h3>
-                      <p className="mt-1 whitespace-pre-wrap leading-6 text-gray-600">
-                        {vendor.storePolicies.termsConditions}
-                      </p>
+                      {renderRichText(
+                        vendor.storePolicies.termsConditions,
+                        "mt-1 leading-6 text-gray-600",
+                      )}
                     </div>
                   ) : null}
                 </div>

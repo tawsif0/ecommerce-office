@@ -47,6 +47,11 @@ const paymentMethodSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: {},
   },
+  shippingCost: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   displayOrder: {
     type: Number,
     default: 0,
@@ -88,6 +93,10 @@ paymentMethodSchema.pre("validate", function preValidate(next) {
 
   if (["cod", "stripe", "paypal", "sslcommerz"].includes(channel)) {
     this.requiresTransactionProof = false;
+  }
+
+  if (channel !== "cod") {
+    this.shippingCost = 0;
   }
 
   next();

@@ -1,10 +1,97 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import StorefrontProductCard from "./StorefrontProductCard";
+import LandingSectionProductCard from "./LandingSectionProductCard";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const INITIAL_VISIBLE_PRODUCTS = 4;
+
+const SECTION_THEMES = {
+  popular: {
+    sectionClassName: "relative overflow-hidden bg-[#1B1C18] py-16 md:py-20",
+    contentShellClassName: "home-showcase-section-shell",
+    headerWrapClassName: "mb-12 text-center",
+    eyebrowClassName:
+      "home-showcase-label mb-3 block text-[10px] uppercase tracking-[0.4em] text-white/72",
+    titleClassName:
+      "text-3xl font-extrabold tracking-tight text-white md:text-4xl",
+    descriptionClassName: "mx-auto mt-4 max-w-xl text-sm text-white/70",
+    tabsWrapClassName: "mb-10 flex flex-wrap justify-center gap-2",
+    activeTabClassName: "border-white bg-white text-[#1B1C18]",
+    inactiveTabClassName:
+      "border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white",
+    buttonClassName:
+      "border border-white/15 bg-white/5 text-white hover:bg-white hover:text-[#1B1C18]",
+    buttonWrapClassName: "justify-center",
+  },
+  "hot-deals": {
+    sectionClassName: "home-showcase-satin-glow py-16 md:py-24",
+    contentShellClassName: "home-showcase-section-shell",
+    headerWrapClassName: "mb-14 text-center",
+    eyebrowClassName:
+      "home-showcase-label mb-4 block text-[10px] uppercase tracking-[0.5em] text-[#1B1C18]",
+    titleClassName:
+      "mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-[#1B1C18] md:text-4xl",
+    descriptionClassName: "mx-auto mt-5 max-w-md text-sm leading-7 text-[#4D4635]",
+    tabsWrapClassName: "mb-12 flex flex-wrap justify-center gap-2",
+    activeTabClassName: "bg-[#1B1C18] text-white border-[#1B1C18]",
+    inactiveTabClassName:
+      "border-[#D0C5AF] bg-white/80 text-[#4D4635] hover:border-[#1B1C18] hover:text-[#1B1C18]",
+    buttonClassName:
+      "bg-[#1B1C18] text-white hover:bg-[#2A2A2A] hover:text-white",
+    buttonWrapClassName: "justify-center",
+  },
+  featured: {
+    sectionClassName: "bg-white py-16 md:py-24",
+    contentShellClassName: "home-showcase-section-shell home-showcase-section-shell--featured",
+    headerWrapClassName: "mb-12 text-left",
+    eyebrowClassName:
+      "home-showcase-label mb-4 block text-[10px] uppercase tracking-[0.5em] text-[#1B1C18]",
+    titleClassName:
+      "max-w-2xl text-4xl font-extrabold leading-tight text-[#1B1C18] md:text-5xl",
+    descriptionClassName: "mt-5 max-w-xl text-sm text-[#4D4635]",
+    tabsWrapClassName: "mb-10 flex flex-wrap gap-2",
+    activeTabClassName: "bg-[#1B1C18] text-white border-[#1B1C18]",
+    inactiveTabClassName:
+      "border-[#D0C5AF] bg-[#FBF9F3] text-[#4D4635] hover:border-[#1B1C18] hover:text-[#1B1C18]",
+    buttonClassName:
+      "rounded-none border-x-0 border-t-0 border-b border-[#1B1C18] bg-transparent text-[#1B1C18] hover:bg-transparent hover:text-black",
+    buttonWrapClassName: "justify-start",
+  },
+  "best-selling": {
+    sectionClassName: "bg-[#F5F3ED]/60 py-16 md:py-24",
+    contentShellClassName: "home-showcase-section-shell",
+    headerWrapClassName: "mb-14",
+    eyebrowClassName:
+      "home-showcase-label mb-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-black/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-[#1B1C18]",
+    titleClassName:
+      "max-w-3xl text-4xl font-extrabold leading-[0.96] tracking-tight text-[#1B1C18] md:text-5xl",
+    descriptionClassName: "mt-4 max-w-2xl text-base leading-7 text-[#4D4635]",
+    tabsWrapClassName: "mb-12 flex flex-wrap gap-2",
+    activeTabClassName: "bg-[#1B1C18] text-white border-[#1B1C18]",
+    inactiveTabClassName:
+      "border-[#D0C5AF] bg-white text-[#4D4635] hover:border-[#1B1C18] hover:text-[#1B1C18]",
+    buttonClassName:
+      "bg-[#1B1C18] text-white hover:bg-[#2A2A2A] hover:text-white",
+    buttonWrapClassName: "justify-start",
+  },
+  latest: {
+    sectionClassName: "relative overflow-hidden bg-white py-16 md:py-24",
+    contentShellClassName: "home-showcase-section-shell",
+    headerWrapClassName: "mb-16 text-center",
+    eyebrowClassName:
+      "home-showcase-label mb-3 block text-[10px] uppercase tracking-[0.6em] text-[#1B1C18]",
+    titleClassName: "text-3xl font-extrabold tracking-tight text-[#1B1C18] md:text-4xl",
+    descriptionClassName: "mx-auto mt-4 max-w-xl text-sm text-[#4D4635]",
+    tabsWrapClassName: "mb-10 flex flex-wrap justify-center gap-2",
+    activeTabClassName: "bg-[#1B1C18] text-white border-[#1B1C18]",
+    inactiveTabClassName:
+      "border-[#D0C5AF] bg-white/80 text-[#4D4635] hover:border-[#1B1C18] hover:text-[#1B1C18]",
+    buttonClassName:
+      "w-full justify-between rounded-2xl bg-[#1B1C18] px-8 py-6 text-[#FBF9F3] hover:bg-[#2A2A2A] hover:text-white",
+    buttonWrapClassName: "justify-stretch",
+  },
+};
 
 const resolveProductsPayload = (payload) => {
   if (payload?.success) return payload.products || [];
@@ -47,28 +134,23 @@ const ProductShowcaseSection = ({
   eyebrow,
   title,
   description,
-  icon: Icon,
-  iconShellClassName = "bg-black",
-  eyebrowClassName = "text-gray-600",
-  activeTabClassName = "bg-black text-white shadow-md",
-  inactiveTabClassName = "bg-gray-50 text-gray-700 hover:bg-gray-100 hover:shadow-sm",
-  buttonClassName = "bg-black text-white hover:bg-gray-900",
   badgeText = "",
-  badgeClassName = "",
   loadingTitle,
   loadingDescription = "Organizing by categories...",
   emptyTitle,
   emptyDescription = "Please check back soon for more products.",
   viewAllNoun = "Products",
-  sectionClassName = "bg-white py-10 md:py-14",
   containerClassName = "product-rail-shell",
   fallbackEndpointPath = "",
+  variant = "popular",
 }) => {
   const navigate = useNavigate();
   const [groupedProducts, setGroupedProducts] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
+
+  const theme = SECTION_THEMES[variant] || SECTION_THEMES.popular;
 
   useEffect(() => {
     let ignore = false;
@@ -152,128 +234,103 @@ const ProductShowcaseSection = ({
     }
   };
 
-  if (loading) {
-    return (
-      <section id={sectionId} className={sectionClassName}>
-        <div className={containerClassName}>
-          <div className="text-center">
-            <div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full ${iconShellClassName}`}>
-              {Icon ? <Icon className="h-5 w-5 text-white" /> : null}
-            </div>
-            <h3 className="text-base font-semibold text-gray-700">
-              {loadingTitle || `Loading ${title}`}
-            </h3>
-            <p className="mt-1 text-sm text-gray-500">{loadingDescription}</p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (!categories.length || !currentCategory) {
-    return (
-      <section id={sectionId} className={sectionClassName}>
-        <div className={containerClassName}>
-          <div className="py-10 text-center">
-            <div className={`mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full ${iconShellClassName}`}>
-              {Icon ? <Icon className="h-6 w-6 text-white" /> : null}
-            </div>
-            <h4 className="text-lg font-semibold text-gray-900">
-              {emptyTitle || `No ${title} Available`}
-            </h4>
-            <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-              {emptyDescription}
-            </p>
-          </div>
-        </div>
-      </section>
-    );
-  }
+  const renderEmptyState = (titleText, copyText) => (
+    <div className="py-12 text-center">
+      <h3 className={theme.titleClassName}>{titleText}</h3>
+      <p className={`${theme.descriptionClassName} mt-3`}>{copyText}</p>
+    </div>
+  );
 
   return (
-    <section id={sectionId} className={sectionClassName}>
-      <div className={containerClassName}>
-        <div className="mb-8 text-center md:mb-12">
-          <div className="mb-3 inline-flex items-center gap-2">
-            <div className={`flex h-8 w-8 items-center justify-center rounded-full ${iconShellClassName}`}>
-              {Icon ? <Icon className="h-4 w-4 text-white" /> : null}
+    <section id={sectionId} className={`${theme.sectionClassName} home-showcase-font`}>
+      {variant === "popular" ? (
+        <div className="pointer-events-none absolute inset-0 opacity-20">
+          <div className="absolute -right-[10%] -top-[10%] h-[50%] w-[50%] rounded-full bg-[#D4AF37] blur-[120px]" />
+        </div>
+      ) : null}
+
+      {variant === "latest" ? (
+        <div className="home-latest-watermark text-[#1B1C18]">NEW</div>
+      ) : null}
+
+      <div className={`${containerClassName} relative z-10`}>
+        <div className={theme.contentShellClassName}>
+          <div className={theme.headerWrapClassName}>
+            <div>
+              <span className={theme.eyebrowClassName}>{eyebrow}</span>
+              <h2 className={theme.titleClassName}>{title}</h2>
+              {description ? (
+                <p className={theme.descriptionClassName}>{description}</p>
+              ) : null}
             </div>
-            <span
-              className={`text-xs font-semibold uppercase tracking-wider ${eyebrowClassName}`}
-            >
-              {eyebrow}
-            </span>
           </div>
 
-          <h2 className="mb-3 text-2xl font-bold text-black sm:text-3xl md:mb-4 md:text-4xl">
-            {title}
-          </h2>
-          <div className="mx-auto max-w-xl">
-            <p className="text-sm leading-relaxed text-gray-600 md:text-base">
-              {description}
-            </p>
-          </div>
-        </div>
+          {loading
+            ? renderEmptyState(loadingTitle || `Loading ${title}`, loadingDescription)
+            : null}
 
-        <div className="mb-8 md:mb-10">
-          <div className="flex flex-wrap justify-center gap-2">
-            {categories.map((categoryId) => {
-              const category = groupedProducts[categoryId];
-              const isActive = activeCategory === categoryId;
+          {!loading && (!categories.length || !currentCategory)
+            ? renderEmptyState(
+                emptyTitle || `No ${title} Available`,
+                emptyDescription,
+              )
+            : null}
 
-              return (
-                <button
-                  key={categoryId}
-                  type="button"
-                  onClick={() => setActiveCategory(categoryId)}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-all duration-200 ${isActive ? activeTabClassName : inactiveTabClassName}`}
-                >
-                  <span className="text-sm font-medium">
-                    {category.categoryName}
-                  </span>
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-xs ${isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"}`}
-                  >
-                    {category.products.length}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          {!loading && categories.length && currentCategory ? (
+            <>
+              <div className={theme.tabsWrapClassName}>
+                {categories.map((categoryId) => {
+                  const category = groupedProducts[categoryId];
+                  const isActive = activeCategory === categoryId;
 
-        <div className="mb-10 overflow-visible md:mb-12">
-          <div className="storefront-card-grid">
-            {visibleProducts.map((product) => (
-              <div
-                key={product?._id || product?.id}
-                className="storefront-card-grid__item"
-              >
-                <StorefrontProductCard
-                  product={product}
-                  badgeText={badgeText}
-                  badgeClassName={badgeClassName}
-                  className="!w-full"
-                  onViewDetails={handleViewDetails}
-                />
+                  return (
+                    <button
+                      key={categoryId}
+                      type="button"
+                      onClick={() => setActiveCategory(categoryId)}
+                      className={`home-showcase-label rounded-full border px-4 py-2 text-[11px] font-medium uppercase tracking-[0.22em] transition-all duration-200 ${
+                        isActive ? theme.activeTabClassName : theme.inactiveTabClassName
+                      }`}
+                    >
+                      {category.categoryName}
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-          </div>
 
-          {currentCategory.products.length > INITIAL_VISIBLE_PRODUCTS ? (
-            <div className="mt-8 text-center">
-              <button
-                type="button"
-                onClick={toggleExpanded}
-                className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all duration-300 hover:shadow-lg ${buttonClassName}`}
-              >
-                <span>
-                  {isExpanded
-                    ? "Show Less"
-                    : `View All ${currentCategory.products.length} ${viewAllNoun}`}
-                </span>
-              </button>
-            </div>
+              <div className="flex flex-1 flex-col overflow-visible">
+                <div className="home-showcase-grid">
+                  {visibleProducts.map((product) => (
+                    <LandingSectionProductCard
+                      key={product?._id || product?.id}
+                      product={product}
+                      variant={variant}
+                      badgeText={badgeText}
+                      onViewDetails={handleViewDetails}
+                    />
+                  ))}
+                </div>
+
+                {currentCategory.products.length > INITIAL_VISIBLE_PRODUCTS ? (
+                  <div className={`mt-12 flex ${theme.buttonWrapClassName}`}>
+                    <button
+                      type="button"
+                      onClick={toggleExpanded}
+                      className={`home-showcase-label inline-flex items-center gap-3 rounded-full border px-6 py-3 text-[11px] font-bold uppercase tracking-[0.28em] transition-all duration-300 ${theme.buttonClassName}`}
+                    >
+                      <span>
+                        {isExpanded
+                          ? "Show Less"
+                          : variant === "latest"
+                            ? `Explore ${viewAllNoun}`
+                            : `View All ${viewAllNoun}`}
+                      </span>
+                      {variant === "latest" ? <span aria-hidden="true">-&gt;</span> : null}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </>
           ) : null}
         </div>
       </div>

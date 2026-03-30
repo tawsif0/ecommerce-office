@@ -145,6 +145,12 @@ const paymentDetailsSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  paymentCategory: {
+    type: String,
+    enum: ["cash_on_delivery", "online"],
+    default: "online",
+    trim: true,
+  },
   providerType: {
     type: String,
     default: "",
@@ -181,6 +187,48 @@ const paymentDetailsSchema = new mongoose.Schema({
     default: {},
   },
 });
+
+const cancellationRequestSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ["none", "pending", "approved", "rejected"],
+      default: "none",
+    },
+    reason: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 1200,
+    },
+    requestSource: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 60,
+    },
+    requestedAt: {
+      type: Date,
+      default: null,
+    },
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    resolutionNote: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 1200,
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false },
+);
 
 const ORDER_STATUS_FLOW = [
   "pending",
@@ -284,6 +332,22 @@ const orderSchema = new mongoose.Schema({
     enum: ORDER_STATUS_FLOW,
     default: "pending",
   },
+  cancelledAt: {
+    type: Date,
+    default: null,
+  },
+  cancellationRequest: {
+    type: cancellationRequestSchema,
+    default: () => ({
+      status: "none",
+      reason: "",
+      requestSource: "",
+      requestedAt: null,
+      requestedBy: null,
+      resolutionNote: "",
+      resolvedAt: null,
+    }),
+  },
   adminNotes: {
     type: String,
     default: "",
@@ -332,6 +396,15 @@ orderSchema.pre("validate", function preValidate(next) {
 
   if (!this.paymentMethod && this.paymentDetails?.method) {
     this.paymentMethod = this.paymentDetails.method;
+  }
+
+  const paymentLookup = `${this.paymentMethod || ""} ${this.paymentDetails?.method || ""} ${this.paymentDetails?.providerType || ""}`;
+  if (!this.paymentDetails.paymentCategory) {
+    this.paymentDetails.paymentCategory = /\bcod\b|cash[\s_-]*on[\s_-]*delivery/i.test(
+      paymentLookup,
+    )
+      ? "cash_on_delivery"
+      : "online";
   }
 
   if (this.isNew && (!Array.isArray(this.statusTimeline) || this.statusTimeline.length === 0)) {

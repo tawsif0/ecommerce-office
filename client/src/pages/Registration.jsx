@@ -19,6 +19,7 @@ import {
 } from "@heroicons/react/24/outline";
 import usePublicSettings from "../hooks/usePublicSettings";
 import { loadPublicSettings } from "../store/publicSettingsSlice";
+import { normalizeMarketplaceMode } from "../utils/dashboardAccess";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -28,14 +29,14 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [accountType, setAccountType] = useState("user");
-  const [allowVendorSignup, setAllowVendorSignup] = useState(true);
+  const [allowVendorSignup, setAllowVendorSignup] = useState(false);
   const [isInitialSetup, setIsInitialSetup] = useState(false);
   const [socialProviders, setSocialProviders] = useState({
     google: false,
     facebook: false,
   });
   const navigate = useNavigate();
-  const { settings } = usePublicSettings();
+  const { settings, loaded } = usePublicSettings();
 
   const {
     register,
@@ -47,11 +48,20 @@ const Register = () => {
   const password = watch("password");
 
   useEffect(() => {
-    const marketplaceMode = String(settings?.marketplaceMode || "multi")
-      .trim()
-      .toLowerCase();
+    if (!loaded) {
+      setAllowVendorSignup(false);
+      setIsInitialSetup(false);
+      setSocialProviders({
+        google: false,
+        facebook: false,
+      });
+      setAccountType("user");
+      return;
+    }
+
+    const marketplaceMode = normalizeMarketplaceMode(settings?.marketplaceMode);
     const vendorEnabled = Boolean(settings?.vendorRegistrationEnabled);
-    const allowVendor = marketplaceMode !== "single" && vendorEnabled;
+    const allowVendor = marketplaceMode === "multi" && vendorEnabled;
     const initialSetupMode = Boolean(settings?.isInitialSetup);
 
     setAllowVendorSignup(allowVendor);
@@ -63,7 +73,7 @@ const Register = () => {
     if (!allowVendor || initialSetupMode) {
       setAccountType("user");
     }
-  }, [settings]);
+  }, [loaded, settings]);
 
   const onSubmit = async (data) => {
     setIsLoading(true);

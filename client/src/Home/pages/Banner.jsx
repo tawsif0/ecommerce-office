@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { stripHtml } from "../../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL || "";
 
@@ -270,7 +271,7 @@ const Banner = () => {
 
   if (loading) {
     return (
-      <section className="relative w-full h-[50vh] sm:h-[60vh] md:h-[70vh] lg:h-[80vh] bg-white overflow-hidden">
+      <section className="storefront-hero-height relative w-full bg-white overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
             <div className="relative">
@@ -294,7 +295,7 @@ const Banner = () => {
 
   if (banners.length === 0) {
     return (
-      <section className="relative w-full h-[50vh] sm:h-[60vh] md:h-[70vh] lg:h-[83vh] bg-linear-to-br from-white via-gray-100 to-gray-50 overflow-hidden">
+      <section className="storefront-hero-height relative w-full bg-linear-to-br from-white via-gray-100 to-gray-50 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-violet-500/10 via-transparent to-transparent" />
         <div className="relative h-full flex items-center justify-center px-4">
           <div className="text-center max-w-md">
@@ -326,7 +327,7 @@ const Banner = () => {
   const currentBanner = banners[activeIndex];
 
   return (
-    <section className="relative w-full h-[50vh] sm:h-[60vh] md:h-[70vh] lg:h-[85vh] overflow-hidden bg-black">
+    <section className="storefront-hero-height relative w-full overflow-hidden bg-black">
       {/* Background Image */}
       <div className="absolute inset-0">
         <AnimatePresence mode="wait">
@@ -372,7 +373,7 @@ const Banner = () => {
 
       {/* Content */}
       <div className="relative h-full flex items-center">
-        <div className="site-shell w-full py-4 sm:py-0">
+        <div className="site-shell w-full px-12 py-4 sm:px-16 sm:py-0 md:px-20 lg:px-24 xl:px-28">
           <AnimatePresence mode="wait">
             <motion.div
               key={`content-${activeIndex}`}
@@ -380,7 +381,7 @@ const Banner = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -26 }}
               transition={{ duration: 0.7, delay: 0.18 }}
-              className="w-full max-w-lg pl-8 pr-14 sm:max-w-xl sm:pl-0 sm:pr-0 lg:max-w-2xl"
+              className="w-full max-w-[min(28rem,calc(100%-1rem))] sm:max-w-[min(34rem,calc(100%-1rem))] lg:max-w-[min(42rem,calc(100%-1rem))] xl:max-w-[min(46rem,calc(100%-1rem))]"
             >
               {currentBanner.subtitle && (
                 <motion.span
@@ -411,7 +412,7 @@ const Banner = () => {
                   transition={{ delay: 0.5 }}
                   className="text-xs sm:text-sm lg:text-lg text-white/80 mb-4 sm:mb-5 max-w-lg sm:max-w-xl leading-relaxed line-clamp-2 sm:line-clamp-3"
                 >
-                  {currentBanner.description}
+                  {stripHtml(currentBanner.description)}
                 </motion.p>
               )}
 
@@ -461,7 +462,7 @@ const Banner = () => {
           <button
             onClick={handlePrev}
             disabled={isTransitioning}
-            className="absolute left-2 top-1/2 -translate-y-1/2 group z-10 sm:left-4 lg:left-6"
+            className="absolute left-3 top-1/2 -translate-y-1/2 group z-10 sm:left-5 lg:left-8 xl:left-10"
             aria-label="Previous"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/20 backdrop-blur-md transition-all duration-300 group-hover:scale-105 group-hover:border-white/20 group-hover:bg-white/10 sm:h-10 sm:w-10 lg:h-12 lg:w-12">
@@ -484,7 +485,7 @@ const Banner = () => {
           <button
             onClick={handleNext}
             disabled={isTransitioning}
-            className="absolute right-2 top-1/2 -translate-y-1/2 group z-10 sm:right-4 lg:right-6"
+            className="absolute right-3 top-1/2 -translate-y-1/2 group z-10 sm:right-5 lg:right-8 xl:right-10"
             aria-label="Next"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/20 backdrop-blur-md transition-all duration-300 group-hover:scale-105 group-hover:border-white/20 group-hover:bg-white/10 sm:h-10 sm:w-10 lg:h-12 lg:w-12">

@@ -1,7 +1,9 @@
 /* eslint-disable no-unused-vars */
 import React, { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { motion } from "framer-motion";
 import {
+  FiBell,
   FiSettings,
   FiChevronLeft,
   FiChevronRight,
@@ -28,11 +30,10 @@ import {
   FiMapPin,
   FiShield,
   FiArchive,
-  FiMic,
   FiUsers,
   FiCreditCard,
 } from "react-icons/fi";
-import { fetchPublicSettings } from "../../utils/publicSettings";
+import usePublicSettings from "../../hooks/usePublicSettings";
 import {
   canAccessDashboardTab,
   isSuperAdminUser,
@@ -71,6 +72,13 @@ const getConsoleTitle = (role, isSuperAdmin) =>
     ? "Super Admin Console"
     : CONSOLE_TITLES[role] || CONSOLE_TITLES.user;
 
+const buildNotificationItem = (badge = "") => ({
+  name: "Notifications",
+  icon: FiBell,
+  tab: "notifications",
+  badge,
+});
+
 const MODULE_CHILDREN = [
   {
     name: "Campaign Offers",
@@ -108,11 +116,6 @@ const MODULE_CHILDREN = [
     tab: "module-bookings",
   },
   {
-    name: "Auctions",
-    icon: FiDollarSign,
-    tab: "module-auctions",
-  },
-  {
     name: "Suppliers",
     icon: FiPackage,
     tab: "module-suppliers",
@@ -131,11 +134,6 @@ const MODULE_CHILDREN = [
     name: "Brands",
     icon: FiTag,
     tab: "module-brands",
-  },
-  {
-    name: "Voice Assistant",
-    icon: FiMic,
-    tab: "module-voice",
   },
   {
     name: "Business Reports",
@@ -159,7 +157,12 @@ const MODULE_CHILDREN = [
   },
 ];
 
-const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) => {
+const getRoleSections = (
+  role,
+  marketplaceMode = "multi",
+  isSuperAdmin = false,
+  notificationBadge = "",
+) => {
   const dashboardLabel = getDashboardLabel(role, isSuperAdmin);
   const isSingleMode = normalizeMarketplaceMode(marketplaceMode) === "single";
 
@@ -168,6 +171,7 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
       {
         title: "Overview",
         items: [
+          buildNotificationItem(notificationBadge),
           {
             name: dashboardLabel,
             icon: FiHome,
@@ -256,6 +260,11 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
             name: "Inventory Center",
             icon: FiPackage,
             tab: "module-inventory",
+          },
+          {
+            name: "Product Reviews",
+            icon: FiMessageSquare,
+            tab: "product-reviews",
           },
           ...(!isSingleMode
             ? [
@@ -426,6 +435,7 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
       {
         title: "Overview",
         items: [
+          buildNotificationItem(notificationBadge),
           {
             name: dashboardLabel,
             icon: FiHome,
@@ -559,6 +569,7 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
       {
         title: "Overview",
         items: [
+          buildNotificationItem(notificationBadge),
           {
             name: dashboardLabel,
             icon: FiHome,
@@ -609,6 +620,7 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
     {
       title: "Overview",
       items: [
+        buildNotificationItem(notificationBadge),
         {
           name: dashboardLabel,
           icon: FiHome,
@@ -644,11 +656,6 @@ const getRoleSections = (role, marketplaceMode = "multi", isSuperAdmin = false) 
           icon: FiList,
           tab: "module-bookings",
         },
-        {
-          name: "Auctions",
-          icon: FiDollarSign,
-          tab: "module-auctions",
-        },
       ],
     },
     {
@@ -682,14 +689,24 @@ const Sidebar = ({
   isHovered,
   setIsHovered,
 }) => {
+  const notifications = useSelector((state) => state.notifications.items || []);
   const [openSubmenus, setOpenSubmenus] = useState({});
-  const [marketplaceMode, setMarketplaceMode] = useState("multi");
+  const { settings, loaded } = usePublicSettings();
+  const marketplaceMode = loaded
+    ? normalizeMarketplaceMode(settings?.marketplaceMode)
+    : "single";
+  const unreadNotificationCount = notifications.filter((item) => !item.isRead).length;
+  const unreadBadge = unreadNotificationCount > 0
+    ? unreadNotificationCount > 99
+      ? "99+"
+      : `${unreadNotificationCount}`
+    : "";
 
   const role = resolveUserRole(user);
   const isSuperAdmin = isSuperAdminUser(user);
   const roleSections = useMemo(
-    () => getRoleSections(role, marketplaceMode, isSuperAdmin),
-    [role, marketplaceMode, isSuperAdmin],
+    () => getRoleSections(role, marketplaceMode, isSuperAdmin, unreadBadge),
+    [role, marketplaceMode, isSuperAdmin, unreadBadge],
   );
   const dashboardLabel = getDashboardLabel(role, isSuperAdmin);
   const consoleTitle = getConsoleTitle(role, isSuperAdmin);
@@ -742,23 +759,6 @@ const Sidebar = ({
       })
       .filter(Boolean);
   }, [roleSections, user, marketplaceMode]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadSettings = async () => {
-      const settings = await fetchPublicSettings();
-      if (cancelled) return;
-
-      setMarketplaceMode(normalizeMarketplaceMode(settings?.marketplaceMode));
-    };
-
-    loadSettings();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const navSections = useMemo(
     () => [
@@ -939,7 +939,20 @@ const Sidebar = ({
             <Icon className="h-4 w-4" />
           </span>
           {showLabels(isMobileView) && (
-            <span className="truncate text-sm font-medium">{item.name}</span>
+            <>
+              <span className="truncate text-sm font-medium">{item.name}</span>
+              {item.badge ? (
+                <span
+                  className={`ml-auto inline-flex min-w-[1.6rem] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    isActive
+                      ? "bg-white/15 text-white"
+                      : "bg-black text-white"
+                  }`}
+                >
+                  {item.badge}
+                </span>
+              ) : null}
+            </>
           )}
         </motion.button>
       </li>
@@ -972,7 +985,7 @@ const Sidebar = ({
         animate={{ x: isMobileOpen ? 0 : -320 }}
         exit={{ x: -320 }}
         transition={{ type: "spring", damping: 28, stiffness: 280 }}
-        className="fixed inset-y-0 left-0 z-[60] flex h-[100dvh] max-h-[100dvh] w-72 flex-col overflow-hidden border-r border-black/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.98)_100%)] text-black shadow-[0_20px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl"
+        className="app-layer-drawer fixed inset-y-0 left-0 flex h-[100dvh] max-h-[100dvh] w-72 flex-col overflow-hidden border-r border-black/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.98)_100%)] text-black shadow-[0_20px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl"
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-black/8 px-4">
           <div className="min-w-0">

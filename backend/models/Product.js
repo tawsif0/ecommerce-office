@@ -59,6 +59,51 @@ const variationSchema = new mongoose.Schema(
   { _id: true },
 );
 
+const productVariantOptionSchema = new mongoose.Schema(
+  {
+    label: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    value: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 160,
+    },
+    colorHex: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+    },
+  },
+  { _id: false },
+);
+
+const productVariantDefinitionSchema = new mongoose.Schema(
+  {
+    preset: {
+      type: String,
+      enum: ["size", "color", "custom"],
+      default: "custom",
+    },
+    name: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 80,
+    },
+    options: {
+      type: [productVariantOptionSchema],
+      default: [],
+    },
+  },
+  { _id: false },
+);
+
 const productSchema = new mongoose.Schema({
   vendor: {
     type: mongoose.Schema.Types.ObjectId,
@@ -80,19 +125,34 @@ const productSchema = new mongoose.Schema({
   },
   title: {
     type: String,
-    required: [true, "Product title is required"],
+    required: [
+      function requiredTitle() {
+        return String(this.publicationStatus || "published") !== "draft";
+      },
+      "Product title is required",
+    ],
     trim: true,
     minlength: [3, "Product title must be at least 3 characters"],
     maxlength: [200, "Product title cannot exceed 200 characters"],
   },
   description: {
     type: String,
-    required: [true, "Product description is required"],
+    required: [
+      function requiredDescription() {
+        return String(this.publicationStatus || "published") !== "draft";
+      },
+      "Product description is required",
+    ],
     trim: true,
   },
   price: {
     type: Number,
-    required: [true, "Product price is required"],
+    required: [
+      function requiredPrice() {
+        return String(this.publicationStatus || "published") !== "draft";
+      },
+      "Product price is required",
+    ],
     min: [0, "Price must be at least 0"],
   },
   salePrice: {
@@ -132,7 +192,12 @@ const productSchema = new mongoose.Schema({
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Category",
-    required: [true, "Product category is required"],
+    required: [
+      function requiredCategory() {
+        return String(this.publicationStatus || "published") !== "draft";
+      },
+      "Product category is required",
+    ],
   },
   commissionType: {
     type: String,
@@ -234,6 +299,10 @@ const productSchema = new mongoose.Schema({
     type: [variationSchema],
     default: [],
   },
+  variantDefinitions: {
+    type: [productVariantDefinitionSchema],
+    default: [],
+  },
   groupedProducts: {
     type: [
       {
@@ -284,6 +353,12 @@ const productSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  publicationStatus: {
+    type: String,
+    enum: ["draft", "published"],
+    default: "published",
+    index: true,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -295,6 +370,10 @@ const productSchema = new mongoose.Schema({
 });
 
 productSchema.pre("validate", function (next) {
+  if (String(this.publicationStatus || "published") === "draft") {
+    return next();
+  }
+
   if (
     this.priceType === "best" &&
     (this.salePrice === null || this.salePrice === undefined)
@@ -378,10 +457,16 @@ productSchema.pre("findOneAndUpdate", function (next) {
   next();
 });
 
-productSchema.index({ isActive: 1, approvalStatus: 1, createdAt: -1 });
-productSchema.index({ isActive: 1, productType: 1, approvalStatus: 1, createdAt: -1 });
+productSchema.index({ isActive: 1, publicationStatus: 1, approvalStatus: 1, createdAt: -1 });
+productSchema.index({
+  isActive: 1,
+  publicationStatus: 1,
+  productType: 1,
+  approvalStatus: 1,
+  createdAt: -1,
+});
 productSchema.index({ vendor: 1, createdAt: -1 });
-productSchema.index({ category: 1, isActive: 1, createdAt: -1 });
+productSchema.index({ category: 1, isActive: 1, publicationStatus: 1, createdAt: -1 });
 
 const Product = mongoose.model("Product", productSchema);
 

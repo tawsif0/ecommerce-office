@@ -23,6 +23,7 @@ import {
   getCancellationStatusTone,
 } from "../utils/orderCancellation";
 import {
+  getOrderItemColorSwatch,
   getOrderItemLineTotal,
   getOrderItemUnitPrice,
   getOrderItemVariantLines,
@@ -688,10 +689,7 @@ const UserOrders = () => {
                 <h3 className="font-semibold text-black mb-3">Order Items</h3>
                 <div className="space-y-4">
                   {selectedOrder.items?.map((item, index) => {
-                    const displayColor =
-                      item.color && item.color.toLowerCase() !== "default"
-                        ? item.color
-                        : "";
+                    const displayColor = getOrderItemColorSwatch(item);
                     const variantLines = getOrderItemVariantLines(item);
                     return (
                       <div
@@ -730,8 +728,11 @@ const UserOrders = () => {
                             {displayColor && (
                               <div className="inline-flex items-center rounded-full bg-gray-100 p-1">
                                 <span
-                                  className="h-3 w-3 rounded-full border border-gray-300"
-                                  style={{ backgroundColor: displayColor }}
+                                  className="inline-block h-3 w-3 shrink-0 rounded-full border border-gray-300"
+                                  style={{
+                                    backgroundColor: displayColor,
+                                    boxShadow: "inset 0 0 0 1px rgba(15,23,42,0.12)",
+                                  }}
                                 />
                               </div>
                             )}

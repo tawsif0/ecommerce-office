@@ -30,6 +30,7 @@ import {
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
   getOrderCustomerProfile,
+  getOrderItemColorSwatch,
   getOrderItemLineTotal,
   getOrderItemMetaLine,
   getOrderItemUnitPrice,
@@ -975,12 +976,16 @@ const AdminOrderList = () => {
                           typeof item?.product === "string"
                             ? item.product
                             : item?.product?.title || "Product";
+                        const displayColor = getOrderItemColorSwatch(item);
                         const meta = [
                           ...getOrderItemVariantLines(item),
                           getOrderItemMetaLine(item),
                         ]
                           .filter(Boolean)
                           .join(" | ");
+                        const colorMarkup = displayColor
+                          ? `<span class="product-meta" style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 999px; border: 1px solid #d1d5db; background-color: ${escapeHtml(displayColor)}; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.12); -webkit-print-color-adjust: exact; print-color-adjust: exact;"></span></span>`
+                          : "";
                         const lineTotal = Number(
                           item?.total ?? Number(item?.quantity || 0) * Number(item?.price || 0),
                         );
@@ -989,6 +994,7 @@ const AdminOrderList = () => {
                           <tr>
                             <td>
                               <span class="product-name">${escapeHtml(productName)}</span>
+                              ${colorMarkup}
                               ${
                                 meta
                                   ? `<span class="product-meta">${escapeHtml(meta)}</span>`
@@ -1766,10 +1772,7 @@ const AdminOrderList = () => {
                     </thead>
                     <tbody>
                       {selectedOrder.items.map((item, index) => {
-                        const displayColor =
-                          item.color && item.color.toLowerCase() !== "default"
-                            ? item.color
-                            : "";
+                        const displayColor = getOrderItemColorSwatch(item);
                         const variantLines = getOrderItemVariantLines(item);
                         return (
                         <tr key={index} className="border-b">
@@ -1786,8 +1789,11 @@ const AdminOrderList = () => {
                             {displayColor && (
                               <div className="text-gray-600 text-xs inline-flex items-center rounded-full bg-gray-100 p-1">
                                 <span
-                                  className="h-3 w-3 rounded-full border border-gray-300"
-                                  style={{ backgroundColor: displayColor }}
+                                  className="inline-block h-3 w-3 shrink-0 rounded-full border border-gray-300"
+                                  style={{
+                                    backgroundColor: displayColor,
+                                    boxShadow: "inset 0 0 0 1px rgba(15,23,42,0.12)",
+                                  }}
                                 />
                               </div>
                             )}

@@ -1174,7 +1174,7 @@ const ProductGrid = () => {
                             {/* Image - Left Side */}
                             <div className="relative lg:shrink-0 overflow-hidden">
                               <div className="w-full h-64 lg:h-full p-6 flex items-center justify-center">
-                                <div className="relative w-full h-full lg:w-52 lg:h-52 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105 mx-auto">
+                                <div className="relative mx-auto h-full w-full rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:scale-[0.94] hover:shadow-2xl lg:h-52 lg:w-52">
                                   <ProductImage
                                     src={product.images && product.images[0]}
                                     alt={product.title}

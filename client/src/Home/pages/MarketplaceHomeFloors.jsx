@@ -68,7 +68,7 @@ const ProductMiniCard = ({ product, onClick }) => {
           <img
             src={imageUrl}
             alt={product?.title || "Product"}
-            className="h-40 w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+            className="h-40 w-full object-cover transition duration-500 group-hover:scale-[0.94]"
           />
         ) : (
           <div className="flex h-40 w-full items-center justify-center bg-gray-100 text-sm text-gray-400">

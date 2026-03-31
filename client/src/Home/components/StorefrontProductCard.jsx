@@ -23,6 +23,7 @@ import {
   getDefaultSelectedVariants,
   getProductPricingForSelectedVariants,
   getSelectedVariantSignature,
+  hasVariantOptionPricing,
   normalizeProductVariantDefinitions,
   normalizeSelectedVariantsPayload,
 } from "../../utils/productVariants";
@@ -215,7 +216,7 @@ const StorefrontProductCard = ({
     [product, settings],
   );
   const showStockBadge = Boolean(stockBadgeText) && isPublicStockVisible(product, settings);
-  const showCardCartButton = showCartButton;
+  const showCardCartButton = showCartButton && !hasVariantOptionPricing(product);
   const isCompared = compareItems.some(
     (item) => String(item?._id || "") === productId,
   );
@@ -380,7 +381,7 @@ const StorefrontProductCard = ({
           <ProductImage
             src={product?.images?.[0] || product?.image}
             alt={product?.title}
-            className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.03]"
+            className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[0.94]"
           />
         </div>
       </div>

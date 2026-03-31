@@ -26,6 +26,7 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import {
   formatOrderEstimatedDeliveryLabel,
+  getOrderItemColorSwatch,
   getOrderItemLineTotal,
   getOrderItemUnitPrice,
   getOrderItemVariantLines,
@@ -531,10 +532,7 @@ const ThankYou = () => {
 
               <div className="mt-5 space-y-4">
                 {orderItems.map((item, index) => {
-                  const displayColor =
-                    item.color && String(item.color).toLowerCase() !== "default"
-                      ? item.color
-                      : "";
+                  const displayColor = getOrderItemColorSwatch(item);
                   const variantLines = getOrderItemVariantLines(item);
                   const product =
                     item?.product && typeof item.product === "object" ? item.product : null;
@@ -582,8 +580,11 @@ const ThankYou = () => {
                               {displayColor ? (
                                 <span className="inline-flex items-center rounded-full bg-white p-1">
                                   <span
-                                    className="h-3 w-3 rounded-full border border-gray-300"
-                                    style={{ backgroundColor: displayColor }}
+                                    className="inline-block h-3 w-3 shrink-0 rounded-full border border-gray-300"
+                                    style={{
+                                      backgroundColor: displayColor,
+                                      boxShadow: "inset 0 0 0 1px rgba(15,23,42,0.12)",
+                                    }}
                                   />
                                 </span>
                               ) : null}

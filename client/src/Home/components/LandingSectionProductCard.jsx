@@ -24,6 +24,7 @@ import {
   getDefaultSelectedVariants,
   getProductPricingForSelectedVariants,
   getSelectedVariantSignature,
+  hasVariantOptionPricing,
   normalizeProductVariantDefinitions,
   normalizeSelectedVariantsPayload,
 } from "../../utils/productVariants";
@@ -186,6 +187,10 @@ const useProductCardState = (product) => {
     () => getProductPricingForSelectedVariants(product, resolvedSelectedVariants),
     [product, resolvedSelectedVariants],
   );
+  const canQuickAddToCart = useMemo(
+    () => !hasVariantOptionPricing(product),
+    [product],
+  );
 
   const isCompared = compareItems.some(
     (item) => String(item?._id || item?.id || "") === productId,
@@ -292,6 +297,7 @@ const useProductCardState = (product) => {
   };
 
   return {
+    canQuickAddToCart,
     pricing,
     isCompared,
     isInCart,
@@ -428,7 +434,7 @@ const PopularCard = ({
       <ProductImage
         src={product?.images?.[0] || product?.image}
         alt={product?.title}
-        className="h-full w-full object-cover opacity-90 transition-transform duration-1000 group-hover:scale-110"
+        className="h-full w-full object-cover opacity-90 transition-transform duration-1000 group-hover:scale-[0.94]"
       />
     </div>
 
@@ -535,7 +541,7 @@ const HotDealCard = ({
       <ProductImage
         src={product?.images?.[0] || product?.image}
         alt={product?.title}
-        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[0.94]"
       />
     </div>
 
@@ -650,7 +656,7 @@ const FeaturedCard = ({
       <ProductImage
         src={product?.images?.[0] || product?.image}
         alt={product?.title}
-        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[0.94]"
       />
     </div>
 
@@ -735,7 +741,7 @@ const BestSellingCard = ({
         <ProductImage
           src={product?.images?.[0] || product?.image}
           alt={product?.title}
-          className="max-h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+          className="max-h-full w-full object-contain transition-transform duration-500 group-hover:scale-[0.94]"
         />
         <div className="home-showcase-label absolute left-3 top-3 rounded px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.18em] text-[#575042] backdrop-blur-sm bg-[#F5F3ED]/90 sm:text-[8px] sm:tracking-[0.28em]">
           {categoryLabel}
@@ -835,7 +841,7 @@ const LatestCard = ({
       <ProductImage
         src={product?.images?.[0] || product?.image}
         alt={product?.title}
-        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[0.94]"
       />
       <div className="absolute bottom-3 right-3 flex gap-1.5 sm:gap-2">
         {showCartButton ? (
@@ -897,6 +903,7 @@ const LandingSectionProductCard = ({
   onViewDetails,
 }) => {
   const {
+    canQuickAddToCart,
     pricing,
     isCompared,
     isInCart,
@@ -906,7 +913,7 @@ const LandingSectionProductCard = ({
     toggleCompare,
     toggleWishlist,
   } = useProductCardState(product);
-  const showCartButton = true;
+  const showCartButton = canQuickAddToCart;
   const discountLabel = buildDiscountLabel(pricing);
   const categoryLabel = getCategoryLabel(product, badgeText);
   const sectionBadgeLabel = getSectionBadgeLabel(categoryLabel, badgeText);

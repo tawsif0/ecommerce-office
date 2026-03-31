@@ -1,4 +1,8 @@
-import { getSelectedVariantSummaryLines } from "./productVariants";
+import {
+  getResolvedSelectedVariants,
+  getSelectedVariantSummaryLines,
+  normalizeColorHex,
+} from "./productVariants";
 
 const isCashOnDeliveryValue = (value) =>
   /\bcod\b|cash[\s_-]*on[\s_-]*delivery/i.test(String(value || "").trim());
@@ -10,6 +14,27 @@ const toWholeNumber = (value) => {
 
 const roundMoney = (value) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+const COLOR_SWATCH_FALLBACKS = {
+  black: "#000000",
+  white: "#ffffff",
+  gray: "#6b7280",
+  grey: "#6b7280",
+  silver: "#cbd5e1",
+  blue: "#2563eb",
+  navy: "#1e3a8a",
+  green: "#16a34a",
+  red: "#dc2626",
+  orange: "#f97316",
+  yellow: "#eab308",
+  purple: "#9333ea",
+  pink: "#db2777",
+  beige: "#f0deba",
+  brown: "#a16207",
+  teal: "#14b8a6",
+  cyan: "#06b6d4",
+  skyblue: "#0ea5e9",
+  "sky blue": "#0ea5e9",
+};
 
 const readDeliveryWindow = (source = {}) => {
   const estimatedMinDays = toWholeNumber(
@@ -184,8 +209,86 @@ export const getOrderCustomerProfile = (order = {}) => {
   };
 };
 
+const isColorVariant = (variant = {}) =>
+  String(variant?.preset || variant?.kind || variant?.type || variant?.name || "")
+    .trim()
+    .toLowerCase() === "color";
+
+const getOrderItemSelectedVariants = (item = {}) => {
+  const selectedVariants = Array.isArray(item?.selectedVariants)
+    ? item.selectedVariants
+    : [];
+  const product =
+    item?.product && typeof item.product === "object" ? item.product : item;
+  const resolvedSelectedVariants = getResolvedSelectedVariants(product, selectedVariants);
+
+  return resolvedSelectedVariants.length ? resolvedSelectedVariants : selectedVariants;
+};
+
+const resolveOrderSwatchColor = (value) => {
+  const normalizedColorHex = normalizeColorHex(value);
+  if (normalizedColorHex) {
+    return normalizedColorHex;
+  }
+
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (COLOR_SWATCH_FALLBACKS[normalizedValue]) {
+    return COLOR_SWATCH_FALLBACKS[normalizedValue];
+  }
+
+  if (COLOR_SWATCH_FALLBACKS[normalizedValue.replace(/\s+/g, "")]) {
+    return COLOR_SWATCH_FALLBACKS[normalizedValue.replace(/\s+/g, "")];
+  }
+
+  return normalizedValue.includes(" ") ? "" : normalizedValue;
+};
+
+export const getOrderItemColorSwatch = (item = {}) => {
+  const selectedVariants = getOrderItemSelectedVariants(item);
+  const selectedColorVariant = selectedVariants.find((variant) => isColorVariant(variant));
+  const normalizedSelectedColor = normalizeColorHex(
+    selectedColorVariant?.colorHex ||
+      selectedColorVariant?.colorCode ||
+      selectedColorVariant?.color ||
+      selectedColorVariant?.hex,
+  );
+  const selectedColor = String(
+    normalizedSelectedColor ||
+      selectedColorVariant?.colorHex ||
+      selectedColorVariant?.colorCode ||
+      selectedColorVariant?.color ||
+      selectedColorVariant?.hex ||
+      selectedColorVariant?.value ||
+      selectedColorVariant?.label ||
+      "",
+  ).trim();
+
+  if (selectedColor) {
+    return resolveOrderSwatchColor(selectedColor) || selectedColor;
+  }
+
+  const legacyColor = String(item?.color || "").trim();
+  if (legacyColor && legacyColor.toLowerCase() !== "default") {
+    return resolveOrderSwatchColor(legacyColor) || legacyColor;
+  }
+
+  const legacyType = String(item?.variantType || item?.variationId || "")
+    .trim()
+    .toLowerCase();
+  const legacyOption = String(item?.variantOption || item?.variationLabel || "").trim();
+  if (legacyType === "color" && legacyOption) {
+    return resolveOrderSwatchColor(legacyOption) || legacyOption;
+  }
+
+  return "";
+};
+
 export const getOrderItemVariantLines = (item = {}) => {
-  const selectedLines = getSelectedVariantSummaryLines(item?.selectedVariants || []);
+  const selectedLines = getSelectedVariantSummaryLines(getOrderItemSelectedVariants(item));
   const variationLabel = String(item?.variationLabel || "").trim();
 
   if (selectedLines.length) {

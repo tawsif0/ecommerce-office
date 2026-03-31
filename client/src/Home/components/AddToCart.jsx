@@ -7,7 +7,10 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import { useCart } from "../../context/CartContext";
 import ConfirmModal from "../../components/ConfirmModal";
-import { getOrderItemVariantLines } from "../../utils/orderPresentation";
+import {
+  getOrderItemColorSwatch,
+  getOrderItemVariantLines,
+} from "../../utils/orderPresentation";
 import { getSelectedVariantSignature } from "../../utils/productVariants";
 
 const baseUrl = import.meta.env.VITE_API_URL;
@@ -421,6 +424,7 @@ const AddToCart = () => {
                   {cartItems.map((item) => {
                     const itemData = getItemData(item);
                     const variantLines = getOrderItemVariantLines(itemData);
+                    const colorSwatch = getOrderItemColorSwatch(itemData);
                     const key = `${itemData.productId}-${itemData.variationId || ""}-${itemData.color || ""}-${itemData.dimensions || ""}-${itemData.selectedVariantSignature || ""}`;
                     const legacyFallbackChips =
                       variantLines.length === 0
@@ -468,11 +472,14 @@ const AddToCart = () => {
                                         {line}
                                       </span>
                                     ))}
-                                {itemData.color ? (
+                                {colorSwatch ? (
                                   <span className="inline-flex items-center rounded-full bg-gray-100 p-1">
                                     <span
-                                      className="h-3 w-3 rounded-full border border-gray-300"
-                                      style={{ backgroundColor: itemData.color }}
+                                      className="inline-block h-3 w-3 shrink-0 rounded-full border border-gray-300"
+                                      style={{
+                                        backgroundColor: colorSwatch,
+                                        boxShadow: "inset 0 0 0 1px rgba(15,23,42,0.12)",
+                                      }}
                                     />
                                   </span>
                                 ) : null}

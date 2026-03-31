@@ -446,7 +446,7 @@ const BestSellingProducts = () => {
                         <ProductImage
                           src={product.image}
                           alt={product.title}
-                          className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
+                          className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[0.94]"
                         />
                         {/* Best Seller Badge */}
                         <div className="absolute top-2 left-2">

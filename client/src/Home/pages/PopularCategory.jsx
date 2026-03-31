@@ -399,7 +399,7 @@ const PopularCategory = () => {
                         <ProductImage
                           src={product.image}
                           alt={product.title}
-                          className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
+                          className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[0.94]"
                           onClick={() => {
                             navigate(`/product/${product.id}`);
                             window.scrollTo(0, 0);

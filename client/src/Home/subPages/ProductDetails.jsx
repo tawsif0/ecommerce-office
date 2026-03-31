@@ -69,6 +69,7 @@ import { hasHtmlContent, stripHtml } from "../../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const VALID_PRODUCT_TABS = new Set(["description", "additional", "reviews"]);
+const THUMBNAIL_VISIBLE_COUNT = 4;
 
 const normalizeProductTabValue = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -245,11 +246,7 @@ const ProductDetails = () => {
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [relatedProductsLoading, setRelatedProductsLoading] = useState(false);
   const [relatedCarouselHasOverflow, setRelatedCarouselHasOverflow] = useState(false);
-  const [thumbnailRailState, setThumbnailRailState] = useState({
-    hasOverflow: false,
-    canScrollUp: false,
-    canScrollDown: false,
-  });
+  const [thumbnailStartIndex, setThumbnailStartIndex] = useState(0);
   const {
     addToCart,
     isLoading: cartLoading,
@@ -262,8 +259,6 @@ const ProductDetails = () => {
   const wishlistPendingIds = useSelector(selectWishlistPendingIds);
   const navigate = useNavigate();
   const productTopRef = useRef(null);
-  const verticalThumbsRef = useRef(null);
-  const thumbnailButtonRefs = useRef([]);
   const relatedCarouselRef = useRef(null);
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareTitle = product?.title || "Product";
@@ -312,6 +307,28 @@ const ProductDetails = () => {
   const currentMediaItem = productMediaItems[selectedImage] || productMediaItems[0] || null;
   const currentModalMediaItem =
     productMediaItems[currentImageIndex] || productMediaItems[0] || null;
+  const maxThumbnailStartIndex = Math.max(
+    productMediaItems.length - THUMBNAIL_VISIBLE_COUNT,
+    0,
+  );
+  const visibleThumbnailItems = useMemo(
+    () =>
+      productMediaItems
+        .slice(
+          thumbnailStartIndex,
+          thumbnailStartIndex + THUMBNAIL_VISIBLE_COUNT,
+        )
+        .map((mediaItem, offset) => ({
+          mediaItem,
+          index: thumbnailStartIndex + offset,
+        })),
+    [productMediaItems, thumbnailStartIndex],
+  );
+  const hasThumbnailPagination =
+    productMediaItems.length > THUMBNAIL_VISIBLE_COUNT;
+  const canShowPreviousThumbnailPage = thumbnailStartIndex > 0;
+  const canShowNextThumbnailPage =
+    thumbnailStartIndex < maxThumbnailStartIndex;
   const isCompared = compareItems.some(
     (item) => String(item?._id || "") === String(product?._id || ""),
   );
@@ -343,70 +360,40 @@ const ProductDetails = () => {
   };
 
   useEffect(() => {
-    const activeThumb = thumbnailButtonRefs.current?.[selectedImage];
-    if (
-      activeThumb &&
-      typeof activeThumb.scrollIntoView === "function" &&
-      activeThumb.offsetParent !== null
-    ) {
-      activeThumb.scrollIntoView({ block: "nearest", inline: "nearest" });
-    }
-  }, [selectedImage]);
-
-  useEffect(() => {
     const maxIndex = Math.max(productMediaItems.length - 1, 0);
     setSelectedImage((prev) => Math.min(prev, maxIndex));
     setCurrentImageIndex((prev) => Math.min(prev, maxIndex));
   }, [productMediaItems.length]);
 
   useEffect(() => {
-    const container = verticalThumbsRef.current;
-    if (!container) {
-      setThumbnailRailState({
-        hasOverflow: false,
-        canScrollUp: false,
-        canScrollDown: false,
-      });
-      return undefined;
-    }
-
-    const updateThumbnailRailState = () => {
-      const node = verticalThumbsRef.current;
-      if (!node) return;
-
-      const maxScrollTop = Math.max(node.scrollHeight - node.clientHeight, 0);
-
-      setThumbnailRailState({
-        hasOverflow: maxScrollTop > 2,
-        canScrollUp: node.scrollTop > 2,
-        canScrollDown: node.scrollTop < maxScrollTop - 2,
-      });
-    };
-
-    updateThumbnailRailState();
-    container.addEventListener("scroll", updateThumbnailRailState, {
-      passive: true,
-    });
-
-    let observer;
-
-    if (typeof ResizeObserver !== "undefined") {
-      observer = new ResizeObserver(() => updateThumbnailRailState());
-      observer.observe(container);
-    }
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("resize", updateThumbnailRailState);
-    }
-
-    return () => {
-      container.removeEventListener("scroll", updateThumbnailRailState);
-      observer?.disconnect();
-      if (typeof window !== "undefined") {
-        window.removeEventListener("resize", updateThumbnailRailState);
+    setThumbnailStartIndex((currentStart) => {
+      if (selectedImage < currentStart) {
+        return selectedImage;
       }
-    };
-  }, [product?.images?.length]);
+
+      if (selectedImage >= currentStart + THUMBNAIL_VISIBLE_COUNT) {
+        return Math.max(
+          Math.min(
+            selectedImage - THUMBNAIL_VISIBLE_COUNT + 1,
+            maxThumbnailStartIndex,
+          ),
+          0,
+        );
+      }
+
+      return Math.min(currentStart, maxThumbnailStartIndex);
+    });
+  }, [maxThumbnailStartIndex, selectedImage]);
+
+  useEffect(() => {
+    setThumbnailStartIndex((currentStart) =>
+      Math.min(currentStart, maxThumbnailStartIndex),
+    );
+  }, [maxThumbnailStartIndex]);
+
+  useEffect(() => {
+    setThumbnailStartIndex(0);
+  }, [product?._id]);
 
   useEffect(() => {
     const container = relatedCarouselRef.current;
@@ -1475,11 +1462,14 @@ const ProductDetails = () => {
     setSelectedImage((prev) => (prev === 0 ? productMediaItems.length - 1 : prev - 1));
   };
 
-  const scrollVerticalThumbs = (direction) => {
-    const container = verticalThumbsRef.current;
-    if (!container) return;
-    const delta = direction === "up" ? -180 : 180;
-    container.scrollBy({ top: delta, behavior: "smooth" });
+  const showPreviousThumbnailPage = () => {
+    setThumbnailStartIndex((prev) => Math.max(prev - 1, 0));
+  };
+
+  const showNextThumbnailPage = () => {
+    setThumbnailStartIndex((prev) =>
+      Math.min(prev + 1, maxThumbnailStartIndex),
+    );
   };
 
   const currentPrice = Number(currentPricing.currentPrice || 0);
@@ -1826,63 +1816,87 @@ const ProductDetails = () => {
         <div className="mb-10 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
           {/* Product images */}
           <div className="storefront-sticky-offset lg:sticky lg:self-start">
-            <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="flex flex-col-reverse gap-4 md:flex-row md:items-start md:gap-6">
               {productMediaItems.length > 1 ? (
-                <div
-                  ref={verticalThumbsRef}
-                  className="scrollbar-none flex gap-3 overflow-x-auto pb-1 sm:max-h-[38rem] sm:w-16 sm:flex-col sm:overflow-x-hidden sm:overflow-y-auto sm:pb-0 sm:pr-1 lg:w-18"
-                >
-                  {productMediaItems.map((mediaItem, index) => (
+                <div className="mx-auto flex items-center justify-center gap-3 md:mx-0 md:flex-col">
+                  {hasThumbnailPagination ? (
                     <button
-                      key={mediaItem.key}
                       type="button"
                       data-no-scroll-top
-                      ref={(el) => {
-                        thumbnailButtonRefs.current[index] = el;
-                      }}
-                      onClick={() => setSelectedImage(index)}
-                      className={`aspect-square w-16 shrink-0 overflow-hidden rounded-2xl border bg-white p-2 transition-all active:scale-95 lg:w-[4.5rem] ${
-                        selectedImage === index
-                          ? "border-2 border-black shadow-[0_10px_22px_rgba(0,0,0,0.08)]"
-                          : "border-black/10 hover:border-black/70"
-                      }`}
+                      onClick={showPreviousThumbnailPage}
+                      disabled={!canShowPreviousThumbnailPage}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black shadow-sm transition hover:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                      aria-label="Previous thumbnails"
                     >
-                      {mediaItem.type === "youtube" ? (
-                        <div className="relative h-full w-full overflow-hidden rounded-xl bg-black">
-                          <img
-                            src={mediaItem.thumbnailSrc}
-                            alt={mediaItem.alt}
-                            className="h-full w-full object-cover"
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/92 shadow-lg ring-1 ring-black/5">
-                              <FaYoutube className="h-4 w-4 text-red-600" />
-                            </span>
-                          </div>
-                        </div>
-                      ) : mediaItem.type === "video" ? (
-                        <div className="relative h-full w-full overflow-hidden rounded-xl bg-black">
-                          <video
-                            src={mediaItem.src}
-                            className="h-full w-full object-cover"
-                            muted
-                            preload="metadata"
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
-                            <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-black">
-                              Video
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <ProductImage
-                          src={mediaItem.src}
-                          alt={mediaItem.alt}
-                          className="h-full w-full object-contain mix-blend-multiply"
-                        />
-                      )}
+                      <FaChevronLeft className="h-4 w-4 md:-rotate-90" />
                     </button>
-                  ))}
+                  ) : null}
+
+                  <div className="w-full max-w-[292px] overflow-hidden md:w-16 md:max-w-[4rem] lg:w-[4.5rem] lg:max-w-[4.5rem]">
+                    <div className="grid grid-cols-4 gap-3 md:grid-cols-1">
+                    {visibleThumbnailItems.map(({ mediaItem, index }) => (
+                      <button
+                        key={mediaItem.key}
+                        type="button"
+                        data-no-scroll-top
+                        onClick={() => setSelectedImage(index)}
+                        className={`aspect-square w-16 shrink-0 overflow-hidden rounded-2xl border bg-white p-2 transition-all hover:scale-95 active:scale-90 lg:w-[4.5rem] ${
+                          selectedImage === index
+                            ? "border-2 border-black shadow-[0_10px_22px_rgba(0,0,0,0.08)]"
+                            : "border-black/10 hover:border-black/70"
+                        }`}
+                      >
+                        {mediaItem.type === "youtube" ? (
+                          <div className="relative h-full w-full overflow-hidden rounded-xl bg-black">
+                            <img
+                              src={mediaItem.thumbnailSrc}
+                              alt={mediaItem.alt}
+                              className="h-full w-full object-cover"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/92 shadow-lg ring-1 ring-black/5">
+                                <FaYoutube className="h-4 w-4 text-red-600" />
+                              </span>
+                            </div>
+                          </div>
+                        ) : mediaItem.type === "video" ? (
+                          <div className="relative h-full w-full overflow-hidden rounded-xl bg-black">
+                            <video
+                              src={mediaItem.src}
+                              className="h-full w-full object-cover"
+                              muted
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
+                              <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-black">
+                                Video
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <ProductImage
+                            src={mediaItem.src}
+                            alt={mediaItem.alt}
+                            className="h-full w-full object-contain mix-blend-multiply"
+                          />
+                        )}
+                      </button>
+                    ))}
+                    </div>
+                  </div>
+
+                  {hasThumbnailPagination ? (
+                    <button
+                      type="button"
+                      data-no-scroll-top
+                      onClick={showNextThumbnailPage}
+                      disabled={!canShowNextThumbnailPage}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black shadow-sm transition hover:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                      aria-label="Next thumbnails"
+                    >
+                      <FaChevronRight className="h-4 w-4 md:rotate-90" />
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1895,7 +1909,7 @@ const ProductDetails = () => {
                     setCurrentImageIndex(selectedImage);
                     setShowImageModal(true);
                   }}
-                  className="relative z-10 block aspect-square w-full cursor-zoom-in"
+                  className="group relative z-10 block aspect-square w-full cursor-zoom-in"
                   aria-label="Open product media"
                 >
                   <div className="flex h-full items-center justify-center">
@@ -1922,7 +1936,7 @@ const ProductDetails = () => {
                         src={currentMediaItem?.src}
                         alt={currentMediaItem?.alt || product.title}
                         isCurrent
-                        className="h-full max-h-[34rem] w-full object-contain mix-blend-multiply drop-shadow-[0_30px_35px_rgba(0,0,0,0.14)]"
+                        className="h-full max-h-[34rem] w-full object-contain mix-blend-multiply drop-shadow-[0_30px_35px_rgba(0,0,0,0.14)] transition-transform duration-700 group-hover:scale-[0.94]"
                       />
                     )}
                   </div>
@@ -1937,7 +1951,7 @@ const ProductDetails = () => {
                         event.stopPropagation();
                         prevSelectedImage();
                       }}
-                      className="absolute left-4 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-sm transition-all hover:scale-110 active:scale-95 sm:left-6 sm:h-11 sm:w-11"
+                      className="absolute left-4 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-sm transition-all hover:scale-95 active:scale-90 sm:left-6 sm:h-11 sm:w-11"
                       aria-label="Previous image"
                     >
                       <FaChevronLeft className="h-4 w-4" />
@@ -1949,7 +1963,7 @@ const ProductDetails = () => {
                         event.stopPropagation();
                         nextSelectedImage();
                       }}
-                      className="absolute right-4 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-sm transition-all hover:scale-110 active:scale-95 sm:right-6 sm:h-11 sm:w-11"
+                      className="absolute right-4 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-sm transition-all hover:scale-95 active:scale-90 sm:right-6 sm:h-11 sm:w-11"
                       aria-label="Next image"
                     >
                       <FaChevronRight className="h-4 w-4" />

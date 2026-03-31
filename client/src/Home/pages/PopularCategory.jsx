@@ -375,11 +375,6 @@ const PopularCategory = () => {
             <div className={`${getGridClasses(productCount, isExpanded)}`}>
               {displayProducts.map((product) => {
                 const pricing = getPricing(product);
-                const previewColors = Array.isArray(product.colors)
-                  ? product.colors.slice(0, 4)
-                  : [];
-                const hasMoreColors =
-                  Array.isArray(product.colors) && product.colors.length > 4;
                 const cardMetaLine = getCardMetaLine(product);
                 return (
                   <div
@@ -427,25 +422,8 @@ const PopularCategory = () => {
                             {`Brand: ${product.brand}`}
                           </p>
                         ) : null}
-                        {previewColors.length > 0 || cardMetaLine ? (
+                        {cardMetaLine ? (
                           <div className="flex items-center gap-2">
-                            {previewColors.length > 0 ? (
-                              <div className="flex items-center gap-1 shrink-0">
-                                {previewColors.map((color, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="w-3 h-3 rounded-full border border-gray-300"
-                                    style={{ backgroundColor: color }}
-                                    title={color}
-                                  />
-                                ))}
-                                {hasMoreColors ? (
-                                  <span className="inline-flex items-center justify-center min-w-[1.05rem] h-[1.05rem] rounded-full bg-linear-to-br from-black to-gray-700 text-white text-[8px] font-bold shadow-sm">
-                                    4+
-                                  </span>
-                                ) : null}
-                              </div>
-                            ) : null}
                             {cardMetaLine ? (
                               <p className="text-xs text-gray-500 line-clamp-1">
                                 {cardMetaLine}

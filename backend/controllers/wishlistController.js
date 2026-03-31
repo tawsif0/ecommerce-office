@@ -3,6 +3,8 @@ const Product = require("../models/Product");
 const { attachImageDataToProducts } = require("../utils/imageUtils");
 
 const isObjectId = (value) => /^[0-9a-fA-F]{24}$/.test(String(value || "").trim());
+const WISHLIST_PRODUCT_SELECT =
+  "title price salePrice priceType showStockToPublic images vendor category brand marketplaceType stock allowBackorder isActive approvalStatus ratingAverage ratingCount variantDefinitions variations";
 
 const getUserId = (req) => req.user.id || req.user._id;
 
@@ -25,8 +27,7 @@ exports.getWishlist = async (req, res) => {
     const userId = getUserId(req);
     let wishlist = await Wishlist.findOne({ user: userId }).populate({
       path: "items.product",
-      select:
-        "title price salePrice priceType showStockToPublic images vendor category marketplaceType stock allowBackorder isActive approvalStatus ratingAverage ratingCount",
+      select: WISHLIST_PRODUCT_SELECT,
       populate: [
         { path: "vendor", select: "storeName slug logo status" },
         { path: "category", select: "name" },
@@ -53,8 +54,7 @@ exports.getWishlist = async (req, res) => {
       await wishlist.save();
       await wishlist.populate({
         path: "items.product",
-        select:
-          "title price salePrice priceType showStockToPublic images vendor category marketplaceType stock allowBackorder isActive approvalStatus ratingAverage ratingCount",
+        select: WISHLIST_PRODUCT_SELECT,
         populate: [
           { path: "vendor", select: "storeName slug logo status" },
           { path: "category", select: "name" },

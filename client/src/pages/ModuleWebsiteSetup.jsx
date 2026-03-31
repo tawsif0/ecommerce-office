@@ -4,6 +4,15 @@ import { useDispatch, useSelector } from "react-redux";
 import { FiGlobe, FiSave, FiSettings, FiUpload, FiX } from "react-icons/fi";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
+import {
+  ABOUT_CARD_ICON_OPTIONS,
+  DEFAULT_ABOUT_CARDS,
+  DEFAULT_ABOUT_STORY_CONTENT,
+  DEFAULT_ABOUT_STORY_TITLE,
+  createEmptyAboutCard,
+  getAboutCardIconComponent,
+  normalizeAboutCards,
+} from "../utils/aboutSection";
 import { toPublicAssetUrl } from "../utils/publicSettings";
 import RichTextEditor from "../components/RichTextEditor";
 import {
@@ -124,6 +133,34 @@ const ModuleWebsiteSetup = () => {
     dispatch(updateAdminField({ key, value }));
   };
 
+  const aboutCards = useMemo(
+    () => normalizeAboutCards(settings?.about?.cards || DEFAULT_ABOUT_CARDS),
+    [settings?.about?.cards],
+  );
+
+  const updateAboutCards = (nextCards) => {
+    updateNested("about", "cards", normalizeAboutCards(nextCards));
+  };
+
+  const addAboutCard = () => {
+    if (aboutCards.length >= 4) return;
+    updateAboutCards([...aboutCards, createEmptyAboutCard()]);
+  };
+
+  const updateAboutCard = (index, updates) => {
+    updateAboutCards(
+      aboutCards.map((card, currentIndex) =>
+        currentIndex === index ? { ...card, ...updates } : card,
+      ),
+    );
+  };
+
+  const removeAboutCard = (index) => {
+    updateAboutCards(
+      aboutCards.filter((_, currentIndex) => currentIndex !== index),
+    );
+  };
+
   const handleLogoUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -217,6 +254,16 @@ const ModuleWebsiteSetup = () => {
         storefront: {
           ...(settings.storefront || {}),
           footerCaption: String(settings?.storefront?.footerCaption || "").trim(),
+        },
+        about: {
+          ...(settings.about || {}),
+          storyTitle:
+            String(settings?.about?.storyTitle || "").trim() ||
+            DEFAULT_ABOUT_STORY_TITLE,
+          storyContent:
+            String(settings?.about?.storyContent || "").trim() ||
+            DEFAULT_ABOUT_STORY_CONTENT,
+          cards: aboutCards,
         },
         marketplace: {
           ...(settings?.marketplace || {}),
@@ -602,6 +649,201 @@ const ModuleWebsiteSetup = () => {
                   placeholder="YouTube URL"
                   className={`${inputClass} md:col-span-2`}
                 />
+              </div>
+            </section>
+
+            <section className={sectionClass}>
+              <h2 className="text-lg font-semibold text-black">About Page</h2>
+              <p className="text-sm text-gray-600">
+                Control the story copy and feature cards shown on the public About page.
+              </p>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 md:p-5">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
+                  Our Story
+                </p>
+                <div className="grid gap-4">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                      Story Title
+                    </label>
+                    <input
+                      value={settings?.about?.storyTitle || ""}
+                      onChange={(event) =>
+                        updateNested("about", "storyTitle", event.target.value)
+                      }
+                      placeholder="Our Story"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                      Story Content
+                    </label>
+                    <RichTextEditor
+                      value={settings?.about?.storyContent || ""}
+                      onChange={(value) => updateNested("about", "storyContent", value)}
+                      placeholder="Write the About page story content..."
+                      minHeight={220}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 md:p-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
+                      About Cards
+                    </p>
+                    <h3 className="mt-2 text-base font-semibold text-black">
+                      Up to four feature cards
+                    </h3>
+                    <p className="mt-2 text-sm text-gray-600">
+                      Match the ecom-arc style: choose an icon, set the icon and background
+                      colors, and write the card copy shown on the public About page.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={addAboutCard}
+                    disabled={aboutCards.length >= 4}
+                    className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Add Card
+                  </button>
+                </div>
+
+                {aboutCards.length ? (
+                  <div className="mt-4 space-y-4">
+                    {aboutCards.map((card, index) => {
+                      const IconPreview = getAboutCardIconComponent(card.icon);
+
+                      return (
+                        <div
+                          key={`about-card-${index}`}
+                          className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                        >
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="flex h-12 w-12 items-center justify-center rounded-2xl"
+                                style={{ backgroundColor: card.backgroundColor || "#111827" }}
+                              >
+                                <IconPreview
+                                  className="h-5 w-5"
+                                  style={{ color: card.iconColor || "#ffffff" }}
+                                />
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
+                                  Card {index + 1}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  Configure the icon, colors, title, and description.
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => removeAboutCard(index)}
+                              className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-100"
+                            >
+                              Remove Card
+                            </button>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,220px)_120px_120px]">
+                            <div>
+                              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                Icon
+                              </label>
+                              <select
+                                value={card.icon || "package"}
+                                onChange={(event) =>
+                                  updateAboutCard(index, { icon: event.target.value })
+                                }
+                                className={inputClass}
+                              >
+                                {ABOUT_CARD_ICON_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                Icon Color
+                              </label>
+                              <input
+                                type="color"
+                                value={card.iconColor || "#ffffff"}
+                                onChange={(event) =>
+                                  updateAboutCard(index, { iconColor: event.target.value })
+                                }
+                                className="h-12 w-full rounded-xl border border-gray-200 bg-white px-2 py-2"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                Background
+                              </label>
+                              <input
+                                type="color"
+                                value={card.backgroundColor || "#111827"}
+                                onChange={(event) =>
+                                  updateAboutCard(index, {
+                                    backgroundColor: event.target.value,
+                                  })
+                                }
+                                className="h-12 w-full rounded-xl border border-gray-200 bg-white px-2 py-2"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-4">
+                            <div>
+                              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                Card Title
+                              </label>
+                              <input
+                                value={card.title || ""}
+                                onChange={(event) =>
+                                  updateAboutCard(index, { title: event.target.value })
+                                }
+                                placeholder="Fast Shipping"
+                                className={inputClass}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                Card Description
+                              </label>
+                              <RichTextEditor
+                                value={card.description || ""}
+                                onChange={(value) =>
+                                  updateAboutCard(index, { description: value })
+                                }
+                                placeholder="Write the card description..."
+                                minHeight={160}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-white p-4 text-sm text-gray-500">
+                    No cards added yet. Add up to four cards for the About page.
+                  </div>
+                )}
               </div>
             </section>
 

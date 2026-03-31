@@ -3,6 +3,10 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import { FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
 import { fetchPublicSettings } from "../utils/publicSettings";
+import {
+  BANGLADESH_DISTRICT_OPTIONS,
+  getCodDeliveryChargeForDistrict,
+} from "../utils/bangladeshLocations";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -90,7 +94,7 @@ const AdminAddOrder = () => {
   );
   const selectedMethodShippingCost =
     selectedMethodIsCod && selectedMethod
-      ? Math.max(0, Number(selectedMethod?.shippingCost || 0))
+      ? getCodDeliveryChargeForDistrict(selectedMethod, customer.district)
       : 0;
   const selectedMethodRequiresProof =
     selectedMethod?.requiresTransactionProof === undefined
@@ -195,7 +199,7 @@ const AdminAddOrder = () => {
     if (selectedMethodIsCod) {
       setShippingFee(selectedMethodShippingCost);
     }
-  }, [selectedMethodIsCod, selectedMethodShippingCost]);
+  }, [selectedMethodIsCod, selectedMethodShippingCost, customer.district]);
 
   const checkRisk = async () => {
     if (!customer.phone.trim() && !customer.email.trim() && !customerUserId) {
@@ -287,6 +291,11 @@ const AdminAddOrder = () => {
       return;
     }
 
+    if (selectedMethodIsCod && !String(customer.district || "").trim()) {
+      toast.error("Select a district for Cash on Delivery orders");
+      return;
+    }
+
     if (selectedMethodRequiresProof && !String(paymentDetails.transactionId || "").trim()) {
       toast.error("Transaction ID is required for this payment method");
       return;
@@ -371,7 +380,22 @@ const AdminAddOrder = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <input value={customer.city} onChange={(e) => setCustomer((p) => ({ ...p, city: e.target.value }))} placeholder="City*" list="admin-order-city-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
             <input value={customer.subCity} onChange={(e) => setCustomer((p) => ({ ...p, subCity: e.target.value }))} placeholder="Sub city" list="admin-order-subcity-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={customer.district} onChange={(e) => setCustomer((p) => ({ ...p, district: e.target.value }))} placeholder="District" list="admin-order-subcity-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
+            <select
+              value={customer.district}
+              onChange={(e) => setCustomer((p) => ({ ...p, district: e.target.value }))}
+              className="px-3 py-2.5 border border-gray-200 rounded-lg"
+            >
+              <option value="">Select district</option>
+              {customer.district &&
+              !BANGLADESH_DISTRICT_OPTIONS.includes(customer.district) ? (
+                <option value={customer.district}>{customer.district}</option>
+              ) : null}
+              {BANGLADESH_DISTRICT_OPTIONS.map((district) => (
+                <option key={district} value={district}>
+                  {district}
+                </option>
+              ))}
+            </select>
             <input value={customer.country} onChange={(e) => setCustomer((p) => ({ ...p, country: e.target.value }))} placeholder="Country" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
           </div>
           <datalist id="admin-order-city-options">
@@ -521,7 +545,16 @@ const AdminAddOrder = () => {
             </p>
           ) : selectedMethodIsCod ? (
             <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
-              Cash on Delivery does not need a transaction ID. Payment completes automatically on delivery. Shipping fee: {selectedMethodShippingCost.toFixed(2)} Tk.
+              Cash on Delivery does not need a transaction ID. Payment completes automatically on
+              delivery. Inside Dhaka:{" "}
+              {Number(
+                selectedMethod?.insideDhakaShippingCost ?? selectedMethod?.shippingCost ?? 0,
+              ).toFixed(2)}{" "}
+              Tk. Outside Dhaka:{" "}
+              {Number(
+                selectedMethod?.outsideDhakaShippingCost ?? selectedMethod?.shippingCost ?? 0,
+              ).toFixed(2)}{" "}
+              Tk. Selected shipping fee: {selectedMethodShippingCost.toFixed(2)} Tk.
             </p>
           ) : null}
           <textarea value={meta.adminNotes} onChange={(e) => setMeta((p) => ({ ...p, adminNotes: e.target.value }))} rows={2} placeholder="Admin notes" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" />

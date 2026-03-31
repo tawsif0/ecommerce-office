@@ -45,7 +45,11 @@ router.delete("/:id/reviews/me", auth, deleteMyProductReview);
 router.post(
   "/",
   auth,
-  upload.array("images", 5),
+  upload.fields([
+    { name: "images", maxCount: 5 },
+    { name: "videos", maxCount: 3 },
+    { name: "video", maxCount: 1 },
+  ]),
   handleMulterError,
   createProduct
 );
@@ -54,7 +58,11 @@ router.get("/:id", auth, getProduct);
 router.put(
   "/:id",
   auth,
-  upload.array("images", 5),
+  upload.fields([
+    { name: "images", maxCount: 5 },
+    { name: "videos", maxCount: 3 },
+    { name: "video", maxCount: 1 },
+  ]),
   handleMulterError,
   updateProduct
 );

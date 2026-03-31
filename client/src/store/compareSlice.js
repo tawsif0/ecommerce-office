@@ -1,7 +1,8 @@
 import { createSlice } from "@reduxjs/toolkit";
 
 const STORAGE_KEY = "compareProducts";
-const MAX_COMPARE_ITEMS = 4;
+export const MAX_COMPARE_ITEMS = 4;
+export const COMPARE_LIMIT_MESSAGE = `You can compare up to ${MAX_COMPARE_ITEMS} products at a time.`;
 
 const loadStoredItems = () => {
   if (typeof window === "undefined") return [];
@@ -43,7 +44,9 @@ const compareSlice = createSlice({
         (item) => String(item?._id || "") !== nextItem._id,
       );
 
-      state.items = [nextItem, ...withoutDuplicate].slice(0, MAX_COMPARE_ITEMS);
+      if (withoutDuplicate.length >= MAX_COMPARE_ITEMS) return;
+
+      state.items = [nextItem, ...withoutDuplicate];
       persistItems(state.items);
     },
     removeCompareItem(state, action) {
@@ -73,7 +76,8 @@ const compareSlice = createSlice({
         const withoutDuplicate = state.items.filter(
           (item) => String(item?._id || "") !== nextItem._id,
         );
-        state.items = [nextItem, ...withoutDuplicate].slice(0, MAX_COMPARE_ITEMS);
+        if (withoutDuplicate.length >= MAX_COMPARE_ITEMS) return;
+        state.items = [nextItem, ...withoutDuplicate];
       }
 
       persistItems(state.items);

@@ -39,6 +39,12 @@ const {
   pushNotificationsToOperationalUsers,
   pushNotificationsToUsers,
 } = require("../utils/notificationUtils");
+const {
+  buildSelectedVariantSummary,
+  normalizeSelectedVariantsForProduct,
+  normalizeSelectedVariantsPayload,
+  resolveProductPricingForSelection,
+} = require("../utils/productVariants");
 
 // Generate order number
 const generateOrderNumber = () => {
@@ -1385,6 +1391,7 @@ const buildTrackedOrderResponse = async (order, cancellationSettings = {}) => {
           },
       quantity: item.quantity,
       variationLabel: item.variationLabel || "",
+      selectedVariants: item.selectedVariants || [],
       sku: item.sku || "",
       color: item.color,
       dimensions: item.dimensions,
@@ -1472,6 +1479,7 @@ const resolvePaymentMethodSelection = async ({
   paymentMethodId,
   paymentMethod,
   paymentDetails,
+  shippingAddress,
 }) => {
   const requestedMethod = extractPaymentMethod(paymentMethod, paymentDetails);
   const requestedCanonical = String(requestedMethod || "").trim().toLowerCase();
@@ -1514,13 +1522,45 @@ const resolvePaymentMethodSelection = async ({
 
   const inferredChannel = methodDoc ? channelType : "manual";
   const resolvedMethodName = String(methodDoc?.type || requestedMethod || "").trim();
+  const resolveCodShippingCost = () => {
+    if (inferredChannel !== "cod") return 0;
+
+    const insideDhakaShippingCost = Number(
+      methodDoc?.insideDhakaShippingCost ?? methodDoc?.shippingCost,
+    );
+    const outsideDhakaShippingCost = Number(
+      methodDoc?.outsideDhakaShippingCost ?? methodDoc?.shippingCost,
+    );
+
+    if (
+      Number.isFinite(insideDhakaShippingCost) ||
+      Number.isFinite(outsideDhakaShippingCost)
+    ) {
+      const resolved = String(shippingAddress?.district || "").trim().toLowerCase() === "dhaka"
+        ? insideDhakaShippingCost
+        : outsideDhakaShippingCost;
+      if (Number.isFinite(resolved) && resolved >= 0) {
+        return Math.max(0, resolved);
+      }
+    }
+
+    return Math.max(0, Number(methodDoc?.shippingCost || 0));
+  };
 
   return {
     methodDoc,
     methodName: resolvedMethodName,
     channelType: inferredChannel,
     defaultAccountNo: String(methodDoc?.accountNo || "").trim(),
-    shippingCost: Math.max(0, Number(methodDoc?.shippingCost || 0)),
+    shippingCost: resolveCodShippingCost(),
+    insideDhakaShippingCost: Math.max(
+      0,
+      Number((methodDoc?.insideDhakaShippingCost ?? methodDoc?.shippingCost) || 0),
+    ),
+    outsideDhakaShippingCost: Math.max(
+      0,
+      Number((methodDoc?.outsideDhakaShippingCost ?? methodDoc?.shippingCost) || 0),
+    ),
     requiresTransactionProof: methodDoc
       ? methodDoc.requiresTransactionProof === undefined
         ? true
@@ -1535,6 +1575,7 @@ const normalizeOrderItem = (item) => ({
   variationId:
     item?.variationId || item?.variantId || item?.variation?._id || null,
   variationLabel: String(item?.variationLabel || item?.variantLabel || "").trim(),
+  selectedVariants: normalizeSelectedVariantsPayload(item?.selectedVariants || []),
   color: item?.color || "",
   dimensions: item?.dimensions || "",
 });
@@ -1668,7 +1709,7 @@ const buildOrderItems = async (
 
   for (const item of normalizedItems) {
     const product = await Product.findById(item.productId).select(
-      "title price salePrice priceType vendor category isActive approvalStatus marketplaceType stock allowBackorder variations commissionType commissionValue commissionFixed deliveryMinDays deliveryMaxDays",
+      "title price salePrice priceType vendor category isActive approvalStatus marketplaceType stock allowBackorder variations variantDefinitions commissionType commissionValue commissionFixed deliveryMinDays deliveryMaxDays",
     );
 
     if (!product) {
@@ -1729,10 +1770,28 @@ const buildOrderItems = async (
       return String(rawVariationId || "") === String(variationContext?.variationId || "");
     });
 
+    const selectedVariantResult = normalizeSelectedVariantsForProduct(
+      product,
+      item.selectedVariants || rawFallbackItem?.selectedVariants || [],
+    );
+    if (selectedVariantResult.error) {
+      return {
+        success: false,
+        status: 400,
+        message: selectedVariantResult.error,
+      };
+    }
+
     const fallbackPrice = toNumber(rawFallbackItem?.price, NaN);
-    const resolvedPrice = variationContext
-      ? variationContext.price
-      : getBaseProductPrice(product);
+    const resolvedPricing = resolveProductPricingForSelection({
+      basePrice: variationContext ? variationContext.price : getBaseProductPrice(product),
+      baseComparePrice:
+        !variationContext && String(product?.priceType || "single") === "best"
+          ? toNumber(product?.price, null)
+          : null,
+      selectedVariants: selectedVariantResult.selectedVariants,
+    });
+    const resolvedPrice = resolvedPricing.price;
 
     const unitPrice = Number.isFinite(resolvedPrice)
       ? resolvedPrice
@@ -1827,10 +1886,11 @@ const buildOrderItems = async (
       quantity: item.quantity,
       price: roundMoney(Math.max(unitPrice, 0)),
       variationId: variationContext?.variationId || null,
-      variationLabel:
-        item.variationLabel ||
-        variationContext?.variationLabel ||
-        "",
+      variationLabel: buildCombinedVariationLabel(
+        item.variationLabel || variationContext?.variationLabel || "",
+        selectedVariantResult.selectedVariants,
+      ),
+      selectedVariants: selectedVariantResult.selectedVariants,
       sku: variationContext?.sku || "",
       color: item.color,
       dimensions: item.dimensions,
@@ -1862,6 +1922,11 @@ const buildOrderItems = async (
     estimatedMaxDays,
   };
 };
+
+const buildCombinedVariationLabel = (variationLabel = "", selectedVariants = []) =>
+  [String(variationLabel || "").trim(), buildSelectedVariantSummary(selectedVariants)]
+    .filter(Boolean)
+    .join(" | ");
 
 const mergeEstimatedDeliveryIntoShippingMeta = (
   shippingMeta = {},
@@ -1975,6 +2040,7 @@ exports.createOrder = async (req, res) => {
       paymentMethodId,
       paymentMethod,
       paymentDetails,
+      shippingAddress,
     });
     const resolvedShippingFee =
       paymentSelection.channelType === "cod"
@@ -2377,6 +2443,7 @@ exports.getAllOrders = async (req, res) => {
         quantity: item.quantity,
         price: item.price,
         variationLabel: item.variationLabel || "",
+        selectedVariants: item.selectedVariants || [],
         sku: item.sku || "",
         color: item.color || "",
         dimensions: item.dimensions || "",
@@ -3615,6 +3682,7 @@ exports.guestCheckout = async (req, res) => {
       paymentMethodId,
       paymentMethod,
       paymentDetails,
+      shippingAddress,
     });
     const resolvedShippingFee =
       paymentSelection.channelType === "cod"
@@ -4013,6 +4081,7 @@ exports.createAdminOrder = async (req, res) => {
       paymentMethodId,
       paymentMethod,
       paymentDetails,
+      shippingAddress: normalizedShippingAddress,
     });
     const resolvedShippingFee =
       paymentSelection.channelType === "cod"

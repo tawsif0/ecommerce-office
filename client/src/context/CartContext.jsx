@@ -14,6 +14,12 @@ import {
   setCartLoading,
   setCartLoggedIn,
 } from "../store/cartSlice";
+import {
+  buildSelectedVariantLabel,
+  getEffectiveProductPricing,
+  getSelectedVariantSignature,
+  normalizeSelectedVariantsPayload,
+} from "../utils/productVariants";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const GUEST_CART_KEY = "guestCart";
@@ -21,7 +27,11 @@ const GUEST_CART_KEY = "guestCart";
 let cartBootstrapped = false;
 let cartListenersBound = false;
 
-const resolveEffectiveUnitPrice = (product, variationId = "") => {
+const resolveEffectiveUnitPrice = (
+  product,
+  variationId = "",
+  selectedVariants = [],
+) => {
   if (!product) return 0;
 
   const marketplaceType = String(product.marketplaceType || "simple");
@@ -40,31 +50,71 @@ const resolveEffectiveUnitPrice = (product, variationId = "") => {
 
     if (selectedVariation) {
       const variationSalePrice = Number(selectedVariation.salePrice);
-      if (Number.isFinite(variationSalePrice) && variationSalePrice >= 0) {
-        return variationSalePrice;
-      }
       const variationPrice = Number(selectedVariation.price);
-      if (Number.isFinite(variationPrice) && variationPrice >= 0) {
-        return variationPrice;
+      const pricing = getEffectiveProductPricing({
+        basePrice:
+          Number.isFinite(variationSalePrice) && variationSalePrice >= 0
+            ? variationSalePrice
+            : variationPrice,
+        baseComparePrice:
+          Number.isFinite(variationSalePrice) && variationSalePrice >= 0
+            ? variationPrice
+            : null,
+        selectedVariants,
+      });
+      if (Number.isFinite(pricing.currentPrice) && pricing.currentPrice >= 0) {
+        return pricing.currentPrice;
       }
     }
   }
 
   const priceType = String(product.priceType || "single");
-  if (priceType === "best") {
-    const salePrice = Number(product.salePrice);
-    if (Number.isFinite(salePrice) && salePrice >= 0) {
-      return salePrice;
-    }
-  }
-
-  const regularPrice = Number(product.price);
-  if (Number.isFinite(regularPrice) && regularPrice >= 0) {
-    return regularPrice;
+  const pricing = getEffectiveProductPricing({
+    basePrice:
+      priceType === "best" && Number.isFinite(Number(product.salePrice))
+        ? Number(product.salePrice)
+        : Number(product.price),
+    baseComparePrice: priceType === "best" ? Number(product.price) : null,
+    selectedVariants,
+  });
+  if (Number.isFinite(pricing.currentPrice) && pricing.currentPrice >= 0) {
+    return pricing.currentPrice;
   }
 
   return 0;
 };
+
+const getCartItemProductId = (item) =>
+  String(
+    item?.product?._id ||
+      item?.product?.id ||
+      (typeof item?.product === "string" ? item.product : "") ||
+      item?.productId ||
+      item?._id ||
+      item?.id ||
+      "",
+  ).trim();
+
+const getCartItemVariantSignature = (item) => {
+  const explicitSignature = String(item?.selectedVariantSignature || "").trim();
+  if (explicitSignature) return explicitSignature;
+
+  return getSelectedVariantSignature(item?.selectedVariants || []);
+};
+
+const matchesCartItem = (
+  item,
+  productId,
+  color = "",
+  dimensions = "",
+  variationId = "",
+  selectedVariantSignature = "",
+) =>
+  getCartItemProductId(item) === String(productId || "").trim() &&
+  String(item?.color || "") === String(color || "") &&
+  String(item?.dimensions || "") === String(dimensions || "") &&
+  String(item?.variationId || "") === String(variationId || "").trim() &&
+  getCartItemVariantSignature(item) === String(selectedVariantSignature || "");
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
@@ -119,6 +169,7 @@ const loadGuestCartState = async (dispatch) => {
         const latestPrice = resolveEffectiveUnitPrice(
           latestProduct,
           String(item?.variationId || "").trim(),
+          item?.selectedVariants || [],
         );
 
         return {
@@ -188,6 +239,7 @@ const syncGuestCartToDatabaseState = async (dispatch) => {
             color: item.color || "",
             dimensions: item.dimensions || "",
             variationId: item.variationId || "",
+            selectedVariants: item.selectedVariants || [],
           },
           {
             headers: getAuthHeaders(),
@@ -274,9 +326,12 @@ export const useCart = () => {
 
   const addToCart = useCallback(
     async (product, quantity = 1, color = "", dimensions = "", options = {}) => {
+      const shouldToast = options?.silent !== true;
       if (String(product?.priceType || "single") === "tba") {
         const error = "This product is marked as TBA and cannot be purchased right now";
-        toast.error(error);
+        if (shouldToast) {
+          toast.error(error);
+        }
         return { success: false, error };
       }
 
@@ -284,11 +339,24 @@ export const useCart = () => {
       const loggedIn = Boolean(token);
       const normalizedVariationId = String(options?.variationId || "").trim();
       const normalizedVariationLabel = String(options?.variationLabel || "").trim();
+      const normalizedSelectedVariants = normalizeSelectedVariantsPayload(
+        options?.selectedVariants || [],
+      );
+      const normalizedSelectedVariantLabel = buildSelectedVariantLabel(
+        normalizedSelectedVariants,
+      );
+      const normalizedSelectedVariantSignature = getSelectedVariantSignature(
+        normalizedSelectedVariants,
+      );
       const normalizedUnitPrice = Number(options?.unitPrice);
       const resolvedProductPrice =
         Number.isFinite(normalizedUnitPrice) && normalizedUnitPrice >= 0
           ? normalizedUnitPrice
-          : resolveEffectiveUnitPrice(product, normalizedVariationId);
+          : resolveEffectiveUnitPrice(
+              product,
+              normalizedVariationId,
+              normalizedSelectedVariants,
+            );
 
       const cartItem = {
         product: {
@@ -300,7 +368,10 @@ export const useCart = () => {
         quantity,
         unitPrice: resolvedProductPrice,
         variationId: normalizedVariationId,
-        variationLabel: normalizedVariationLabel,
+        variationLabel:
+          normalizedVariationLabel || normalizedSelectedVariantLabel,
+        selectedVariants: normalizedSelectedVariants,
+        selectedVariantSignature: normalizedSelectedVariantSignature,
         color,
         dimensions,
         productId: product._id || product.id,
@@ -317,6 +388,7 @@ export const useCart = () => {
               color,
               dimensions,
               variationId: normalizedVariationId,
+              selectedVariants: normalizedSelectedVariants,
             },
             {
               headers: getAuthHeaders(),
@@ -339,13 +411,16 @@ export const useCart = () => {
                     quantity,
                     category: product?.category?.name || product?.category || "",
                     brand: product?.brand || "",
-                    variationLabel: normalizedVariationLabel,
+                    variationLabel:
+                      normalizedVariationLabel || normalizedSelectedVariantLabel,
                     vendorName: product?.vendor?.storeName || "",
                   }),
                 ],
               },
             });
-            toast.success("Added to cart!");
+            if (shouldToast) {
+              toast.success("Added to cart!");
+            }
             return { success: true, items };
           }
 
@@ -353,7 +428,9 @@ export const useCart = () => {
         } catch (err) {
           const errorMessage =
             err.response?.data?.message || "Failed to add to cart";
-          toast.error(errorMessage);
+          if (shouldToast) {
+            toast.error(errorMessage);
+          }
           return { success: false, error: errorMessage };
         } finally {
           dispatch(setCartLoading(false));
@@ -366,16 +443,24 @@ export const useCart = () => {
 
         const existingIndex = items.findIndex(
           (item) =>
-            item.product?._id === (product._id || product.id) &&
-            item.color === color &&
-            item.dimensions === dimensions &&
-            String(item.variationId || "") === normalizedVariationId,
+            matchesCartItem(
+              item,
+              product._id || product.id,
+              color,
+              dimensions,
+              normalizedVariationId,
+              normalizedSelectedVariantSignature,
+            ),
         );
 
         if (existingIndex > -1) {
           items[existingIndex].quantity += quantity;
           items[existingIndex].unitPrice = resolvedProductPrice;
-          items[existingIndex].variationLabel = normalizedVariationLabel;
+          items[existingIndex].variationLabel =
+            normalizedVariationLabel || normalizedSelectedVariantLabel;
+          items[existingIndex].selectedVariants = normalizedSelectedVariants;
+          items[existingIndex].selectedVariantSignature =
+            normalizedSelectedVariantSignature;
         } else {
           items.push(cartItem);
         }
@@ -394,16 +479,21 @@ export const useCart = () => {
                 quantity,
                 category: product?.category?.name || product?.category || "",
                 brand: product?.brand || "",
-                variationLabel: normalizedVariationLabel,
+                variationLabel:
+                  normalizedVariationLabel || normalizedSelectedVariantLabel,
                 vendorName: product?.vendor?.storeName || "",
               }),
             ],
           },
         });
-        toast.success("Added to cart!");
+        if (shouldToast) {
+          toast.success("Added to cart!");
+        }
         return { success: true, items };
       } catch (_error) {
-        toast.error("Failed to add to cart");
+        if (shouldToast) {
+          toast.error("Failed to add to cart");
+        }
         return { success: false, error: "Failed to add to cart" };
       }
     },
@@ -411,10 +501,18 @@ export const useCart = () => {
   );
 
   const removeCartItem = useCallback(
-    async (productId, color = "", dimensions = "", variationId = "") => {
+    async (
+      productId,
+      color = "",
+      dimensions = "",
+      variationId = "",
+      selectedVariantSignature = "",
+      options = {},
+    ) => {
       const token = localStorage.getItem("token");
       const loggedIn = Boolean(token);
       const normalizedVariationId = String(variationId || "").trim();
+      const shouldToast = options?.silent !== true;
 
       if (loggedIn) {
         try {
@@ -425,20 +523,25 @@ export const useCart = () => {
               color,
               dimensions,
               variationId: normalizedVariationId,
+              selectedVariantSignature,
             },
           });
 
           if (response.data.success) {
             const items = response.data.cart?.items || [];
             dispatchCartItems(dispatch, items);
-            toast.success("Item removed from cart");
+            if (shouldToast) {
+              toast.success("Item removed from cart");
+            }
             return { success: true, items };
           }
 
           return { success: false, error: "Failed to remove item" };
         } catch (err) {
           const message = err.response?.data?.message || "Failed to remove item";
-          toast.error(message);
+          if (shouldToast) {
+            toast.error(message);
+          }
           return {
             success: false,
             error: message,
@@ -452,25 +555,36 @@ export const useCart = () => {
         const guestCart = localStorage.getItem(GUEST_CART_KEY);
         if (guestCart) {
           let items = JSON.parse(guestCart);
-          items = items.filter(
+          const nextItems = items.filter(
             (item) =>
-              !(
-                item.product?._id === productId &&
-                item.color === color &&
-                item.dimensions === dimensions &&
-                String(item.variationId || "") === normalizedVariationId
+              !matchesCartItem(
+                item,
+                productId,
+                color,
+                dimensions,
+                normalizedVariationId,
+                selectedVariantSignature,
               ),
           );
 
+          if (nextItems.length === items.length) {
+            return { success: false, error: "Item not found in cart" };
+          }
+
+          items = nextItems;
           localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
           dispatchCartItems(dispatch, items);
-          toast.success("Item removed from cart");
+          if (shouldToast) {
+            toast.success("Item removed from cart");
+          }
           return { success: true, items };
         }
 
         return { success: false, error: "Cart is empty" };
       } catch (_error) {
-        toast.error("Failed to remove item");
+        if (shouldToast) {
+          toast.error("Failed to remove item");
+        }
         return { success: false, error: "Failed to remove item" };
       }
     },
@@ -484,13 +598,20 @@ export const useCart = () => {
       color = "",
       dimensions = "",
       variationId = "",
+      selectedVariantSignature = "",
     ) => {
       const token = localStorage.getItem("token");
       const loggedIn = Boolean(token);
       const normalizedVariationId = String(variationId || "").trim();
 
       if (quantity < 1) {
-        return removeCartItem(productId, color, dimensions, normalizedVariationId);
+        return removeCartItem(
+          productId,
+          color,
+          dimensions,
+          normalizedVariationId,
+          selectedVariantSignature,
+        );
       }
 
       if (loggedIn) {
@@ -498,7 +619,13 @@ export const useCart = () => {
           dispatch(setCartLoading(true));
           const response = await axios.put(
             `${baseUrl}/cart/${productId}`,
-            { quantity, color, dimensions, variationId: normalizedVariationId },
+            {
+              quantity,
+              color,
+              dimensions,
+              variationId: normalizedVariationId,
+              selectedVariantSignature,
+            },
             { headers: getAuthHeaders() },
           );
 
@@ -527,10 +654,14 @@ export const useCart = () => {
           let items = JSON.parse(guestCart);
           const itemIndex = items.findIndex(
             (item) =>
-              item.product?._id === productId &&
-              item.color === color &&
-              item.dimensions === dimensions &&
-              String(item.variationId || "") === normalizedVariationId,
+              matchesCartItem(
+                item,
+                productId,
+                color,
+                dimensions,
+                normalizedVariationId,
+                selectedVariantSignature,
+              ),
           );
 
           if (itemIndex > -1) {
@@ -579,6 +710,137 @@ export const useCart = () => {
     );
   }, [cartItems]);
 
+  const isCartItemPresent = useCallback(
+    (
+      productId,
+      color = "",
+      dimensions = "",
+      variationId = "",
+      selectedVariantSignature = "",
+    ) =>
+      cartItems.some((item) =>
+        matchesCartItem(
+          item,
+          productId,
+          color,
+          dimensions,
+          variationId,
+          selectedVariantSignature,
+        ),
+      ),
+    [cartItems],
+  );
+
+  const getCartItemsForProduct = useCallback(
+    (productId) =>
+      cartItems.filter(
+        (item) => getCartItemProductId(item) === String(productId || "").trim(),
+      ),
+    [cartItems],
+  );
+
+  const isProductInCart = useCallback(
+    (productId) => getCartItemsForProduct(productId).length > 0,
+    [getCartItemsForProduct],
+  );
+
+  const toggleCartItem = useCallback(
+    async (product, quantity = 1, color = "", dimensions = "", options = {}) => {
+      const productId = String(product?._id || product?.id || "").trim();
+      if (!productId) {
+        return { success: false, error: "Product not found" };
+      }
+
+      const normalizedVariationId = String(options?.variationId || "").trim();
+      const normalizedSelectedVariants = normalizeSelectedVariantsPayload(
+        options?.selectedVariants || [],
+      );
+      const normalizedSelectedVariantSignature = getSelectedVariantSignature(
+        normalizedSelectedVariants,
+      );
+
+      if (
+        isCartItemPresent(
+          productId,
+          color,
+          dimensions,
+          normalizedVariationId,
+          normalizedSelectedVariantSignature,
+        )
+      ) {
+        const result = await removeCartItem(
+          productId,
+          color,
+          dimensions,
+          normalizedVariationId,
+          normalizedSelectedVariantSignature,
+        );
+        return {
+          ...result,
+          removed: Boolean(result?.success),
+        };
+      }
+
+      const result = await addToCart(product, quantity, color, dimensions, {
+        ...options,
+        variationId: normalizedVariationId,
+        selectedVariants: normalizedSelectedVariants,
+      });
+
+      return {
+        ...result,
+        removed: false,
+      };
+    },
+    [addToCart, isCartItemPresent, removeCartItem],
+  );
+
+  const toggleProductInCart = useCallback(
+    async (product, quantity = 1) => {
+      const productId = String(product?._id || product?.id || "").trim();
+      if (!productId) {
+        return { success: false, error: "Product not found" };
+      }
+
+      const matchingItems = getCartItemsForProduct(productId);
+      if (matchingItems.length > 0) {
+        for (const item of matchingItems) {
+          const selectedVariantSignature =
+            getCartItemVariantSignature(item);
+          const result = await removeCartItem(
+            productId,
+            item?.color || "",
+            item?.dimensions || "",
+            item?.variationId || "",
+            selectedVariantSignature,
+            { silent: true },
+          );
+
+          if (!result?.success) {
+            toast.error(result?.error || "Failed to remove item");
+            return {
+              ...result,
+              removed: false,
+            };
+          }
+        }
+
+        toast.success("Item removed from cart");
+        return {
+          success: true,
+          removed: true,
+        };
+      }
+
+      const result = await addToCart(product, quantity);
+      return {
+        ...result,
+        removed: false,
+      };
+    },
+    [addToCart, getCartItemsForProduct, removeCartItem],
+  );
+
   return {
     cartItems,
     cartCount,
@@ -589,6 +851,11 @@ export const useCart = () => {
     removeCartItem,
     clearCart,
     getCartSubtotal,
+    isCartItemPresent,
+    getCartItemsForProduct,
+    isProductInCart,
+    toggleCartItem,
+    toggleProductInCart,
     fetchCartFromDatabase,
     syncGuestCartToDatabase,
     loadGuestCart,

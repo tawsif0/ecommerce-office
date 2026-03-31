@@ -312,6 +312,10 @@ const Navbar = () => {
   };
 
   const handleCompareClick = () => {
+    if (safeCompareCount < 2) {
+      toast.error("Select at least 2 products to compare");
+      return;
+    }
     navigate("/compare");
     setCategoryOpen(false);
     setMobileMenuOpen(false);
@@ -409,7 +413,7 @@ const Navbar = () => {
   return (
     <header className={`app-layer-header sticky top-0 bg-white transition-shadow duration-300 ${scrolled ? "shadow-lg" : "shadow-sm"}`}>
       <div className="site-shell">
-        <div className="grid grid-cols-[40px_minmax(0,1fr)_182px] items-center gap-3 py-3 lg:hidden">
+        <div className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 py-3 sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:gap-3 lg:hidden">
           <button
             ref={menuButtonRef}
             type="button"
@@ -417,28 +421,35 @@ const Navbar = () => {
               setMobileMenuOpen((prev) => !prev);
               setMobileSearchOpen(false);
             }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm sm:h-10 sm:w-10"
             aria-label="Toggle menu"
           >
             {mobileMenuOpen ? <FiX className="h-5 w-5" /> : <FiMenu className="h-5 w-5" />}
           </button>
-          <Link to="/" onClick={scrollToTop} className="flex min-w-0 items-center justify-center">
+          <Link to="/" onClick={scrollToTop} className="flex min-w-0 items-center justify-center overflow-hidden px-1">
             {logo ? (
-              <img src={logo} alt={brandName} className="h-9 w-auto max-w-37.5 object-contain" />
+              <img
+                src={logo}
+                alt={brandName}
+                className="h-7 w-auto max-w-[clamp(5.5rem,28vw,8.5rem)] object-contain sm:h-8 sm:max-w-[9.75rem]"
+              />
             ) : (
-              <p className="truncate text-lg font-bold tracking-tight" style={{ color: accent }}>
+              <p
+                className="truncate text-base font-bold tracking-tight sm:text-lg"
+                style={{ color: accent }}
+              >
                 {brandLogoText}
               </p>
             )}
           </Link>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => {
                 setMobileSearchOpen((prev) => !prev);
                 setMobileMenuOpen(false);
               }}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm sm:h-10 sm:w-10"
               aria-label="Toggle search"
             >
               {mobileSearchOpen ? <FiX className="h-5 w-5" /> : <FiSearch className="h-5 w-5" />}
@@ -446,7 +457,7 @@ const Navbar = () => {
             <button
               type="button"
               onClick={handleCompareClick}
-              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm"
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm sm:h-10 sm:w-10"
               aria-label="Open compare"
             >
               <FiShuffle className="h-5 w-5" />
@@ -459,7 +470,7 @@ const Navbar = () => {
             <button
               type="button"
               onClick={handleWishlistClick}
-              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm"
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm sm:h-10 sm:w-10"
               aria-label="Open wishlist"
             >
               <FiHeart className="h-5 w-5" />
@@ -475,7 +486,7 @@ const Navbar = () => {
                 navigate("/cart");
                 scrollToTop();
               }}
-              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm"
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm sm:h-10 sm:w-10"
               aria-label="Open cart"
             >
               <FiShoppingBag className="h-5 w-5" />
@@ -693,8 +704,18 @@ const Navbar = () => {
             >
                 <div className="flex h-full flex-col">
                   <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
-                    <Link to="/" onClick={handleMobileRouteClick} className="flex min-w-0 items-center">
-                      {logo ? <img src={logo} alt={brandName} className="h-9 w-auto max-w-37.5 object-contain" /> : <p className="truncate text-lg font-bold tracking-tight" style={{ color: accent }}>{brandLogoText}</p>}
+                    <Link to="/" onClick={handleMobileRouteClick} className="flex min-w-0 items-center overflow-hidden">
+                      {logo ? (
+                        <img
+                          src={logo}
+                          alt={brandName}
+                          className="h-8 w-auto max-w-[9.75rem] object-contain"
+                        />
+                      ) : (
+                        <p className="truncate text-lg font-bold tracking-tight" style={{ color: accent }}>
+                          {brandLogoText}
+                        </p>
+                      )}
                     </Link>
                   <button type="button" onClick={() => setMobileMenuOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm">
                     <FiX className="h-5 w-5" />

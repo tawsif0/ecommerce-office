@@ -26,6 +26,9 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import {
   formatOrderEstimatedDeliveryLabel,
+  getOrderItemLineTotal,
+  getOrderItemUnitPrice,
+  getOrderItemVariantLines,
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
   shouldShowPaymentStatus,
@@ -532,6 +535,7 @@ const ThankYou = () => {
                     item.color && String(item.color).toLowerCase() !== "default"
                       ? item.color
                       : "";
+                  const variantLines = getOrderItemVariantLines(item);
                   const product =
                     item?.product && typeof item.product === "object" ? item.product : null;
                   const title = item.title || product?.title || "Product";
@@ -539,8 +543,8 @@ const ThankYou = () => {
                     item.image || product?.images?.[0] || product?.image || "",
                   );
                   const quantity = Number(item.quantity || 1);
-                  const unitPrice = Number(item.price ?? product?.price ?? 0);
-                  const itemTotal = unitPrice * quantity;
+                  const unitPrice = getOrderItemUnitPrice(item);
+                  const itemTotal = getOrderItemLineTotal(item);
 
                   return (
                     <div
@@ -567,14 +571,16 @@ const ThankYou = () => {
                             <h3 className="text-base font-semibold text-gray-900">{title}</h3>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
                               <span className="rounded-full bg-white px-2.5 py-1">Qty: {quantity}</span>
-                              {item.variationLabel ? (
-                                <span className="rounded-full bg-white px-2.5 py-1">
-                                  Variant: {item.variationLabel}
+                              {variantLines.map((line) => (
+                                <span
+                                  key={`${title}-${line}`}
+                                  className="rounded-full bg-white px-2.5 py-1"
+                                >
+                                  {line}
                                 </span>
-                              ) : null}
+                              ))}
                               {displayColor ? (
-                                <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1">
-                                  <span>Color</span>
+                                <span className="inline-flex items-center rounded-full bg-white p-1">
                                   <span
                                     className="h-3 w-3 rounded-full border border-gray-300"
                                     style={{ backgroundColor: displayColor }}

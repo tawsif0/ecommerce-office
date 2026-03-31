@@ -2,10 +2,16 @@
 const Cart = require("../models/Cart.js");
 const Product = require("../models/Product.js");
 const { attachImageDataToProducts } = require("../utils/imageUtils");
+const {
+  buildSelectedVariantSummary,
+  normalizeSelectedVariantsForProduct,
+  normalizeSelectedVariantsPayload,
+  resolveProductPricingForSelection,
+} = require("../utils/productVariants");
 
 const NON_BUYABLE_TYPES = new Set(["grouped"]);
 const CART_PRODUCT_SELECT =
-  "title price salePrice priceType showStockToPublic images brand category weight dimensions colors vendor marketplaceType stock allowBackorder variations";
+  "title price salePrice priceType showStockToPublic images brand category weight dimensions colors vendor marketplaceType stock allowBackorder variations variantDefinitions";
 
 const asString = (value) =>
   value === undefined || value === null ? "" : String(value).trim();
@@ -20,6 +26,33 @@ const normalizeVariationId = (value) => {
   const parsed = asString(value);
   return /^[0-9a-fA-F]{24}$/.test(parsed) ? parsed : "";
 };
+
+const parseSelectedVariants = (value) => {
+  if (Array.isArray(value)) {
+    return normalizeSelectedVariantsPayload(value);
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeSelectedVariantsPayload(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
+const getSelectedVariantSignature = (selectedVariants = []) =>
+  JSON.stringify(
+    normalizeSelectedVariantsPayload(selectedVariants).map((variant) => ({
+      name: variant.name,
+      preset: variant.preset,
+      value: variant.value,
+      colorHex: variant.colorHex,
+    })),
+  );
 
 const getEffectivePrice = (product) => {
   const hasSalePrice =
@@ -52,6 +85,15 @@ const getVariationForProduct = (product, variationId) => {
 const resolveLineSelector = (req) => {
   const body = req.body || {};
   const query = req.query || {};
+  const selectedVariants = parseSelectedVariants(
+    body.selectedVariants !== undefined ? body.selectedVariants : query.selectedVariants,
+  );
+  const selectedVariantSignature =
+    asString(
+      body.selectedVariantSignature !== undefined
+        ? body.selectedVariantSignature
+        : query.selectedVariantSignature,
+    ) || getSelectedVariantSignature(selectedVariants);
 
   return {
     color: asString(body.color !== undefined ? body.color : query.color),
@@ -61,17 +103,26 @@ const resolveLineSelector = (req) => {
     variationId: normalizeVariationId(
       body.variationId !== undefined ? body.variationId : query.variationId,
     ),
+    selectedVariants,
+    selectedVariantSignature,
   };
 };
 
-const isLineMatch = (item, { productId, color, dimensions, variationId }, strict) => {
+const isLineMatch = (
+  item,
+  { productId, color, dimensions, variationId, selectedVariantSignature = "" },
+  strict,
+) => {
   if (String(item.product) !== String(productId)) return false;
   if (!strict) return true;
+
+  const itemSelectedVariantSignature = getSelectedVariantSignature(item.selectedVariants || []);
 
   return (
     asString(item.color) === asString(color) &&
     asString(item.dimensions) === asString(dimensions) &&
-    String(item.variationId || "") === String(variationId || "")
+    String(item.variationId || "") === String(variationId || "") &&
+    itemSelectedVariantSignature === String(selectedVariantSignature || "")
   );
 };
 
@@ -109,7 +160,7 @@ const syncCartItemUnitPrices = async (cart) => {
   if (productIds.length === 0) return false;
 
   const products = await Product.find({ _id: { $in: productIds } }).select(
-    "price salePrice priceType isActive marketplaceType stock allowBackorder variations",
+    "price salePrice priceType isActive marketplaceType stock allowBackorder variations variantDefinitions",
   );
 
   const productMap = new Map(products.map((product) => [String(product._id), product]));
@@ -121,7 +172,10 @@ const syncCartItemUnitPrices = async (cart) => {
     if (!product || !product.isActive) return;
 
     const currentVariationId = normalizeVariationId(item?.variationId);
-    const purchaseContext = getProductPurchaseContext(product, currentVariationId);
+    const purchaseContext = getProductPurchaseContext(product, {
+      variationId: currentVariationId,
+      selectedVariants: item.selectedVariants || [],
+    });
     if (purchaseContext.error) return;
 
     const nextPrice = Number(purchaseContext.price);
@@ -136,12 +190,26 @@ const syncCartItemUnitPrices = async (cart) => {
       item.variationLabel = purchaseContext.variationLabel || "";
       changed = true;
     }
+
+    const nextSelectedVariantSignature = getSelectedVariantSignature(
+      purchaseContext.selectedVariants || [],
+    );
+    const currentSelectedVariantSignature = getSelectedVariantSignature(
+      item.selectedVariants || [],
+    );
+    if (currentSelectedVariantSignature !== nextSelectedVariantSignature) {
+      item.selectedVariants = purchaseContext.selectedVariants || [];
+      changed = true;
+    }
   });
 
   return changed;
 };
 
-const getProductPurchaseContext = (product, selectorVariationId = "") => {
+const getProductPurchaseContext = (
+  product,
+  { variationId: selectorVariationId = "", selectedVariants = [] } = {},
+) => {
   const marketplaceType = String(product?.marketplaceType || "simple");
   const priceType = String(product?.priceType || "single");
   const allowBackorder = Boolean(product?.allowBackorder);
@@ -164,30 +232,65 @@ const getProductPurchaseContext = (product, selectorVariationId = "") => {
       return { error: "Please select a valid product variation" };
     }
 
-    const price =
-      variation.salePrice !== null && variation.salePrice !== undefined
-        ? Number(variation.salePrice)
-        : Number(variation.price);
+    const normalizedSelectedVariantsResult = normalizeSelectedVariantsForProduct(
+      product,
+      selectedVariants,
+    );
+    if (normalizedSelectedVariantsResult.error) {
+      return { error: normalizedSelectedVariantsResult.error };
+    }
+
+    const pricing = resolveProductPricingForSelection({
+      basePrice:
+        variation.salePrice !== null && variation.salePrice !== undefined
+          ? Number(variation.salePrice)
+          : Number(variation.price),
+      baseComparePrice:
+        variation.salePrice !== null && variation.salePrice !== undefined
+          ? Number(variation.price)
+          : null,
+      selectedVariants: normalizedSelectedVariantsResult.selectedVariants,
+    });
+    const variantSummary = buildSelectedVariantSummary(
+      normalizedSelectedVariantsResult.selectedVariants,
+    );
 
     return {
       marketplaceType,
       allowBackorder,
-      price: Number.isFinite(price) && price >= 0 ? price : 0,
+      price: Number.isFinite(pricing.price) && pricing.price >= 0 ? pricing.price : 0,
       stock: Number(variation.stock) || 0,
       variation,
       variationId: String(variation._id),
-      variationLabel: asString(variation.label),
+      variationLabel: [asString(variation.label), variantSummary].filter(Boolean).join(" | "),
+      selectedVariants: normalizedSelectedVariantsResult.selectedVariants,
     };
   }
+
+  const normalizedSelectedVariantsResult = normalizeSelectedVariantsForProduct(
+    product,
+    selectedVariants,
+  );
+  if (normalizedSelectedVariantsResult.error) {
+    return { error: normalizedSelectedVariantsResult.error };
+  }
+
+  const pricing = resolveProductPricingForSelection({
+    basePrice: getEffectivePrice(product),
+    baseComparePrice:
+      String(product?.priceType || "single") === "best" ? Number(product?.price || 0) : null,
+    selectedVariants: normalizedSelectedVariantsResult.selectedVariants,
+  });
 
   return {
     marketplaceType,
     allowBackorder,
-    price: getEffectivePrice(product),
+    price: pricing.price,
     stock: Number(product?.stock) || 0,
     variation: null,
     variationId: "",
-    variationLabel: "",
+    variationLabel: buildSelectedVariantSummary(normalizedSelectedVariantsResult.selectedVariants),
+    selectedVariants: normalizedSelectedVariantsResult.selectedVariants,
   };
 };
 
@@ -263,6 +366,7 @@ exports.addToCart = async (req, res) => {
       color = "",
       dimensions = "",
       variationId: inputVariationId = "",
+      selectedVariants: inputSelectedVariants = [],
     } = req.body;
 
     if (!productId) {
@@ -273,7 +377,7 @@ exports.addToCart = async (req, res) => {
     }
 
     const product = await Product.findById(productId).select(
-      "title price salePrice priceType isActive marketplaceType stock allowBackorder variations",
+      "title price salePrice priceType isActive marketplaceType stock allowBackorder variations variantDefinitions",
     );
 
     if (!product) {
@@ -292,7 +396,10 @@ exports.addToCart = async (req, res) => {
 
     const parsedQuantity = toPositiveInt(quantity, 1);
     const selectorVariationId = normalizeVariationId(inputVariationId);
-    const purchaseContext = getProductPurchaseContext(product, selectorVariationId);
+    const purchaseContext = getProductPurchaseContext(product, {
+      variationId: selectorVariationId,
+      selectedVariants: inputSelectedVariants,
+    });
 
     if (purchaseContext.error) {
       return res.status(400).json({
@@ -306,6 +413,9 @@ exports.addToCart = async (req, res) => {
       color: asString(color),
       dimensions: asString(dimensions),
       variationId: purchaseContext.variationId || "",
+      selectedVariantSignature: getSelectedVariantSignature(
+        purchaseContext.selectedVariants || [],
+      ),
     };
 
     let cart = await Cart.findOne({ user: req.user.id });
@@ -346,6 +456,8 @@ exports.addToCart = async (req, res) => {
         purchaseContext.variationId || null;
       cart.items[existingItemIndex].variationLabel =
         purchaseContext.variationLabel || "";
+      cart.items[existingItemIndex].selectedVariants =
+        purchaseContext.selectedVariants || [];
     } else {
       cart.items.push({
         product: productId,
@@ -353,6 +465,7 @@ exports.addToCart = async (req, res) => {
         unitPrice: purchaseContext.price,
         variationId: purchaseContext.variationId || null,
         variationLabel: purchaseContext.variationLabel || "",
+        selectedVariants: purchaseContext.selectedVariants || [],
         color: lineSelector.color,
         dimensions: lineSelector.dimensions,
       });
@@ -413,7 +526,8 @@ exports.updateCartItem = async (req, res) => {
     const strictSelector =
       Boolean(selector.color) ||
       Boolean(selector.dimensions) ||
-      Boolean(selector.variationId);
+      Boolean(selector.variationId) ||
+      Boolean(selector.selectedVariantSignature);
 
     const itemIndex = cart.items.findIndex((item) =>
       isLineMatch(
@@ -423,6 +537,7 @@ exports.updateCartItem = async (req, res) => {
           color: selector.color,
           dimensions: selector.dimensions,
           variationId: selector.variationId,
+          selectedVariantSignature: selector.selectedVariantSignature,
         },
         strictSelector,
       ),
@@ -437,7 +552,7 @@ exports.updateCartItem = async (req, res) => {
 
     const lineItem = cart.items[itemIndex];
     const product = await Product.findById(productId).select(
-      "title price salePrice priceType isActive marketplaceType stock allowBackorder variations",
+      "title price salePrice priceType isActive marketplaceType stock allowBackorder variations variantDefinitions",
     );
 
     if (!product || !product.isActive) {
@@ -451,7 +566,13 @@ exports.updateCartItem = async (req, res) => {
       selector.variationId || String(lineItem.variationId || "");
     const purchaseContext = getProductPurchaseContext(
       product,
-      normalizeVariationId(variationIdForValidation),
+      {
+        variationId: normalizeVariationId(variationIdForValidation),
+        selectedVariants:
+          selector.selectedVariants?.length > 0
+            ? selector.selectedVariants
+            : lineItem.selectedVariants || [],
+      },
     );
 
     if (purchaseContext.error) {
@@ -479,6 +600,7 @@ exports.updateCartItem = async (req, res) => {
     lineItem.unitPrice = purchaseContext.price;
     lineItem.variationId = purchaseContext.variationId || null;
     lineItem.variationLabel = purchaseContext.variationLabel || "";
+    lineItem.selectedVariants = purchaseContext.selectedVariants || [];
     lineItem.color = selector.color || lineItem.color || "";
     lineItem.dimensions = selector.dimensions || lineItem.dimensions || "";
     cart.updatedAt = Date.now();
@@ -529,7 +651,8 @@ exports.removeCartItem = async (req, res) => {
     const strictSelector =
       Boolean(selector.color) ||
       Boolean(selector.dimensions) ||
-      Boolean(selector.variationId);
+      Boolean(selector.variationId) ||
+      Boolean(selector.selectedVariantSignature);
 
     const itemIndex = cart.items.findIndex((item) =>
       isLineMatch(
@@ -539,6 +662,7 @@ exports.removeCartItem = async (req, res) => {
           color: selector.color,
           dimensions: selector.dimensions,
           variationId: selector.variationId,
+          selectedVariantSignature: selector.selectedVariantSignature,
         },
         strictSelector,
       ),

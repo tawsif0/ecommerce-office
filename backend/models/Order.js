@@ -1,6 +1,52 @@
 // models/Order.js
 const mongoose = require("mongoose");
 
+const selectedVariantSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    preset: {
+      type: String,
+      enum: ["size", "color", "custom"],
+      default: "custom",
+    },
+    label: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    value: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    colorHex: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    priceMode: {
+      type: String,
+      enum: ["default", "direct", "compare"],
+      default: "default",
+    },
+    price: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    comparePrice: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+  },
+  { _id: false },
+);
+
 const orderItemSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
@@ -31,6 +77,10 @@ const orderItemSchema = new mongoose.Schema({
     type: String,
     default: "",
     trim: true,
+  },
+  selectedVariants: {
+    type: [selectedVariantSchema],
+    default: [],
   },
   sku: {
     type: String,

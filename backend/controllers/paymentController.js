@@ -27,6 +27,8 @@ const toNumber = (value, fallback = 0) => {
 };
 
 const safeString = (value) => String(value || "").trim();
+const normalizeCodShippingCost = (value, fallback = 0) =>
+  Math.max(0, toNumber(value, fallback));
 
 const normalizeChannelType = (value) => {
   const normalized = safeString(value).toLowerCase();
@@ -125,6 +127,33 @@ const normalizeGatewayConfig = (input, channelType) => {
   return {};
 };
 
+const buildCodShippingConfig = (payload = {}, fallbackMethod = null) => {
+  const legacyShippingCost = normalizeCodShippingCost(
+    payload?.shippingCost,
+    fallbackMethod?.shippingCost || 0,
+  );
+  const insideDhakaShippingCost = normalizeCodShippingCost(
+    payload?.insideDhakaShippingCost,
+    payload?.insideDhakaDeliveryCharge ??
+      fallbackMethod?.insideDhakaShippingCost ??
+      fallbackMethod?.shippingCost ??
+      legacyShippingCost,
+  );
+  const outsideDhakaShippingCost = normalizeCodShippingCost(
+    payload?.outsideDhakaShippingCost,
+    payload?.outsideDhakaDeliveryCharge ??
+      fallbackMethod?.outsideDhakaShippingCost ??
+      fallbackMethod?.shippingCost ??
+      legacyShippingCost,
+  );
+
+  return {
+    shippingCost: legacyShippingCost || insideDhakaShippingCost || outsideDhakaShippingCost || 0,
+    insideDhakaShippingCost,
+    outsideDhakaShippingCost,
+  };
+};
+
 const ensureAdminAccess = (req, res) => {
   if (isAdminUser(req.user)) return true;
   res.status(403).json({ error: "Admin access required" });
@@ -192,6 +221,7 @@ exports.addPaymentMethod = async (req, res) => {
 
     const gatewayConfig = normalizeGatewayConfig(req.body?.gatewayConfig, channelType);
     validateGatewayConfig({ channelType, gatewayConfig, isActive });
+    const codShipping = buildCodShippingConfig(req.body);
 
     const paymentMethod = new PaymentMethod({
       code: safeString(req.body?.code),
@@ -203,12 +233,15 @@ exports.addPaymentMethod = async (req, res) => {
       channelType === "manual"
         ? toBoolean(req.body?.requiresTransactionProof, true)
         : false,
-    shippingCost:
-      channelType === "cod" ? Math.max(0, toNumber(req.body?.shippingCost, 0)) : 0,
-    gatewayConfig,
-    displayOrder,
-    isActive,
-    createdBy: req.user._id,
+      shippingCost: channelType === "cod" ? codShipping.shippingCost : 0,
+      insideDhakaShippingCost:
+        channelType === "cod" ? codShipping.insideDhakaShippingCost : 0,
+      outsideDhakaShippingCost:
+        channelType === "cod" ? codShipping.outsideDhakaShippingCost : 0,
+      gatewayConfig,
+      displayOrder,
+      isActive,
+      createdBy: req.user._id,
     });
 
     await paymentMethod.save();
@@ -268,6 +301,7 @@ exports.updatePaymentMethod = async (req, res) => {
       gatewayConfig: nextGatewayConfig,
       isActive: nextIsActive,
     });
+    const codShipping = buildCodShippingConfig(req.body, paymentMethod);
 
     paymentMethod.code =
       req.body?.code !== undefined ? safeString(req.body.code) : paymentMethod.code;
@@ -286,14 +320,12 @@ exports.updatePaymentMethod = async (req, res) => {
         : false;
     paymentMethod.shippingCost =
       channelType === "cod"
-        ? Math.max(
-            0,
-            toNumber(
-              req.body?.shippingCost,
-              paymentMethod.shippingCost || 0,
-            ),
-          )
+        ? codShipping.shippingCost
         : 0;
+    paymentMethod.insideDhakaShippingCost =
+      channelType === "cod" ? codShipping.insideDhakaShippingCost : 0;
+    paymentMethod.outsideDhakaShippingCost =
+      channelType === "cod" ? codShipping.outsideDhakaShippingCost : 0;
     paymentMethod.gatewayConfig = nextGatewayConfig;
     paymentMethod.displayOrder =
       req.body?.displayOrder !== undefined

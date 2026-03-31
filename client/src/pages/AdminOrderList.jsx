@@ -30,6 +30,10 @@ import {
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
   getOrderCustomerProfile,
+  getOrderItemLineTotal,
+  getOrderItemMetaLine,
+  getOrderItemUnitPrice,
+  getOrderItemVariantLines,
 } from "../utils/orderPresentation";
 
 const baseUrl = import.meta.env.VITE_API_URL;
@@ -971,7 +975,10 @@ const AdminOrderList = () => {
                           typeof item?.product === "string"
                             ? item.product
                             : item?.product?.title || "Product";
-                        const meta = [item?.variationLabel, item?.sku, item?.dimensions]
+                        const meta = [
+                          ...getOrderItemVariantLines(item),
+                          getOrderItemMetaLine(item),
+                        ]
                           .filter(Boolean)
                           .join(" | ");
                         const lineTotal = Number(
@@ -1763,19 +1770,30 @@ const AdminOrderList = () => {
                           item.color && item.color.toLowerCase() !== "default"
                             ? item.color
                             : "";
+                        const variantLines = getOrderItemVariantLines(item);
                         return (
                         <tr key={index} className="border-b">
                           <td className="px-2 sm:px-4 py-2 sm:py-3">
                             <div className="font-medium">{item.product}</div>
+                            {variantLines.map((line) => (
+                              <div
+                                key={`${item.product}-${line}`}
+                                className="text-gray-600 text-xs"
+                              >
+                                {line}
+                              </div>
+                            ))}
                             {displayColor && (
-                              <div className="text-gray-600 text-xs inline-flex items-center gap-1">
-                                <span>Colors:</span>
+                              <div className="text-gray-600 text-xs inline-flex items-center rounded-full bg-gray-100 p-1">
                                 <span
-                                  className="w-3 h-3 rounded-full border border-gray-300"
+                                  className="h-3 w-3 rounded-full border border-gray-300"
                                   style={{ backgroundColor: displayColor }}
                                 />
                               </div>
                             )}
+                            {item.sku ? (
+                              <div className="text-gray-600 text-xs">SKU: {item.sku}</div>
+                            ) : null}
                             {item.dimensions && (
                               <div className="text-gray-600 text-xs">
                                 dimensions: {item.dimensions}
@@ -1786,10 +1804,10 @@ const AdminOrderList = () => {
                             {item.quantity}
                           </td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3">
-                            Tk {item.price.toFixed(2)}
+                            Tk {getOrderItemUnitPrice(item).toFixed(2)}
                           </td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3">
-                            Tk {item.total.toFixed(2)}
+                            Tk {getOrderItemLineTotal(item).toFixed(2)}
                           </td>
                         </tr>
                         );

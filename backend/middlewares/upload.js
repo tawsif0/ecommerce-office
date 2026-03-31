@@ -5,13 +5,21 @@ const storage = multer.memoryStorage();
 
 // File filter
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif|webp/;
-  const mimetype = allowedTypes.test(file.mimetype);
+  const imageTypes = /jpeg|jpg|png|gif|webp/;
+  const videoTypes = /mp4|webm|ogg|quicktime/;
+  const isVideoField = file.fieldname === "video" || file.fieldname === "videos";
+  const mimetype = isVideoField
+    ? videoTypes.test(file.mimetype)
+    : imageTypes.test(file.mimetype);
 
   if (mimetype) {
     return cb(null, true);
   }
-  cb(new Error("Only images are allowed (jpeg, jpg, png, gif, webp)"));
+  cb(
+    new Error(
+      "Only product images (jpeg, jpg, png, gif, webp) and up to 3 product videos (mp4, webm, ogg, mov) are allowed",
+    ),
+  );
 };
 
 // Create upload middleware (no file size limits)

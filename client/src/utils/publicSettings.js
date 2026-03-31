@@ -1,4 +1,10 @@
 import axios from "axios";
+import {
+  DEFAULT_ABOUT_CARDS,
+  DEFAULT_ABOUT_STORY_CONTENT,
+  DEFAULT_ABOUT_STORY_TITLE,
+  normalizeAboutCards,
+} from "./aboutSection";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const CACHE_KEY = "publicStoreSettings";
@@ -168,6 +174,11 @@ const DEFAULT_SETTINGS = {
     address: "",
     footerText: "",
   },
+  about: {
+    storyTitle: DEFAULT_ABOUT_STORY_TITLE,
+    storyContent: DEFAULT_ABOUT_STORY_CONTENT,
+    cards: [...DEFAULT_ABOUT_CARDS],
+  },
   courier: {
     providerName: "",
     apiBaseUrl: "",
@@ -315,6 +326,17 @@ const mergeSettings = (incoming = {}) => {
       ...(incoming.integrations || {}),
     },
     invoice: { ...DEFAULT_SETTINGS.invoice, ...(incoming.invoice || {}) },
+    about: {
+      ...DEFAULT_SETTINGS.about,
+      ...(incoming.about || {}),
+      storyTitle:
+        String(incoming?.about?.storyTitle || "").trim() ||
+        DEFAULT_ABOUT_STORY_TITLE,
+      storyContent:
+        String(incoming?.about?.storyContent || "").trim() ||
+        DEFAULT_ABOUT_STORY_CONTENT,
+      cards: normalizeAboutCards(incoming?.about?.cards || DEFAULT_ABOUT_CARDS),
+    },
     courier: { ...DEFAULT_SETTINGS.courier, ...(incoming.courier || {}) },
     locations: {
       ...DEFAULT_SETTINGS.locations,
@@ -467,18 +489,28 @@ export const toPublicAssetUrl = (value) => {
 let defaultDocumentTitle = "";
 let defaultFaviconHref = "";
 
+export const formatDocumentTitle = (settingsOrStoreName = "", pageTitle = "") => {
+  const resolvedStoreName =
+    typeof settingsOrStoreName === "string"
+      ? settingsOrStoreName
+      : settingsOrStoreName?.website?.storeName;
+  const storeName =
+    String(resolvedStoreName || defaultDocumentTitle || "E-Commerce").trim() ||
+    "E-Commerce";
+  const resolvedPageTitle = String(pageTitle || "").trim();
+
+  return resolvedPageTitle ? `${storeName} - ${resolvedPageTitle}` : storeName;
+};
+
 export const applyPublicSettingsDocument = (settings = {}) => {
   if (typeof document === "undefined") return;
 
   const website = settings?.website || {};
-  const storeName = String(website?.storeName || "").trim() || "E-Commerce";
   const iconValue = String(website?.headerIconUrl || website?.logoUrl || "").trim();
 
   if (!defaultDocumentTitle) {
     defaultDocumentTitle = String(document.title || "E-Commerce").trim() || "E-Commerce";
   }
-
-  document.title = storeName || defaultDocumentTitle;
 
   if (!defaultFaviconHref) {
     defaultFaviconHref =

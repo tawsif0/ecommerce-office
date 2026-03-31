@@ -1,5 +1,27 @@
 const mongoose = require("mongoose");
 
+const selectedVariantSchema = new mongoose.Schema(
+  {
+    name: { type: String, default: "", trim: true },
+    preset: {
+      type: String,
+      enum: ["size", "color", "custom"],
+      default: "custom",
+    },
+    label: { type: String, default: "", trim: true },
+    value: { type: String, default: "", trim: true },
+    colorHex: { type: String, default: "", trim: true },
+    priceMode: {
+      type: String,
+      enum: ["default", "direct", "compare"],
+      default: "default",
+    },
+    price: { type: Number, default: null, min: 0 },
+    comparePrice: { type: Number, default: null, min: 0 },
+  },
+  { _id: false },
+);
+
 const abandonedOrderItemSchema = new mongoose.Schema(
   {
     product: {
@@ -46,6 +68,10 @@ const abandonedOrderItemSchema = new mongoose.Schema(
       default: "",
       trim: true,
       maxlength: 160,
+    },
+    selectedVariants: {
+      type: [selectedVariantSchema],
+      default: [],
     },
   },
   { _id: false },

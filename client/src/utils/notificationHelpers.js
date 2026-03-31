@@ -1,7 +1,10 @@
+import { resolveUserRole } from "./dashboardAccess";
+
 const getNotificationUserRole = (user) =>
-  String(user?.userType || "user")
-    .trim()
-    .toLowerCase();
+  resolveUserRole({
+    ...user,
+    userType: user?.userType || user?.role || "user",
+  });
 
 const resolveRoleAwareTargetTab = (notification, user, fallbackTab = "") => {
   const type = String(notification?.type || "").trim();
@@ -53,6 +56,7 @@ export const formatNotificationTime = (value) => {
 };
 
 export const getNotificationTarget = (notification, user) => {
+  const role = getNotificationUserRole(user);
   const meta =
     notification?.meta &&
     typeof notification.meta === "object" &&
@@ -93,7 +97,11 @@ export const getNotificationTarget = (notification, user) => {
       return {
         ...meta,
         targetTab:
-          user?.userType === "vendor" ? "vendor-orders" : "my-orders",
+          role === "admin"
+            ? "order-list"
+            : role === "vendor"
+              ? "vendor-orders"
+              : "my-orders",
       };
     case "review_pending":
       return {
@@ -133,7 +141,7 @@ export const getNotificationTypeLabel = (notification) => {
 };
 
 export const getNotificationRoleCopy = (user) => {
-  const role = String(user?.userType || "user").trim().toLowerCase();
+  const role = getNotificationUserRole(user);
 
   if (role === "admin") {
     return {

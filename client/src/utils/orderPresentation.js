@@ -1,3 +1,5 @@
+import { getSelectedVariantSummaryLines } from "./productVariants";
+
 const isCashOnDeliveryValue = (value) =>
   /\bcod\b|cash[\s_-]*on[\s_-]*delivery/i.test(String(value || "").trim());
 
@@ -5,6 +7,9 @@ const toWholeNumber = (value) => {
   const parsed = parseInt(value, 10);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
 };
+
+const roundMoney = (value) =>
+  Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 const readDeliveryWindow = (source = {}) => {
   const estimatedMinDays = toWholeNumber(
@@ -177,4 +182,45 @@ export const getOrderCustomerProfile = (order = {}) => {
       customer?.accountType || (order?.user ? "Registered" : "Guest"),
     ).trim(),
   };
+};
+
+export const getOrderItemVariantLines = (item = {}) => {
+  const selectedLines = getSelectedVariantSummaryLines(item?.selectedVariants || []);
+  const variationLabel = String(item?.variationLabel || "").trim();
+
+  if (selectedLines.length) {
+    return selectedLines;
+  }
+
+  return variationLabel ? [variationLabel] : [];
+};
+
+export const getOrderItemMetaLine = (item = {}) =>
+  [item?.sku, item?.dimensions].filter(Boolean).join(" | ");
+
+export const getOrderItemUnitPrice = (item = {}) => {
+  const directPrice = Number(item?.price);
+  if (Number.isFinite(directPrice) && directPrice >= 0) {
+    return roundMoney(directPrice);
+  }
+
+  const product =
+    item?.product && typeof item.product === "object" ? item.product : {};
+  const fallbackPrice = Number(
+    item?.unitPrice ?? product?.salePrice ?? product?.price ?? 0,
+  );
+
+  return Number.isFinite(fallbackPrice) && fallbackPrice >= 0
+    ? roundMoney(fallbackPrice)
+    : 0;
+};
+
+export const getOrderItemLineTotal = (item = {}) => {
+  const explicitTotal = Number(item?.itemTotal);
+  if (Number.isFinite(explicitTotal) && explicitTotal >= 0) {
+    return roundMoney(explicitTotal);
+  }
+
+  const quantity = Math.max(1, Number(item?.quantity || 1));
+  return roundMoney(getOrderItemUnitPrice(item) * quantity);
 };

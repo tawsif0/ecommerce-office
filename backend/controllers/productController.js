@@ -7,6 +7,10 @@ const {
   normalizeImageString,
   isObjectIdLike,
 } = require("../utils/imageUtils");
+const {
+  normalizeVariantPrice,
+  normalizeVariantPriceMode,
+} = require("../utils/productVariants");
 const { uploadImageBuffer, deleteImage } = require("../config/cloudinary");
 const { isAdmin } = require("../utils/vendorUtils");
 const { clearResponseCacheByPrefix } = require("../middlewares/responseCache");
@@ -20,11 +24,41 @@ const PRODUCT_UPLOAD_OPTIONS = {
   resource_type: "image",
   transformation: [{ quality: "auto:best", fetch_format: "auto" }],
 };
+const PRODUCT_VIDEO_UPLOAD_OPTIONS = {
+  folder: "ecommerce/products/videos",
+  resource_type: "video",
+};
+const MAX_PRODUCT_VIDEO_SIZE_BYTES = 9 * 1024 * 1024;
 
 const uploadProductImage = async (file) => {
   if (!file?.buffer) return null;
   const result = await uploadImageBuffer(file.buffer, PRODUCT_UPLOAD_OPTIONS);
   return result;
+};
+
+const uploadProductVideo = async (file) => {
+  if (!file?.buffer) return null;
+  const result = await uploadImageBuffer(file.buffer, PRODUCT_VIDEO_UPLOAD_OPTIONS);
+  return result;
+};
+
+const getUploadedImageFiles = (files) => {
+  if (Array.isArray(files)) return files;
+  return Array.isArray(files?.images) ? files.images : [];
+};
+
+const getUploadedVideoFiles = (files) => {
+  const nextFiles = [];
+
+  if (Array.isArray(files?.videos)) {
+    nextFiles.push(...files.videos);
+  }
+
+  if (Array.isArray(files?.video) && files.video[0]) {
+    nextFiles.push(files.video[0]);
+  }
+
+  return nextFiles.slice(0, 3);
 };
 
 const isVendorUser = (user) =>
@@ -154,6 +188,72 @@ const normalizeRecurringInterval = (value, fallback = "monthly") => {
   return "monthly";
 };
 
+const normalizeProductVideoEntries = (value, fallback = []) => {
+  const parsedValue = parseJsonMaybe(value, fallback);
+  const source = Array.isArray(parsedValue) ? parsedValue : [];
+
+  return source
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return {
+          url: entry.trim(),
+          publicId: "",
+          mimeType: "",
+        };
+      }
+
+      return {
+        url: asString(entry?.url || entry?.src || entry?.video).trim(),
+        publicId: asString(entry?.publicId).trim(),
+        mimeType: asString(entry?.mimeType).trim(),
+      };
+    })
+    .filter((entry) => Boolean(entry.url));
+};
+
+const normalizeYouTubeVideoUrls = (value, fallback = []) => {
+  const parsedValue = parseJsonMaybe(value, fallback);
+  const source = Array.isArray(parsedValue)
+    ? parsedValue
+    : value === undefined || value === null || value === ""
+      ? fallback
+      : [parsedValue];
+
+  return [...new Set(source.map((entry) => asString(entry).trim()).filter(Boolean))];
+};
+
+const getExistingProductVideos = (product) => {
+  const normalizedVideos = normalizeProductVideoEntries(product?.videos, []);
+  if (normalizedVideos.length > 0) return normalizedVideos;
+
+  const legacyUrl = asString(product?.video).trim();
+  if (!legacyUrl) return [];
+
+  return [
+    {
+      url: legacyUrl,
+      publicId: asString(product?.videoPublicId).trim(),
+      mimeType: asString(product?.videoMimeType).trim(),
+    },
+  ];
+};
+
+const syncLegacyVideoFields = (payload, videos = [], youtubeVideoUrls = []) => {
+  const nextVideos = normalizeProductVideoEntries(videos, []);
+  const nextYoutubeVideoUrls = normalizeYouTubeVideoUrls(youtubeVideoUrls, []);
+  const primaryVideo = nextVideos[0] || null;
+
+  return {
+    ...payload,
+    videos: nextVideos,
+    video: primaryVideo?.url || "",
+    videoPublicId: primaryVideo?.publicId || "",
+    videoMimeType: primaryVideo?.mimeType || "",
+    youtubeVideoUrls: nextYoutubeVideoUrls,
+    youtubeVideoUrl: nextYoutubeVideoUrls[0] || "",
+  };
+};
+
 const normalizePublicationStatus = (value, fallback = "draft") => {
   const normalizedValue = String(value || "").trim().toLowerCase();
   if (["draft", "published"].includes(normalizedValue)) {
@@ -271,11 +371,8 @@ const normalizeVariantDefinitions = (value) => {
         ? rawPreset
         : "custom";
       const resolvedName =
-        preset === "size"
-          ? "Size"
-          : preset === "color"
-            ? "Color"
-            : asString(entry.name || entry.label || entry.typeName).trim();
+        asString(entry.name || entry.label || entry.typeName).trim() ||
+        (preset === "size" ? "Size" : preset === "color" ? "Color" : "");
 
       const optionsSource = Array.isArray(entry.options)
         ? entry.options
@@ -290,27 +387,40 @@ const normalizeVariantDefinitions = (value) => {
           if (typeof option === "string") {
             const next = option.trim();
             if (!next) return null;
-            return {
-              label: next,
-              value: next,
-              colorHex:
-                preset === "color" && /^#[0-9a-fA-F]{6}$/.test(next) ? next : "",
-            };
-          }
+          return {
+            label: next,
+            value: next,
+            colorHex:
+              preset === "color" && /^#[0-9a-fA-F]{6}$/.test(next) ? next : "",
+            priceMode: "default",
+            price: null,
+            comparePrice: null,
+          };
+        }
 
-          const label = asString(option.label || option.name || option.value).trim();
-          const valueText = asString(option.value || option.label || option.name).trim();
+        const label = asString(option.label || option.name || option.value).trim();
+        const valueText = asString(option.value || option.label || option.name).trim();
           const colorHex = asString(
             option.colorHex || option.hex || option.color || option.value,
           ).trim();
 
           if (!label && !valueText && !colorHex) return null;
 
+          const price = normalizeVariantPrice(option.price);
+          const comparePrice = normalizeVariantPrice(option.comparePrice);
+          const priceMode = normalizeVariantPriceMode(option.priceMode, {
+            price,
+            comparePrice,
+          });
+
           return {
             label: label || valueText || colorHex,
             value: valueText || label || colorHex,
             colorHex:
               preset === "color" && /^#[0-9a-fA-F]{6}$/.test(colorHex) ? colorHex : "",
+            priceMode,
+            price: priceMode === "default" ? null : price,
+            comparePrice: priceMode === "compare" ? comparePrice : null,
           };
         })
         .filter(Boolean);
@@ -651,7 +761,8 @@ exports.searchProducts = async (req, res) => {
 };
 
 exports.createProduct = async (req, res) => {
-  let uploadedPublicIds = [];
+  let uploadedImagePublicIds = [];
+  let uploadedVideoPublicIds = [];
   let createdImageIds = [];
   try {
     const title = asString(req.body.title).trim();
@@ -659,6 +770,11 @@ exports.createProduct = async (req, res) => {
     const category = req.body.category;
     const productType = asString(req.body.productType || "General").trim() || "General";
     const brand = asString(req.body.brand).trim();
+    const youtubeVideoUrls = normalizeYouTubeVideoUrls(
+      req.body.youtubeVideoUrls !== undefined
+        ? req.body.youtubeVideoUrls
+        : req.body.youtubeVideoUrl,
+    );
     const weight = asNonNegativeNumber(req.body.weight, 0);
     const dimensions = asString(req.body.dimensions).trim();
     const publicationStatus = normalizePublicationStatus(req.body.publicationStatus, "draft");
@@ -744,13 +860,32 @@ exports.createProduct = async (req, res) => {
       approvalStatus = "approved";
     }
 
+    const imageFiles = getUploadedImageFiles(req.files);
+    const videoFiles = getUploadedVideoFiles(req.files);
+
+    if (videoFiles.length > 3) {
+      return res.status(400).json({
+        success: false,
+        message: "You can upload up to 3 product videos",
+      });
+    }
+
+    for (const videoFile of videoFiles) {
+      if (videoFile?.size > MAX_PRODUCT_VIDEO_SIZE_BYTES) {
+        return res.status(400).json({
+          success: false,
+          message: "Each product video must be 9 MB or smaller",
+        });
+      }
+    }
+
     // Create proper image URLs
     const images = [];
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
+    if (imageFiles.length > 0) {
+      for (const file of imageFiles) {
         const uploaded = await uploadProductImage(file);
         if (!uploaded?.secure_url) continue;
-        uploadedPublicIds.push(uploaded.public_id);
+        uploadedImagePublicIds.push(uploaded.public_id);
         const imageDoc = await ProductImage.create({
           data: uploaded.secure_url,
           publicId: uploaded.public_id,
@@ -766,7 +901,24 @@ exports.createProduct = async (req, res) => {
       }
     }
 
-    const product = await Product.create({
+    const uploadedVideos = [];
+    for (const videoFile of videoFiles) {
+      const uploadedVideo = await uploadProductVideo(videoFile);
+      if (!uploadedVideo?.secure_url) continue;
+      if (uploadedVideo?.public_id) {
+        uploadedVideoPublicIds.push(uploadedVideo.public_id);
+      }
+      uploadedVideos.push({
+        url: uploadedVideo.secure_url,
+        publicId: uploadedVideo.public_id || "",
+        mimeType: uploadedVideo?.format
+          ? `video/${uploadedVideo.format}`
+          : videoFile?.mimetype || "",
+      });
+    }
+
+    const productPayload = syncLegacyVideoFields(
+      {
       vendor: vendorId,
       approvalStatus,
       rejectionReason: "",
@@ -807,7 +959,12 @@ exports.createProduct = async (req, res) => {
       deliveryMaxDays: marketplacePayload.deliveryMaxDays,
       images,
       isActive: asBoolean(req.body.isActive, true),
-    });
+      },
+      uploadedVideos,
+      youtubeVideoUrls,
+    );
+
+    const product = await Product.create(productPayload);
 
     await product.populate("category", "name");
     await product.populate("vendor", "storeName slug logo status");
@@ -828,8 +985,13 @@ exports.createProduct = async (req, res) => {
       product,
     });
   } catch (error) {
-    if (uploadedPublicIds.length > 0) {
-      await Promise.all(uploadedPublicIds.map((id) => deleteImage(id)));
+    if (uploadedImagePublicIds.length > 0) {
+      await Promise.all(uploadedImagePublicIds.map((id) => deleteImage(id)));
+    }
+    if (uploadedVideoPublicIds.length > 0) {
+      await Promise.all(
+        uploadedVideoPublicIds.map((id) => deleteImage(id, { resource_type: "video" })),
+      );
     }
     if (createdImageIds.length > 0) {
       await ProductImage.deleteMany({ _id: { $in: createdImageIds } });
@@ -916,7 +1078,7 @@ exports.getActiveProducts = async (req, res) => {
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .select(
-        "title price salePrice priceType showStockToPublic images category brand description colors dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
+        "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -951,7 +1113,7 @@ exports.getProductsByType = async (req, res) => {
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .select(
-        "title price salePrice priceType showStockToPublic images category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
+        "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -1001,7 +1163,7 @@ exports.getProduct = async (req, res) => {
       .populate({
         path: "groupedProducts",
         select:
-          "title price salePrice priceType showStockToPublic images category brand marketplaceType stock isActive publicationStatus approvalStatus vendor variantDefinitions",
+          "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand marketplaceType stock isActive publicationStatus approvalStatus vendor variantDefinitions",
         populate: [
           { path: "category", select: "name" },
           { path: "vendor", select: PUBLIC_VENDOR_POPULATE_FIELDS },
@@ -1070,7 +1232,8 @@ exports.getProduct = async (req, res) => {
 };
 
 exports.updateProduct = async (req, res) => {
-  let uploadedPublicIds = [];
+  let uploadedImagePublicIds = [];
+  let uploadedVideoPublicIds = [];
   let createdImageIds = [];
   try {
     const product = await Product.findById(req.params.id);
@@ -1134,6 +1297,7 @@ exports.updateProduct = async (req, res) => {
       req.body.publicationStatus,
       product.publicationStatus || "draft",
     );
+    const shouldRemoveVideo = asBoolean(req.body.removeCurrentVideo, false);
     const isDraft = publicationStatus === "draft";
 
     if (!isDraft && marketplaceErrors.length > 0) {
@@ -1228,6 +1392,9 @@ exports.updateProduct = async (req, res) => {
     if (req.body.mainImageFirst !== undefined) {
       delete req.body.mainImageFirst;
     }
+    if (req.body.removeCurrentVideo !== undefined) {
+      delete req.body.removeCurrentVideo;
+    }
 
     let existingImages = null;
     if (req.body.existingImages) {
@@ -1242,12 +1409,48 @@ exports.updateProduct = async (req, res) => {
       updatePayload.images = existingImages;
     }
 
-    if (req.files && req.files.length > 0) {
+    const imageFiles = getUploadedImageFiles(req.files);
+    const videoFiles = getUploadedVideoFiles(req.files);
+    const currentVideos = getExistingProductVideos(product);
+    const youtubeVideoUrls = normalizeYouTubeVideoUrls(
+      req.body.youtubeVideoUrls !== undefined
+        ? req.body.youtubeVideoUrls
+        : req.body.youtubeVideoUrl !== undefined
+          ? req.body.youtubeVideoUrl
+          : product.youtubeVideoUrls?.length
+            ? product.youtubeVideoUrls
+            : product.youtubeVideoUrl || "",
+    );
+
+    let existingVideos = currentVideos;
+    if (req.body.existingVideos !== undefined) {
+      existingVideos = normalizeProductVideoEntries(req.body.existingVideos, []);
+    } else if (shouldRemoveVideo) {
+      existingVideos = [];
+    }
+
+    if (videoFiles.length + existingVideos.length > 3) {
+      return res.status(400).json({
+        success: false,
+        message: "You can keep up to 3 product videos",
+      });
+    }
+
+    for (const videoFile of videoFiles) {
+      if (videoFile?.size > MAX_PRODUCT_VIDEO_SIZE_BYTES) {
+        return res.status(400).json({
+          success: false,
+          message: "Each product video must be 9 MB or smaller",
+        });
+      }
+    }
+
+    if (imageFiles.length > 0) {
       const newImageIds = [];
-      for (const file of req.files) {
+      for (const file of imageFiles) {
         const uploaded = await uploadProductImage(file);
         if (!uploaded?.secure_url) continue;
-        uploadedPublicIds.push(uploaded.public_id);
+        uploadedImagePublicIds.push(uploaded.public_id);
         const imageDoc = await ProductImage.create({
           data: uploaded.secure_url,
           publicId: uploaded.public_id,
@@ -1272,6 +1475,39 @@ exports.updateProduct = async (req, res) => {
         updatePayload.images = [...baseImages, ...newImageIds].slice(0, 10);
       }
     }
+
+    const nextVideos = [...existingVideos];
+
+    for (const videoFile of videoFiles) {
+      const uploadedVideo = await uploadProductVideo(videoFile);
+      if (!uploadedVideo?.secure_url) continue;
+      if (uploadedVideo?.public_id) {
+        uploadedVideoPublicIds.push(uploadedVideo.public_id);
+      }
+      nextVideos.push({
+        url: uploadedVideo.secure_url,
+        publicId: uploadedVideo.public_id || "",
+        mimeType: uploadedVideo?.format
+          ? `video/${uploadedVideo.format}`
+          : videoFile.mimetype || "",
+      });
+    }
+
+    const removedVideos = currentVideos.filter(
+      (currentVideo) =>
+        currentVideo.publicId &&
+        !nextVideos.some((nextVideo) => nextVideo.publicId === currentVideo.publicId),
+    );
+
+    if (removedVideos.length > 0) {
+      await Promise.all(
+        removedVideos.map((videoEntry) =>
+          deleteImage(videoEntry.publicId, { resource_type: "video" }),
+        ),
+      );
+    }
+
+    Object.assign(updatePayload, syncLegacyVideoFields({}, nextVideos, youtubeVideoUrls));
 
     // Remove deleted images from ProductImage collection
     if (updatePayload.images) {
@@ -1319,8 +1555,13 @@ exports.updateProduct = async (req, res) => {
       product: productObj,
     });
   } catch (error) {
-    if (uploadedPublicIds.length > 0) {
-      await Promise.all(uploadedPublicIds.map((id) => deleteImage(id)));
+    if (uploadedImagePublicIds.length > 0) {
+      await Promise.all(uploadedImagePublicIds.map((id) => deleteImage(id)));
+    }
+    if (uploadedVideoPublicIds.length > 0) {
+      await Promise.all(
+        uploadedVideoPublicIds.map((id) => deleteImage(id, { resource_type: "video" })),
+      );
     }
     if (createdImageIds.length > 0) {
       await ProductImage.deleteMany({ _id: { $in: createdImageIds } });
@@ -1394,6 +1635,9 @@ exports.deleteProduct = async (req, res) => {
         .lean();
       await Promise.all(imageDocs.map((doc) => deleteImage(doc.publicId)));
       await ProductImage.deleteMany({ _id: { $in: imageIds } });
+    }
+    if (product.videoPublicId) {
+      await deleteImage(product.videoPublicId, { resource_type: "video" });
     }
     invalidatePublicProductCache();
 
@@ -1578,6 +1822,13 @@ exports.duplicateProduct = async (req, res) => {
       images: sourceObj.images || [],
       isActive: sourceObj.isActive !== false,
       publicationStatus: sourceObj.publicationStatus || "draft",
+      ...syncLegacyVideoFields(
+        {},
+        getExistingProductVideos(sourceObj),
+        sourceObj.youtubeVideoUrls?.length
+          ? sourceObj.youtubeVideoUrls
+          : sourceObj.youtubeVideoUrl || "",
+      ),
     });
 
     await duplicated.populate("category", "name");
@@ -1714,7 +1965,7 @@ exports.getSearchSuggestions = async (req, res) => {
           .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
           .limit(parseInt(limit))
           .select(
-            "title images price salePrice priceType showStockToPublic category brand productType marketplaceType vendor _id",
+            "title images videos video youtubeVideoUrls youtubeVideoUrl price salePrice priceType showStockToPublic category brand productType marketplaceType vendor _id",
           )
           .sort({ createdAt: -1 })
           .lean();

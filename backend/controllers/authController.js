@@ -245,6 +245,40 @@ const DEFAULT_STOREFRONT_TRUST_BULLETS = [
   "Product stock only shows publicly when enabled",
   "Orders and purchases already sync inventory",
 ];
+const DEFAULT_ABOUT_STORY_TITLE = "Our Story";
+const DEFAULT_ABOUT_STORY_CONTENT =
+  "<p>E-Commerce was shaped to close the gap between a basic online catalog and a serious ecommerce operation with stronger discovery, cleaner checkout, and tighter inventory-aware storefront control.</p><p>The platform brings products, banners, categories, support, compare flows, wishlist behavior, and branded landing content into one polished office ecommerce system.</p><p>Our mission is simple: give shoppers a smoother buying journey while giving operators stronger control over stock, pricing, orders, and storefront presentation.</p>";
+const DEFAULT_ABOUT_CARDS = [
+  {
+    icon: "truck",
+    iconColor: "#ffffff",
+    backgroundColor: "#2563eb",
+    title: "Fast Shipping",
+    description: "<p>Quick delivery windows and a smoother order handoff.</p>",
+  },
+  {
+    icon: "shield",
+    iconColor: "#ffffff",
+    backgroundColor: "#16a34a",
+    title: "Secure Payment",
+    description: "<p>Protected checkout flow with clearer payment handling.</p>",
+  },
+  {
+    icon: "refresh",
+    iconColor: "#ffffff",
+    backgroundColor: "#7c3aed",
+    title: "Easy Returns",
+    description: "<p>Clear policies and a more reliable post-purchase flow.</p>",
+  },
+  {
+    icon: "package",
+    iconColor: "#ffffff",
+    backgroundColor: "#d97706",
+    title: "Quality Products",
+    description:
+      "<p>Catalog, stock, and order controls built for dependable selling.</p>",
+  },
+];
 
 const normalizeStorefrontNavLinks = (value) => {
   if (!Array.isArray(value)) {
@@ -383,6 +417,76 @@ const normalizeStorefrontSettings = (value = {}) => {
       storefront.footerCaption || "Built for Bangladesh marketplace operations",
     ).trim(),
     navQuickLinks: normalizeStorefrontNavLinks(storefront.navQuickLinks),
+  };
+};
+
+const normalizeAboutCards = (value = []) => {
+  const cards = Array.isArray(value) ? value : [];
+
+  return cards
+    .map((card, index) => {
+      const fallback =
+        DEFAULT_ABOUT_CARDS[index] ||
+        DEFAULT_ABOUT_CARDS[DEFAULT_ABOUT_CARDS.length - 1];
+      const icon = String(card?.icon || card?.iconKey || fallback.icon)
+        .trim()
+        .toLowerCase();
+      const title = String(card?.title || fallback.title).trim();
+      const description = String(card?.description || fallback.description).trim();
+      const iconColor =
+        String(card?.iconColor || fallback.iconColor).trim() || fallback.iconColor;
+      const backgroundColor =
+        String(
+          card?.backgroundColor ||
+            fallback.backgroundColor ||
+            (String(card?.color || "").toLowerCase().includes("blue")
+              ? "#2563eb"
+              : String(card?.color || "").toLowerCase().includes("green")
+                ? "#16a34a"
+                : String(card?.color || "").toLowerCase().includes("purple")
+                  ? "#7c3aed"
+                  : String(card?.color || "").toLowerCase().includes("amber") ||
+                      String(card?.color || "").toLowerCase().includes("yellow")
+                    ? "#d97706"
+                    : "#111827"),
+        ).trim() || fallback.backgroundColor;
+
+      if (!title && !description) {
+        return null;
+      }
+
+      return {
+        icon: [
+          "truck",
+          "shield",
+          "refresh",
+          "package",
+          "message",
+          "clock",
+          "heart",
+          "star",
+        ].includes(icon)
+          ? icon
+          : fallback.icon,
+        iconColor,
+        backgroundColor,
+        title: title || fallback.title,
+        description: description || fallback.description,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 4);
+};
+
+const normalizeAboutSettings = (value = {}) => {
+  const about = isPlainObject(value) ? value : {};
+
+  return {
+    storyTitle:
+      String(about.storyTitle || "").trim() || DEFAULT_ABOUT_STORY_TITLE,
+    storyContent:
+      String(about.storyContent || "").trim() || DEFAULT_ABOUT_STORY_CONTENT,
+    cards: normalizeAboutCards(about.cards || DEFAULT_ABOUT_CARDS),
   };
 };
 
@@ -530,6 +634,7 @@ const buildPublicSettingsPayload = (settings = {}, { isInitialSetup = false } = 
   const integrations = settings?.integrations || {};
   const website = settings?.website || {};
   const invoice = settings?.invoice || {};
+  const about = settings?.about || {};
   const courier = settings?.courier || {};
   const locations = settings?.locations || {};
   const storefront = settings?.storefront || {};
@@ -601,6 +706,7 @@ const buildPublicSettingsPayload = (settings = {}, { isInitialSetup = false } = 
       address: String(invoice.address || "").trim(),
       footerText: String(invoice.footerText || "").trim(),
     },
+    about: normalizeAboutSettings(about),
     courier: {
       providerName: String(courier.providerName || "").trim(),
       apiBaseUrl: String(courier.apiBaseUrl || "").trim(),
@@ -1595,6 +1701,9 @@ exports.updateSettings = async (req, res) => {
       policies: mergeSettingsSection(currentSettings, incoming, "policies"),
       integrations: mergeSettingsSection(currentSettings, incoming, "integrations"),
       invoice: mergeSettingsSection(currentSettings, incoming, "invoice"),
+      about: normalizeAboutSettings(
+        mergeSettingsSection(currentSettings, incoming, "about"),
+      ),
       courier: mergeSettingsSection(currentSettings, incoming, "courier"),
       locations: mergeSettingsSection(currentSettings, incoming, "locations"),
       storefront: normalizeStorefrontSettings({

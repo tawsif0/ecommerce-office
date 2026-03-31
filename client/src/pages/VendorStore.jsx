@@ -14,7 +14,9 @@ import {
 } from "react-icons/fi";
 import { FaFacebookF, FaTwitter, FaWhatsapp, FaPaperPlane } from "react-icons/fa";
 import { useAuth } from "../hooks/useAuth";
+import usePublicSettings from "../hooks/usePublicSettings";
 import StorefrontProductCard from "../Home/components/StorefrontProductCard";
+import { formatDocumentTitle } from "../utils/publicSettings";
 import { hasHtmlContent, stripHtml } from "../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
@@ -53,6 +55,7 @@ const VendorStore = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
+  const { settings } = usePublicSettings();
 
   const [loading, setLoading] = useState(true);
   const [vendor, setVendor] = useState(null);
@@ -141,27 +144,29 @@ const VendorStore = () => {
     fetchReviews();
   }, [fetchReviews, fetchStore]);
 
-  useEffect(() => {
-    if (!vendor) return undefined;
+    useEffect(() => {
+      if (!vendor) return undefined;
 
-    const previousTitle = document.title;
-    const descriptionTag = document.querySelector('meta[name="description"]');
-    const previousDescription = descriptionTag?.getAttribute("content");
-
-    document.title =
-      String(vendor.seoTitle || "").trim() || `${vendor.storeName} | Vendor Store`;
+      const descriptionTag = document.querySelector('meta[name="description"]');
+      const previousDescription = descriptionTag?.getAttribute("content");
+      const timer = window.setTimeout(() => {
+        document.title = formatDocumentTitle(
+          settings,
+          String(vendor.seoTitle || vendor.storeName || "Vendor Store").trim(),
+        );
+      }, 0);
 
     if (descriptionTag && String(vendor.seoDescription || "").trim()) {
       descriptionTag.setAttribute("content", String(vendor.seoDescription).trim());
     }
 
-    return () => {
-      document.title = previousTitle;
-      if (descriptionTag && previousDescription !== null) {
-        descriptionTag.setAttribute("content", previousDescription);
-      }
-    };
-  }, [vendor]);
+      return () => {
+        window.clearTimeout(timer);
+        if (descriptionTag && previousDescription !== null) {
+          descriptionTag.setAttribute("content", previousDescription);
+        }
+      };
+    }, [settings, vendor]);
 
   const submitReview = async (event) => {
     event.preventDefault();

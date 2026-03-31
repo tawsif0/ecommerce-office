@@ -7,6 +7,19 @@ import { motion } from "framer-motion";
 import ConfirmModal from "../../components/ConfirmModal";
 import RichTextEditor from "../../components/RichTextEditor";
 import SearchableSelect from "../../components/SearchableSelect";
+import {
+  isAllowedProductVideoType,
+  MAX_PRODUCT_VIDEO_UPLOADS,
+  MAX_PRODUCT_VIDEO_SIZE_BYTES,
+  normalizeProductVideoEntries,
+  normalizeProductYouTubeUrls,
+} from "../../utils/productMedia";
+import {
+  getReadableVariantOptionLabel,
+  normalizeProductVariantDefinitions,
+  normalizeVariantPrice,
+  normalizeVariantPricing,
+} from "../../utils/productVariants";
 import { stripHtml } from "../../utils/richText";
 import {
   FiEdit2,
@@ -28,6 +41,11 @@ import {
 
 function ProductModify({ initialMode = "list" }) {
   const baseUrl = import.meta.env.VITE_API_URL;
+  const VARIANT_PRICE_MODE_OPTIONS = [
+    { value: "default", label: "Use Product Price" },
+    { value: "direct", label: "Direct Price" },
+    { value: "compare", label: "Compare Price" },
+  ];
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -41,6 +59,10 @@ function ProductModify({ initialMode = "list" }) {
   const [mainImagePreview, setMainImagePreview] = useState("");
   const [galleryFiles, setGalleryFiles] = useState([]);
   const [galleryPreviews, setGalleryPreviews] = useState([]);
+  const [videoFiles, setVideoFiles] = useState([]);
+  const [videoPreviews, setVideoPreviews] = useState([]);
+  const [currentVideos, setCurrentVideos] = useState([]);
+  const [youtubeVideoUrls, setYoutubeVideoUrls] = useState([""]);
   const [currentMainImage, setCurrentMainImage] = useState("");
   const [currentMainImageId, setCurrentMainImageId] = useState(null);
   const [currentGalleryImages, setCurrentGalleryImages] = useState([]);
@@ -124,14 +146,31 @@ function ProductModify({ initialMode = "list" }) {
 
   const createVariantOption = (preset = "custom") =>
     preset === "color"
-      ? { label: "Black", value: "#000000", colorHex: "#000000" }
-      : { label: "", value: "", colorHex: "" };
+      ? {
+          label: "Black",
+          value: "#000000",
+          colorHex: "#000000",
+          priceMode: "default",
+          price: "",
+          comparePrice: "",
+        }
+      : {
+          label: "",
+          value: "",
+          colorHex: "",
+          priceMode: "default",
+          price: "",
+          comparePrice: "",
+        };
 
   const createVariantDefinition = (preset = "size") => ({
     preset,
     name: preset === "size" ? "Size" : preset === "color" ? "Color" : "",
     options: [createVariantOption(preset)],
   });
+
+  const getDefaultVariantTypeName = (preset = "custom") =>
+    preset === "size" ? "Size" : preset === "color" ? "Color" : "";
 
   const normalizeVariantDefinitionsForForm = (definitions = [], fallbackColors = []) => {
     if (Array.isArray(definitions) && definitions.length > 0) {
@@ -145,6 +184,13 @@ function ProductModify({ initialMode = "list" }) {
               label: String(option?.label || option?.value || option?.colorHex || "").trim(),
               value: String(option?.value || option?.label || option?.colorHex || "").trim(),
               colorHex: String(option?.colorHex || "").trim(),
+              priceMode: String(option?.priceMode || "default").trim() || "default",
+              price:
+                option?.price === null || option?.price === undefined ? "" : String(option.price),
+              comparePrice:
+                option?.comparePrice === null || option?.comparePrice === undefined
+                  ? ""
+                  : String(option.comparePrice),
             }))
           : [createVariantOption(String(definition?.preset || "custom"))],
       }));
@@ -159,6 +205,9 @@ function ProductModify({ initialMode = "list" }) {
             label: String(color || "").trim(),
             value: String(color || "").trim(),
             colorHex: String(color || "").trim(),
+            priceMode: "default",
+            price: "",
+            comparePrice: "",
           })),
         },
       ];
@@ -175,12 +224,8 @@ function ProductModify({ initialMode = "list" }) {
         )
           ? String(definition.preset || "custom")
           : "custom";
-        const name =
-          preset === "size"
-            ? "Size"
-            : preset === "color"
-              ? "Color"
-              : String(definition?.name || "").trim();
+        const defaultName = getDefaultVariantTypeName(preset);
+        const name = String(definition?.name || "").trim() || defaultName;
         const options = Array.isArray(definition?.options)
           ? definition.options
               .map((option) => {
@@ -202,6 +247,10 @@ function ProductModify({ initialMode = "list" }) {
                     label: label || resolvedHex,
                     value: value || resolvedHex,
                     colorHex: resolvedHex,
+                    priceMode:
+                      String(option?.priceMode || "default").trim() || "default",
+                    price: normalizeVariantPrice(option?.price),
+                    comparePrice: normalizeVariantPrice(option?.comparePrice),
                   };
                 }
 
@@ -210,6 +259,10 @@ function ProductModify({ initialMode = "list" }) {
                   label: label || value,
                   value: value || label,
                   colorHex: "",
+                  priceMode:
+                    String(option?.priceMode || "default").trim() || "default",
+                  price: normalizeVariantPrice(option?.price),
+                  comparePrice: normalizeVariantPrice(option?.comparePrice),
                 };
               })
               .filter(Boolean)
@@ -275,6 +328,122 @@ function ProductModify({ initialMode = "list" }) {
     }
     return `${getEffectiveProductPrice(product).toFixed(2)} Tk`;
   };
+
+  const getBaseProductPricingSummary = (product) => {
+    const priceType = String(product?.priceType || "single").trim().toLowerCase();
+    if (priceType === "tba") {
+      return {
+        currentPrice: null,
+        previousPrice: null,
+        isTba: true,
+      };
+    }
+
+    const currentPrice = getEffectiveProductPrice(product);
+    const oldPrice = Number(product?.price);
+    return {
+      currentPrice,
+      previousPrice:
+        priceType === "best" && Number.isFinite(oldPrice) && oldPrice > currentPrice
+          ? oldPrice
+          : null,
+      isTba: false,
+    };
+  };
+
+  const renderBaseProductPriceBadge = (pricing) => {
+    if (!pricing) return null;
+
+    if (pricing.isTba) {
+      return (
+        <span className="inline-flex items-center rounded-full bg-black px-2.5 py-1 text-xs font-semibold text-white">
+          TBA
+        </span>
+      );
+    }
+
+    if (pricing.previousPrice !== null && pricing.currentPrice !== null) {
+      return (
+        <span className="inline-flex flex-wrap items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs">
+          <span className="text-gray-400 line-through">
+            {pricing.previousPrice.toFixed(2)} Tk
+          </span>
+          <span className="font-semibold text-emerald-800">
+            {pricing.currentPrice.toFixed(2)} Tk
+          </span>
+        </span>
+      );
+    }
+
+    if (pricing.currentPrice !== null) {
+      return (
+        <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-800">
+          {pricing.currentPrice.toFixed(2)} Tk
+        </span>
+      );
+    }
+
+    return null;
+  };
+
+  const getVariantPricingGroups = (product) =>
+    normalizeProductVariantDefinitions(product)
+      .map((definition) => {
+        const basePricing = getBaseProductPricingSummary(product);
+        const pricedOptions = (definition.options || [])
+          .map((option) => {
+            const pricing = normalizeVariantPricing(option);
+            const usesProductPrice = pricing.price === null;
+            const baseCurrentPrice =
+              basePricing.currentPrice === null ? null : Number(basePricing.currentPrice);
+            const basePreviousPrice =
+              basePricing.previousPrice === null ? null : Number(basePricing.previousPrice);
+            const currentPrice = usesProductPrice
+              ? baseCurrentPrice
+              : baseCurrentPrice === null
+                ? null
+                : baseCurrentPrice + Number(pricing.price || 0);
+            const previousPrice = usesProductPrice
+              ? basePreviousPrice
+              : pricing.priceMode === "compare" &&
+                  pricing.comparePrice !== null &&
+                  pricing.comparePrice > pricing.price &&
+                  baseCurrentPrice !== null
+                ? Number(basePreviousPrice ?? baseCurrentPrice) +
+                  Number(pricing.comparePrice || 0)
+                : basePreviousPrice !== null && currentPrice !== null
+                  ? basePreviousPrice + Number(pricing.price || 0)
+                  : null;
+
+            if (currentPrice === null && !basePricing.isTba) return null;
+
+            return {
+              label: getReadableVariantOptionLabel({
+                ...option,
+                preset: definition.preset,
+              }),
+              colorHex:
+                definition.preset === "color"
+                  ? String(option?.colorHex || option?.value || "").trim().toLowerCase()
+                  : "",
+              currentPrice,
+              previousPrice,
+              isTba: !usesProductPrice && currentPrice === null,
+              usesProductPrice,
+              showPrice: !usesProductPrice,
+            };
+          })
+          .filter(Boolean);
+
+        if (!pricedOptions.length) return null;
+
+        return {
+          name: definition.name,
+          preset: definition.preset,
+          options: pricedOptions,
+        };
+      })
+      .filter(Boolean);
 
   const getFullImageUrl = (imagePath) => {
     if (!imagePath) return null;
@@ -457,6 +626,15 @@ function ProductModify({ initialMode = "list" }) {
     };
   }, [initialMode]);
 
+  useEffect(
+    () => () => {
+      videoPreviews.forEach((preview) => {
+        if (preview) URL.revokeObjectURL(preview);
+      });
+    },
+    [videoPreviews],
+  );
+
   const handleDelete = (product) => {
     setDeleteConfirm(product);
   };
@@ -558,6 +736,13 @@ function ProductModify({ initialMode = "list" }) {
     setMainImagePreview("");
     setGalleryFiles([]);
     setGalleryPreviews([]);
+    videoPreviews.forEach((preview) => {
+      if (preview) URL.revokeObjectURL(preview);
+    });
+    setVideoFiles([]);
+    setVideoPreviews([]);
+    setCurrentVideos([]);
+    setYoutubeVideoUrls([""]);
     setCurrentMainImage("");
     setCurrentMainImageId(null);
     setCurrentGalleryImages([]);
@@ -707,6 +892,18 @@ function ProductModify({ initialMode = "list" }) {
       setMainImagePreview("");
       setGalleryFiles([]);
       setGalleryPreviews([]);
+      videoPreviews.forEach((preview) => {
+        if (preview) URL.revokeObjectURL(preview);
+      });
+      setVideoFiles([]);
+      setVideoPreviews([]);
+      setCurrentVideos(normalizeProductVideoEntries(productData));
+      setYoutubeVideoUrls(
+        (() => {
+          const nextUrls = normalizeProductYouTubeUrls(productData);
+          return nextUrls.length > 0 ? nextUrls : [""];
+        })(),
+      );
 
       setEditingId(id);
       setShowForm(true);
@@ -812,6 +1009,80 @@ function ProductModify({ initialMode = "list" }) {
       setGalleryFiles(newFiles);
       setGalleryPreviews(newPreviews);
     }
+  };
+
+  const handleVideoChange = (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (!selectedFiles.length) return;
+
+    const remainingSlots = Math.max(
+      0,
+      MAX_PRODUCT_VIDEO_UPLOADS - currentVideos.length - videoFiles.length,
+    );
+    if (remainingSlots <= 0) {
+      toast.error(`You can keep up to ${MAX_PRODUCT_VIDEO_UPLOADS} videos.`);
+      e.target.value = "";
+      return;
+    }
+
+    const nextFiles = [];
+    const nextPreviews = [];
+
+    selectedFiles.slice(0, remainingSlots).forEach((file) => {
+      if (!isAllowedProductVideoType(file)) {
+        toast.error("Only MP4, WebM, OGG, or MOV videos are allowed.");
+        return;
+      }
+
+      if (file.size > MAX_PRODUCT_VIDEO_SIZE_BYTES) {
+        toast.error("Each product video must be 9 MB or smaller.");
+        return;
+      }
+
+      nextFiles.push(file);
+      nextPreviews.push(URL.createObjectURL(file));
+    });
+
+    if (nextFiles.length > 0) {
+      setVideoFiles((prev) => [...prev, ...nextFiles].slice(0, MAX_PRODUCT_VIDEO_UPLOADS));
+      setVideoPreviews((prev) => [
+        ...prev,
+        ...nextPreviews,
+      ].slice(0, MAX_PRODUCT_VIDEO_UPLOADS));
+    }
+
+    e.target.value = "";
+  };
+
+  const removeVideo = (index, isCurrent = false) => {
+    if (isCurrent) {
+      setCurrentVideos((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+      return;
+    }
+
+    if (videoPreviews[index]) {
+      URL.revokeObjectURL(videoPreviews[index]);
+    }
+
+    setVideoFiles((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+    setVideoPreviews((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+  };
+
+  const handleYoutubeUrlChange = (index, value) => {
+    setYoutubeVideoUrls((prev) =>
+      prev.map((entry, currentIndex) => (currentIndex === index ? value : entry)),
+    );
+  };
+
+  const addYoutubeField = () => {
+    setYoutubeVideoUrls((prev) => [...prev, ""]);
+  };
+
+  const removeYoutubeField = (index) => {
+    setYoutubeVideoUrls((prev) => {
+      if (prev.length === 1) return [""];
+      return prev.filter((_, currentIndex) => currentIndex !== index);
+    });
   };
 
   const validateField = (name, value) => {
@@ -1077,12 +1348,19 @@ function ProductModify({ initialMode = "list" }) {
         if (currentIndex !== index) return definition;
 
         if (field === "preset") {
+          const previousPreset = String(definition?.preset || "custom");
           const preset = ["size", "color", "custom"].includes(String(value || "custom"))
             ? String(value || "custom")
             : "custom";
+          const previousDefaultName = getDefaultVariantTypeName(previousPreset);
+          const nextDefaultName = getDefaultVariantTypeName(preset);
+          const currentName = String(definition?.name || "").trim();
           return {
             preset,
-            name: preset === "size" ? "Size" : preset === "color" ? "Color" : "",
+            name:
+              !currentName || currentName === previousDefaultName
+                ? nextDefaultName
+                : currentName,
             options:
               Array.isArray(definition.options) && definition.options.length > 0
                 ? definition.options.map((option) =>
@@ -1098,11 +1376,29 @@ function ProductModify({ initialMode = "list" }) {
                             /^#[0-9a-fA-F]{6}$/.test(String(option.colorHex))
                               ? String(option.colorHex).toLowerCase()
                               : "#000000",
+                          priceMode: String(option?.priceMode || "default").trim() || "default",
+                          price:
+                            option?.price === null || option?.price === undefined
+                              ? ""
+                              : String(option.price),
+                          comparePrice:
+                            option?.comparePrice === null || option?.comparePrice === undefined
+                              ? ""
+                              : String(option.comparePrice),
                         }
                       : {
                           label: option?.label || option?.value || "",
                           value: option?.value || option?.label || "",
                           colorHex: "",
+                          priceMode: String(option?.priceMode || "default").trim() || "default",
+                          price:
+                            option?.price === null || option?.price === undefined
+                              ? ""
+                              : String(option.price),
+                          comparePrice:
+                            option?.comparePrice === null || option?.comparePrice === undefined
+                              ? ""
+                              : String(option.comparePrice),
                         },
                   )
                 : [createVariantOption(preset)],
@@ -1139,13 +1435,49 @@ function ProductModify({ initialMode = "list" }) {
           if (currentOptionIndex !== optionIndex) return option;
 
           if (definition.preset === "color" && field === "colorHex") {
-            const normalizedColor = String(value || "").trim().toLowerCase();
+            const normalizedColor = normalizeHexColor(value);
             return {
               ...option,
               colorHex: normalizedColor,
               value: normalizedColor,
-              label:
-                String(option?.label || "").trim() || normalizedColor,
+              label: normalizedColor,
+            };
+          }
+
+          if (field === "priceMode") {
+            return {
+              ...option,
+              priceMode: value,
+              price: value === "default" ? "" : option?.price ?? "",
+              comparePrice:
+                value === "compare"
+                  ? option?.comparePrice ?? ""
+                  : "",
+            };
+          }
+
+          if (field === "price" || field === "comparePrice") {
+            return {
+              ...option,
+              [field]: value,
+            };
+          }
+
+          if (definition.preset === "color" && field === "label") {
+            const normalizedColor = normalizeHexColor(value);
+            return {
+              ...option,
+              label: value,
+              value: normalizedColor || option?.value || "",
+              colorHex: normalizedColor || option?.colorHex || "",
+            };
+          }
+
+          if (field === "label" && definition.preset !== "color") {
+            return {
+              ...option,
+              label: value,
+              value,
             };
           }
 
@@ -1319,6 +1651,10 @@ function ProductModify({ initialMode = "list" }) {
       formData.append("weight", form.weight || "0");
       formData.append("dimensions", form.dimensions.trim());
       formData.append(
+        "youtubeVideoUrls",
+        JSON.stringify(youtubeVideoUrls.map((value) => value.trim()).filter(Boolean)),
+      );
+      formData.append(
         "variantDefinitions",
         JSON.stringify(getNormalizedVariantDefinitions()),
       );
@@ -1357,6 +1693,7 @@ function ProductModify({ initialMode = "list" }) {
         existingImages.push(currentGalleryImageIds[idx] || img);
       });
       formData.append("existingImages", JSON.stringify(existingImages));
+      formData.append("existingVideos", JSON.stringify(currentVideos));
 
       if (mainImageFile) {
         formData.append("images", mainImageFile);
@@ -1364,6 +1701,9 @@ function ProductModify({ initialMode = "list" }) {
       }
       galleryFiles.forEach((image) => {
         formData.append("images", image);
+      });
+      videoFiles.forEach((video) => {
+        formData.append("videos", video);
       });
 
       if (editingId) {
@@ -2205,6 +2545,129 @@ function ProductModify({ initialMode = "list" }) {
                       </div>
                     )}
                   </div>
+
+                  <div className="mt-4 md:mt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Product Video (Optional)
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 md:p-4 text-center hover:border-gray-500 transition-colors">
+                      {currentVideos.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-3">
+                          {currentVideos.map((video, index) => (
+                            <div key={`current-video-${index}`} className="relative">
+                              <video
+                                src={video.url}
+                                className="h-40 w-full rounded-lg bg-black object-contain"
+                                preload="metadata"
+                                controls
+                                controlsList="nodownload"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeVideo(index, true)}
+                                className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700"
+                              >
+                                <FiX size={14} />
+                              </button>
+                              <div className="text-xs text-gray-500 mt-2 text-center">
+                                Current video {index + 1}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {videoPreviews.length > 0 ? (
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          {videoPreviews.map((preview, index) => (
+                            <div key={`new-video-${index}`} className="relative">
+                              <video
+                                src={preview}
+                                className="h-40 w-full rounded-lg bg-black object-contain"
+                                preload="metadata"
+                                controls
+                                controlsList="nodownload"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeVideo(index, false)}
+                                className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700"
+                              >
+                                <FiX size={14} />
+                              </button>
+                              <div className="text-xs text-gray-500 mt-2 text-center">
+                                {videoFiles[index]?.name || `New video ${index + 1}`}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {currentVideos.length + videoFiles.length < MAX_PRODUCT_VIDEO_UPLOADS ? (
+                        <>
+                          <FiUpload className="mx-auto text-gray-400 text-2xl md:text-3xl mb-2 mt-2" />
+                          <p className="text-gray-600 mb-2 text-sm md:text-base">
+                            Upload up to {MAX_PRODUCT_VIDEO_UPLOADS} product videos, 9 MB each
+                          </p>
+                          <input
+                            type="file"
+                            accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                            onChange={handleVideoChange}
+                            className="hidden"
+                            id="product-video-upload"
+                            multiple
+                          />
+                          <label
+                            htmlFor="product-video-upload"
+                            className="inline-flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-900 text-white rounded-lg cursor-pointer hover:bg-gray-800 transition-colors text-sm md:text-base"
+                          >
+                            <FiUpload /> Upload Video
+                          </label>
+                          <p className="text-xs text-gray-500 mt-2">
+                            MP4, WebM, OGG, MOV. Keep each file at 9 MB or less.
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      YouTube Video Links (Optional)
+                    </label>
+                    <div className="space-y-3">
+                      {youtubeVideoUrls.map((value, index) => (
+                        <div key={`youtube-link-${index}`} className="flex gap-2">
+                          <input
+                            type="url"
+                            value={value}
+                            onChange={(event) =>
+                              handleYoutubeUrlChange(index, event.target.value)
+                            }
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeYoutubeField(index)}
+                            className="inline-flex items-center justify-center rounded-lg border border-red-200 px-3 text-red-600 transition hover:bg-red-50"
+                          >
+                            <FiTrash2 />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={addYoutubeField}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:text-black"
+                      >
+                        <FiPlus /> Add YouTube Link
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      These links will appear in the product gallery beside the images and uploaded videos.
+                    </p>
+                  </div>
                 </motion.div>
 
                 {/* Variants */}
@@ -2251,25 +2714,25 @@ function ProductModify({ initialMode = "list" }) {
                             <option value="custom">Custom</option>
                           </select>
 
-                          {definition.preset === "custom" ? (
-                            <input
-                              type="text"
-                              value={definition.name}
-                              onChange={(event) =>
-                                handleVariantDefinitionChange(
-                                  definitionIndex,
-                                  "name",
-                                  event.target.value,
-                                )
-                              }
-                              placeholder="Custom variant type name"
-                              className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
-                            />
-                          ) : (
-                            <div className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-700 border border-gray-200">
-                              {definition.preset === "size" ? "Size" : "Color"}
-                            </div>
-                          )}
+                          <input
+                            type="text"
+                            value={definition.name}
+                            onChange={(event) =>
+                              handleVariantDefinitionChange(
+                                definitionIndex,
+                                "name",
+                                event.target.value,
+                              )
+                            }
+                            placeholder={
+                              definition.preset === "size"
+                                ? "Variant type name, e.g. Size"
+                                : definition.preset === "color"
+                                  ? "Variant type name, e.g. Color"
+                                  : "Custom variant type name"
+                            }
+                            className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
+                          />
 
                           <button
                             type="button"
@@ -2284,23 +2747,40 @@ function ProductModify({ initialMode = "list" }) {
                           {(definition.options || []).map((option, optionIndex) => (
                             <div
                               key={`variant-${definitionIndex}-option-${optionIndex}`}
-                              className="flex flex-col gap-2 md:flex-row md:items-center"
+                              className="rounded-xl border border-gray-200 bg-white p-3"
                             >
-                              {definition.preset === "color" ? (
-                                <>
-                                  <input
-                                    type="color"
-                                    value={option.colorHex || "#000000"}
-                                    onChange={(event) =>
-                                      handleVariantOptionChange(
-                                        definitionIndex,
-                                        optionIndex,
-                                        "colorHex",
-                                        event.target.value,
-                                      )
-                                    }
-                                    className="h-10 w-full md:w-16 rounded-lg border border-gray-300 bg-white p-1"
-                                  />
+                              <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                                {definition.preset === "color" ? (
+                                  <>
+                                    <input
+                                      type="color"
+                                      value={option.colorHex || "#000000"}
+                                      onChange={(event) =>
+                                        handleVariantOptionChange(
+                                          definitionIndex,
+                                          optionIndex,
+                                          "colorHex",
+                                          event.target.value,
+                                        )
+                                      }
+                                      className="h-10 w-full rounded-lg border border-gray-300 bg-white p-1 md:w-16"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={option.label}
+                                      onChange={(event) =>
+                                        handleVariantOptionChange(
+                                          definitionIndex,
+                                          optionIndex,
+                                          "label",
+                                          event.target.value,
+                                        )
+                                      }
+                                      placeholder="Color label"
+                                      className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                                    />
+                                  </>
+                                ) : (
                                   <input
                                     type="text"
                                     value={option.label}
@@ -2312,39 +2792,116 @@ function ProductModify({ initialMode = "list" }) {
                                         event.target.value,
                                       )
                                     }
-                                    placeholder="Color label"
-                                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
+                                    placeholder={
+                                      definition.preset === "size"
+                                        ? "Add size option, e.g. M"
+                                        : "Add custom option"
+                                    }
+                                    className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
                                   />
-                                </>
-                              ) : (
-                                <input
-                                  type="text"
-                                  value={option.label}
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleVariantOptionRemove(definitionIndex, optionIndex)
+                                  }
+                                  className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600"
+                                >
+                                  <FiX className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                <select
+                                  value={option.priceMode || "default"}
                                   onChange={(event) =>
                                     handleVariantOptionChange(
                                       definitionIndex,
                                       optionIndex,
-                                      "label",
+                                      "priceMode",
                                       event.target.value,
                                     )
                                   }
-                                  placeholder={
-                                    definition.preset === "size"
-                                      ? "Add size option, e.g. M"
-                                      : "Add custom option"
-                                  }
-                                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
-                                />
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleVariantOptionRemove(definitionIndex, optionIndex)
-                                }
-                                className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600"
-                              >
-                                <FiX className="w-4 h-4" />
-                              </button>
+                                  className="mt-3 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                                >
+                                  {VARIANT_PRICE_MODE_OPTIONS.map((priceMode) => (
+                                    <option key={priceMode.value} value={priceMode.value}>
+                                      {priceMode.label}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                {String(option.priceMode || "default") === "direct" ? (
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-medium uppercase tracking-[0.18em] text-gray-500">
+                                      Direct Price
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={option.price ?? ""}
+                                      onChange={(event) =>
+                                        handleVariantOptionChange(
+                                          definitionIndex,
+                                          optionIndex,
+                                          "price",
+                                          event.target.value,
+                                        )
+                                      }
+                                      placeholder="Direct price"
+                                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                                    />
+                                  </div>
+                                ) : null}
+
+                                {String(option.priceMode || "default") === "compare" ? (
+                                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium uppercase tracking-[0.18em] text-gray-500">
+                                        Old Price
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={option.comparePrice ?? ""}
+                                        onChange={(event) =>
+                                          handleVariantOptionChange(
+                                            definitionIndex,
+                                            optionIndex,
+                                            "comparePrice",
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder="Old price"
+                                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-medium uppercase tracking-[0.18em] text-gray-500">
+                                        New Price
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={option.price ?? ""}
+                                        onChange={(event) =>
+                                          handleVariantOptionChange(
+                                            definitionIndex,
+                                            optionIndex,
+                                            "price",
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder="New price"
+                                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -2538,6 +3095,14 @@ function ProductModify({ initialMode = "list" }) {
                       <div className="flex-1">
                         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
                           <div className="flex-1">
+                            {(() => {
+                          const variantPricingGroups = getVariantPricingGroups(product);
+                          const basePricing = getBaseProductPricingSummary(product);
+                          const hasColorVariantGroup = variantPricingGroups.some(
+                            (group) => String(group?.preset || "").trim().toLowerCase() === "color",
+                          );
+                          return (
+                            <>
                             <div className="flex items-center gap-2 mb-2">
                               <h2 className="text-lg md:text-xl font-semibold text-gray-900 line-clamp-1">
                                 {product.title}
@@ -2567,17 +3132,69 @@ function ProductModify({ initialMode = "list" }) {
                               <span className="bg-gray-900 text-white text-xs px-2 py-1 rounded capitalize">
                                 {product.marketplaceType || "simple"}
                               </span>
-                              <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                {getProductPriceBadge(product)}
-                              </span>
                             </div>
 
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                Product Price
+                              </span>
+                              {renderBaseProductPriceBadge(basePricing)}
+                            </div>
+
+                            {variantPricingGroups.length ? (
+                              <div className="mb-3 space-y-2">
+                                {variantPricingGroups.map((group) => (
+                                  <div key={group.name} className="flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                      {group.name}
+                                    </span>
+                                    {group.options.map((option) => (
+                                      <span
+                                        key={`${group.name}-${option.label}-${option.colorHex || option.currentPrice}`}
+                                        className="inline-flex flex-wrap items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1"
+                                      >
+                                        {String(group?.preset || "").trim().toLowerCase() === "color" &&
+                                        option.colorHex ? (
+                                          <span
+                                            className="h-3.5 w-3.5 rounded-full border border-black/10"
+                                            style={{ backgroundColor: option.colorHex }}
+                                            title={option.label}
+                                          />
+                                        ) : (
+                                          <span className="font-medium text-gray-700">
+                                            {option.label}
+                                          </span>
+                                        )}
+                                        {option.isTba ? (
+                                          <span className="font-semibold text-gray-900">TBA</span>
+                                        ) : option.showPrice && option.previousPrice !== null ? (
+                                          <>
+                                            <span className="text-gray-400 line-through">
+                                              {option.previousPrice.toFixed(2)} Tk
+                                            </span>
+                                            <span className="font-semibold text-gray-900">
+                                              {option.currentPrice.toFixed(2)} Tk
+                                            </span>
+                                          </>
+                                        ) : option.showPrice ? (
+                                          <span className="font-semibold text-gray-900">
+                                            {option.currentPrice.toFixed(2)} Tk
+                                          </span>
+                                        ) : option.usesProductPrice ? (
+                                          <span className="text-[11px] font-medium text-gray-500">
+                                            No extra charge needed
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+
                             {/* Colors Preview */}
-                            {product.colors && product.colors.length > 0 && (
-                              <div className="flex items-center gap-1 mb-2">
-                                <span className="text-xs text-gray-500">
-                                  Colors:
-                                </span>
+                            {!hasColorVariantGroup && product.colors && product.colors.length > 0 && (
+                              <div className="mb-2 flex items-center gap-1">
                                 <div className="flex gap-1">
                                   {product.colors
                                     .slice(0, 3)
@@ -2597,6 +3214,9 @@ function ProductModify({ initialMode = "list" }) {
                                 </div>
                               </div>
                             )}
+                                </>
+                              );
+                            })()}
                           </div>
 
                           {/* Action Buttons */}

@@ -10,6 +10,7 @@ import {
   FiTrash2,
 } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
+import { BANGLADESH_DISTRICT_OPTIONS } from "../utils/bangladeshLocations";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -372,14 +373,23 @@ const MyAddresses = () => {
                   setForm((current) => ({ ...current, subCity: event.target.value }))
                 }
               />
-              <input
+              <select
                 className={inputClassName}
-                placeholder="District"
                 value={form.district}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, district: event.target.value }))
                 }
-              />
+              >
+                <option value="">Select district</option>
+                {form.district && !BANGLADESH_DISTRICT_OPTIONS.includes(form.district) ? (
+                  <option value={form.district}>{form.district}</option>
+                ) : null}
+                {BANGLADESH_DISTRICT_OPTIONS.map((district) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
               <input
                 className={inputClassName}
                 placeholder="Postal code"

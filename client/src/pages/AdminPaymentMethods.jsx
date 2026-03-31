@@ -65,6 +65,8 @@ const createInitialForm = () => ({
   instructions: "",
   requiresTransactionProof: true,
   shippingCost: 0,
+  insideDhakaShippingCost: 0,
+  outsideDhakaShippingCost: 0,
   displayOrder: 0,
   isActive: true,
   gatewayConfig: createGatewayConfig(),
@@ -319,7 +321,10 @@ const AdminPaymentMethods = () => {
     accountNo: isManual ? String(form.accountNo || "").trim() : "",
     instructions: String(form.instructions || "").trim(),
     requiresTransactionProof: isManual ? Boolean(form.requiresTransactionProof) : false,
-    shippingCost: isCod ? Math.max(0, Number(form.shippingCost || 0)) : 0,
+    shippingCost: isCod ? Math.max(0, Number(form.insideDhakaShippingCost || 0)) : 0,
+    insideDhakaShippingCost: isCod ? Math.max(0, Number(form.insideDhakaShippingCost || 0)) : 0,
+    outsideDhakaShippingCost:
+      isCod ? Math.max(0, Number(form.outsideDhakaShippingCost || 0)) : 0,
     displayOrder: Number(form.displayOrder || 0),
     isActive: Boolean(form.isActive),
     gatewayConfig: buildGatewayPayload(),
@@ -375,6 +380,14 @@ const AdminPaymentMethods = () => {
             : Boolean(method?.requiresTransactionProof)
           : false,
       shippingCost: Math.max(0, Number(method?.shippingCost || 0)),
+      insideDhakaShippingCost: Math.max(
+        0,
+        Number((method?.insideDhakaShippingCost ?? method?.shippingCost) || 0),
+      ),
+      outsideDhakaShippingCost: Math.max(
+        0,
+        Number((method?.outsideDhakaShippingCost ?? method?.shippingCost) || 0),
+      ),
       displayOrder: Number(method?.displayOrder || 0),
       isActive: method?.isActive !== false,
       gatewayConfig: {
@@ -475,16 +488,28 @@ const AdminPaymentMethods = () => {
           />
 
           {isCod ? (
-            <input
-              name="shippingCost"
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.shippingCost}
-              onChange={handleFormChange}
-              placeholder="COD shipping cost"
-              className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm"
-            />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <input
+                name="insideDhakaShippingCost"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.insideDhakaShippingCost}
+                onChange={handleFormChange}
+                placeholder="Inside Dhaka shipping cost"
+                className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm"
+              />
+              <input
+                name="outsideDhakaShippingCost"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.outsideDhakaShippingCost}
+                onChange={handleFormChange}
+                placeholder="Outside Dhaka shipping cost"
+                className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm"
+              />
+            </div>
           ) : (
             <input
               name="displayOrder"
@@ -804,7 +829,18 @@ const AdminPaymentMethods = () => {
                       ) : null}
                       {isMethodCod ? (
                         <div className="space-y-1 text-sm text-gray-600">
-                          <p>Shipping cost: {formatCurrency(method.shippingCost)}</p>
+                          <p>
+                            Inside Dhaka:{" "}
+                            {formatCurrency(
+                              method.insideDhakaShippingCost ?? method.shippingCost,
+                            )}
+                          </p>
+                          <p>
+                            Outside Dhaka:{" "}
+                            {formatCurrency(
+                              method.outsideDhakaShippingCost ?? method.shippingCost,
+                            )}
+                          </p>
                           <p>
                             COD orders are paid after delivery and are marked paid
                             automatically when the order becomes delivered.
@@ -834,7 +870,11 @@ const AdminPaymentMethods = () => {
 
                   <div className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-500">
                     {isMethodCod
-                      ? `Channel: ${channelType} • COD shipping: ${formatCurrency(method.shippingCost)}`
+                      ? `Channel: ${channelType} • Inside Dhaka: ${formatCurrency(
+                          method.insideDhakaShippingCost ?? method.shippingCost,
+                        )} • Outside Dhaka: ${formatCurrency(
+                          method.outsideDhakaShippingCost ?? method.shippingCost,
+                        )}`
                       : `Channel: ${channelType} • Order: ${Number(method.displayOrder || 0)}`}
                   </div>
                 </div>

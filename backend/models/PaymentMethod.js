@@ -52,6 +52,16 @@ const paymentMethodSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  insideDhakaShippingCost: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  outsideDhakaShippingCost: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   displayOrder: {
     type: Number,
     default: 0,
@@ -95,8 +105,29 @@ paymentMethodSchema.pre("validate", function preValidate(next) {
     this.requiresTransactionProof = false;
   }
 
-  if (channel !== "cod") {
+  if (channel === "cod") {
+    const legacyShippingCost = Number(this.shippingCost);
+    const normalizedLegacyShippingCost =
+      Number.isFinite(legacyShippingCost) && legacyShippingCost >= 0
+        ? legacyShippingCost
+        : 0;
+
+    const rawInsideDhakaShippingCost = Number(this.insideDhakaShippingCost);
+    const rawOutsideDhakaShippingCost = Number(this.outsideDhakaShippingCost);
+
+    this.insideDhakaShippingCost =
+      Number.isFinite(rawInsideDhakaShippingCost) && rawInsideDhakaShippingCost >= 0
+        ? rawInsideDhakaShippingCost
+        : normalizedLegacyShippingCost;
+    this.outsideDhakaShippingCost =
+      Number.isFinite(rawOutsideDhakaShippingCost) && rawOutsideDhakaShippingCost >= 0
+        ? rawOutsideDhakaShippingCost
+        : normalizedLegacyShippingCost;
+    this.shippingCost = normalizedLegacyShippingCost || this.insideDhakaShippingCost || 0;
+  } else {
     this.shippingCost = 0;
+    this.insideDhakaShippingCost = 0;
+    this.outsideDhakaShippingCost = 0;
   }
 
   next();

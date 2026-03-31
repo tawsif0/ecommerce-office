@@ -2,21 +2,31 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
-  FiArrowRight,
+  FiEye,
   FiHeart,
   FiShoppingBag,
   FiShuffle,
   FiStar,
 } from "react-icons/fi";
 import { toast } from "react-hot-toast";
-import { getProductPricingDisplay } from "../../utils/productPricing";
 import {
   selectWishlistPendingIds,
   toggleWishlistItem,
 } from "../../store/wishlistSlice";
-import { toggleCompareItem } from "../../store/compareSlice";
+import {
+  COMPARE_LIMIT_MESSAGE,
+  MAX_COMPARE_ITEMS,
+  toggleCompareItem,
+} from "../../store/compareSlice";
 import { createProductSnapshot } from "../../utils/productSnapshot";
 import { useCart } from "../../context/CartContext";
+import {
+  getDefaultSelectedVariants,
+  getProductPricingForSelectedVariants,
+  getSelectedVariantSignature,
+  normalizeProductVariantDefinitions,
+  normalizeSelectedVariantsPayload,
+} from "../../utils/productVariants";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -152,12 +162,30 @@ const getSectionBadgeLabel = (categoryLabel, badgeText) => {
 const useProductCardState = (product) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const { isCartItemPresent, toggleCartItem } = useCart();
   const compareItems = useSelector((state) => state.compare.items || []);
   const wishlistItems = useSelector((state) => state.wishlist.items || []);
   const wishlistPendingIds = useSelector(selectWishlistPendingIds);
-  const pricing = useMemo(() => getProductPricingDisplay(product), [product]);
   const productId = String(product?._id || product?.id || "").trim();
+  const variantDefinitions = useMemo(
+    () => normalizeProductVariantDefinitions(product),
+    [product],
+  );
+  const [selectedVariants, setSelectedVariants] = useState(() =>
+    getDefaultSelectedVariants(product),
+  );
+  const resolvedSelectedVariants = useMemo(
+    () => normalizeSelectedVariantsPayload(selectedVariants),
+    [selectedVariants],
+  );
+  const selectedVariantSignature = useMemo(
+    () => getSelectedVariantSignature(resolvedSelectedVariants),
+    [resolvedSelectedVariants],
+  );
+  const pricing = useMemo(
+    () => getProductPricingForSelectedVariants(product, resolvedSelectedVariants),
+    [product, resolvedSelectedVariants],
+  );
 
   const isCompared = compareItems.some(
     (item) => String(item?._id || item?.id || "") === productId,
@@ -166,11 +194,71 @@ const useProductCardState = (product) => {
     (item) => String(item?._id || item?.id || "") === productId,
   );
   const wishlistLoading = wishlistPendingIds.includes(productId);
+  const isInCart = isCartItemPresent(
+    productId,
+    "",
+    "",
+    "",
+    selectedVariantSignature,
+  );
+
+  useEffect(() => {
+    setSelectedVariants((currentSelections) => {
+      const currentByName = new Map(
+        normalizeSelectedVariantsPayload(currentSelections).map((variant) => [
+          String(variant?.name || "").toLowerCase(),
+          variant,
+        ]),
+      );
+
+      return variantDefinitions
+        .map((definition) => {
+          const existing = currentByName.get(definition.name.toLowerCase());
+          const matchingOption = (definition.options || []).find((option) => {
+            if (!existing) return false;
+
+            if (
+              definition.preset === "color" &&
+              String(option.colorHex || "").toLowerCase() ===
+                String(existing.colorHex || "").toLowerCase()
+            ) {
+              return true;
+            }
+
+            return (
+              String(option.value || "").toLowerCase() ===
+              String(existing.value || "").toLowerCase()
+            );
+          });
+
+          if (!matchingOption) return null;
+
+          return {
+            name: definition.name,
+            preset: definition.preset,
+            label: matchingOption.label || matchingOption.value,
+            value: matchingOption.value || matchingOption.label,
+            colorHex:
+              definition.preset === "color"
+                ? String(matchingOption.colorHex || matchingOption.value || "").toLowerCase()
+                : "",
+            priceMode: matchingOption.priceMode || "default",
+            price: matchingOption.price,
+            comparePrice: matchingOption.comparePrice,
+          };
+        })
+        .filter(Boolean);
+    });
+  }, [productId, variantDefinitions]);
 
   const toggleCompare = (event) => {
     event.stopPropagation();
     const snapshot = createProductSnapshot(product);
     if (!snapshot) return;
+    if (!isCompared && compareItems.length >= MAX_COMPARE_ITEMS) {
+      toast.error(COMPARE_LIMIT_MESSAGE);
+      return;
+    }
     dispatch(toggleCompareItem(snapshot));
   };
 
@@ -186,30 +274,30 @@ const useProductCardState = (product) => {
     }
   };
 
-  const addProductToCart = async (event) => {
+  const toggleProductCart = async (event) => {
     event.stopPropagation();
 
     const marketplaceType = String(product?.marketplaceType || "simple")
       .trim()
       .toLowerCase();
-    if (["variable", "grouped"].includes(marketplaceType)) {
-      toast("Choose options on the product details page first.");
-      navigate(`/products/${productId || product?._id || product?.id}`);
+    if (marketplaceType === "grouped") {
+      toast("Choose grouped items on the product details page first.");
+      navigate(`/product/${productId || product?._id || product?.id}`);
       return;
     }
 
-    const result = await addToCart(product, 1);
-    if (!result?.success && result?.error) {
-      toast.error(result.error);
-    }
+    await toggleCartItem(product, 1, "", "", {
+      selectedVariants: resolvedSelectedVariants,
+    });
   };
 
   return {
     pricing,
     isCompared,
+    isInCart,
     isWishlisted,
     wishlistLoading,
-    addProductToCart,
+    toggleProductCart,
     toggleCompare,
     toggleWishlist,
   };
@@ -241,16 +329,74 @@ const getWishlistIconButtonClassName = (isWishlisted, extraClassName = "") =>
       : "border-white bg-white text-black shadow-sm hover:text-red-500"
   }`;
 
+const getCompareIconButtonClassName = (
+  isCompared,
+  tone = "light",
+  extraClassName = "",
+) => {
+  const baseClassName = `${extraClassName} inline-flex items-center justify-center rounded-full border transition`;
+
+  if (tone === "dark") {
+    return `${baseClassName} ${
+      isCompared
+        ? "border-white bg-white text-[#1B1C18] shadow-sm"
+        : "border-white/14 bg-white/6 text-white/45 shadow-sm hover:border-white/28 hover:bg-white/10 hover:text-white"
+    }`;
+  }
+
+  if (tone === "overlay") {
+    return `${baseClassName} ${
+      isCompared
+        ? "border-black bg-black text-white shadow-sm"
+        : "border-white bg-white/95 text-[#535A63] shadow-sm hover:border-black hover:text-[#1B1C18]"
+    }`;
+  }
+
+  return `${baseClassName} ${
+    isCompared
+      ? "border-black bg-black text-white shadow-sm"
+      : "border-[#E7E0D4] bg-white text-[#5A564C] shadow-sm hover:border-black hover:text-[#1B1C18]"
+  }`;
+};
+
+const getCartIconButtonClassName = (isInCart, tone = "light", extraClassName = "") => {
+  const baseClassName = `${extraClassName} inline-flex items-center justify-center rounded-full border transition`;
+
+  if (tone === "dark") {
+    return `${baseClassName} ${
+      isInCart
+        ? "border-emerald-400 bg-emerald-400 text-[#112015] shadow-sm"
+        : "border-white/14 bg-white/6 text-white/55 shadow-sm hover:border-white/28 hover:bg-white/10 hover:text-white"
+    }`;
+  }
+
+  if (tone === "overlay") {
+    return `${baseClassName} ${
+      isInCart
+        ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+        : "border-white bg-white text-black shadow-sm hover:border-black hover:text-black"
+    }`;
+  }
+
+  return `${baseClassName} ${
+    isInCart
+      ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+      : "border-[#E7E0D4] bg-white text-[#5A564C] shadow-sm hover:border-[#1B1C18] hover:text-[#1B1C18]"
+  }`;
+};
+
 const PopularCard = ({
   product,
   categoryLabel,
   sectionBadgeLabel,
   discountLabel,
   pricing,
+  showCartButton,
   isCompared,
+  isInCart,
   isWishlisted,
   wishlistLoading,
-  addProductToCart,
+  toggleProductCart,
   onViewDetails,
   toggleCompare,
   toggleWishlist,
@@ -265,7 +411,7 @@ const PopularCard = ({
         onViewDetails();
       }
     }}
-    className="home-spotlight-card home-showcase-font group relative flex h-full min-h-[17rem] cursor-pointer flex-col overflow-hidden rounded-xl border border-white/6 bg-[#262722] transition duration-300 hover:-translate-y-[2px] hover:border-[#D4AF37]/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/40 md:min-h-[18.25rem] lg:min-h-[19.5rem]"
+    className="home-spotlight-card home-showcase-font group relative flex h-full min-h-[13rem] cursor-pointer flex-col overflow-hidden rounded-xl border border-white/6 bg-[#262722] transition duration-300 hover:-translate-y-[2px] hover:border-[#D4AF37]/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/40 sm:min-h-[14.25rem] md:min-h-[16.5rem] lg:min-h-[17.75rem]"
   >
     <div className="relative aspect-square overflow-hidden bg-black">
       <IconButton
@@ -274,7 +420,7 @@ const PopularCard = ({
         disabled={wishlistLoading}
         className={`${getWishlistIconButtonClassName(
           isWishlisted,
-          "absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
+          "absolute right-3 top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border transition sm:h-9 sm:w-9",
         )} disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <FiHeart className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`} />
@@ -286,61 +432,66 @@ const PopularCard = ({
       />
     </div>
 
-    <div className="flex flex-1 flex-col gap-3 p-5">
+    <div className="flex flex-1 flex-col gap-2.5 p-3.5 sm:gap-3 sm:p-4 md:p-5">
       <div>
-        <div className="mb-3 flex min-h-[1.75rem] flex-wrap items-center gap-2">
-          <span className="home-showcase-label rounded-full border border-white/10 px-2 py-0.5 text-[8px] font-medium uppercase tracking-[0.3em] text-white/45">
+        <div className="mb-2.5 flex min-h-[1.55rem] flex-wrap items-center gap-1.5 sm:mb-3 sm:min-h-[1.75rem] sm:gap-2">
+          <span className="home-showcase-label rounded-full border border-white/10 px-2 py-0.5 text-[7px] font-medium uppercase tracking-[0.24em] text-white/45 sm:text-[8px] sm:tracking-[0.3em]">
             {categoryLabel}
           </span>
           {sectionBadgeLabel ? (
-            <span className="home-showcase-label rounded-full border border-white/14 bg-white/6 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.28em] text-white/82">
+            <span className="home-showcase-label rounded-full border border-white/14 bg-white/6 px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-white/82 sm:text-[8px] sm:tracking-[0.28em]">
               {sectionBadgeLabel}
             </span>
           ) : null}
           {discountLabel ? (
-            <span className="home-showcase-label rounded-full border border-white/14 bg-white/6 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.28em] text-white">
+            <span className="home-showcase-label rounded-full border border-white/14 bg-white/6 px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-white sm:text-[8px] sm:tracking-[0.28em]">
               {discountLabel}
             </span>
           ) : null}
         </div>
-        <h3 className="line-clamp-1 text-base font-extrabold leading-tight text-white md:text-lg">
+        <h3 className="line-clamp-1 text-sm font-extrabold leading-tight text-white sm:text-base md:text-lg">
           {product?.title}
         </h3>
       </div>
-
-      <div className="mt-auto flex items-center justify-between border-t border-white/6 pt-4">
-        <span className="home-showcase-label text-sm font-bold text-white">
+      <div className="mt-auto flex items-center justify-between border-t border-white/6 pt-3 sm:pt-4">
+        <span className="home-showcase-label text-xs font-bold text-white sm:text-sm">
           {pricing.isTba ? "TBA" : formatPrice(pricing.currentPrice)}
         </span>
-        <div className="flex items-center gap-3">
-          <IconButton
-            label="Add to cart"
-            onClick={addProductToCart}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/14 bg-white/6 text-white/55 shadow-sm transition hover:border-white/28 hover:bg-white/10 hover:text-white"
-          >
-            <FiShoppingBag className="h-4 w-4" />
-          </IconButton>
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          {showCartButton ? (
+            <IconButton
+              label={isInCart ? "Remove from cart" : "Add to cart"}
+              onClick={toggleProductCart}
+              className={getCartIconButtonClassName(
+                isInCart,
+                "dark",
+                "h-8 w-8 sm:h-9 sm:w-9",
+              )}
+            >
+              <FiShoppingBag className="h-4 w-4" />
+            </IconButton>
+          ) : null}
           <IconButton
             label={isCompared ? "Remove from compare" : "Add to compare"}
             onClick={toggleCompare}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition ${
-              isCompared
-                ? "bg-white text-[#1B1C18]"
-                : "text-white/45 hover:text-white"
-            }`}
+            className={getCompareIconButtonClassName(
+              isCompared,
+              "dark",
+              "h-8 w-8 sm:h-9 sm:w-9",
+            )}
           >
             <FiShuffle className="h-4 w-4" />
           </IconButton>
-          <IconButton
-            label="View details"
-            onClick={(event) => {
-            event.stopPropagation();
-            onViewDetails();
-          }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/45 transition-transform duration-300 hover:translate-x-1 hover:text-white"
-          >
-            <FiArrowRight className="h-4 w-4" />
-          </IconButton>
+            <IconButton
+              label="View details"
+              onClick={(event) => {
+                event.stopPropagation();
+                onViewDetails();
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-transform duration-300 hover:translate-x-1 hover:text-white sm:h-9 sm:w-9"
+            >
+              <FiEye className="h-4 w-4" />
+            </IconButton>
         </div>
       </div>
     </div>
@@ -353,10 +504,12 @@ const HotDealCard = ({
   sectionBadgeLabel,
   discountLabel,
   pricing,
+  showCartButton,
   isCompared,
+  isInCart,
   isWishlisted,
   wishlistLoading,
-  addProductToCart,
+  toggleProductCart,
   onViewDetails,
   toggleCompare,
   toggleWishlist,
@@ -371,11 +524,11 @@ const HotDealCard = ({
         onViewDetails();
       }
     }}
-    className="home-showcase-font home-showcase-shadow group flex h-full min-h-[16.5rem] cursor-pointer flex-col rounded-xl bg-white p-3 transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/40 md:min-h-[17.5rem] lg:min-h-[18.75rem]"
+    className="home-showcase-font home-showcase-shadow group flex h-full min-h-[12.75rem] cursor-pointer flex-col rounded-xl bg-white p-2.5 transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/40 sm:min-h-[14rem] sm:p-3 md:min-h-[15.75rem] lg:min-h-[17rem]"
   >
-    <div className="relative mb-3 aspect-square overflow-hidden rounded-lg bg-[#F5F3ED]">
+    <div className="relative mb-2.5 aspect-square overflow-hidden rounded-lg bg-[#F5F3ED] sm:mb-3">
       {discountLabel ? (
-        <span className="home-showcase-label absolute right-2 top-2 z-10 rounded-sm bg-[#1B1C18] px-1.5 py-0.5 text-[9px] font-bold text-white">
+        <span className="home-showcase-label absolute right-2 top-2 z-10 rounded-sm bg-[#1B1C18] px-1.5 py-0.5 text-[8px] font-bold text-white sm:text-[9px]">
           {discountLabel}
         </span>
       ) : null}
@@ -387,23 +540,22 @@ const HotDealCard = ({
     </div>
 
     <div className="flex flex-1 flex-col text-left">
-      <div className="mb-3 flex min-h-[1.7rem] flex-wrap items-center gap-2">
-        <span className="home-showcase-label rounded-full bg-[#FBF9F3] px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.22em] text-[#6B665B]">
+      <div className="mb-2.5 flex min-h-[1.55rem] flex-wrap items-center gap-1.5 sm:mb-3 sm:min-h-[1.7rem] sm:gap-2">
+        <span className="home-showcase-label rounded-full bg-[#FBF9F3] px-2 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-[#6B665B] sm:text-[9px] sm:tracking-[0.22em]">
           {categoryLabel}
         </span>
         {sectionBadgeLabel ? (
-          <span className="home-showcase-label rounded-full border border-black/10 bg-black/5 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.22em] text-[#1B1C18]">
+          <span className="home-showcase-label rounded-full border border-black/10 bg-black/5 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[#1B1C18] sm:text-[9px] sm:tracking-[0.22em]">
             {sectionBadgeLabel}
           </span>
         ) : null}
       </div>
-      <h3 className="line-clamp-1 text-sm font-extrabold text-[#1B1C18]">
+      <h3 className="line-clamp-1 text-[13px] font-extrabold text-[#1B1C18] sm:text-sm">
         {product?.title}
       </h3>
-
-      <div className="mt-auto flex items-end justify-between pt-4">
+      <div className="mt-auto flex items-end justify-between pt-3 sm:pt-4">
         <div className="space-y-1">
-          <p className="home-showcase-label text-sm font-bold text-[#1B1C18]">
+          <p className="home-showcase-label text-xs font-bold text-[#1B1C18] sm:text-sm">
             {pricing.isTba ? "TBA" : formatPrice(pricing.currentPrice)}
           </p>
           {pricing.hasDiscount ? (
@@ -412,22 +564,28 @@ const HotDealCard = ({
             </p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <IconButton
-            label="Add to cart"
-            onClick={addProductToCart}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E7E0D4] bg-white text-[#5A564C] transition hover:border-[#1B1C18] hover:text-[#1B1C18]"
-          >
-            <FiShoppingBag className="h-4 w-4" />
-          </IconButton>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {showCartButton ? (
+            <IconButton
+              label={isInCart ? "Remove from cart" : "Add to cart"}
+              onClick={toggleProductCart}
+              className={getCartIconButtonClassName(
+                isInCart,
+                "light",
+                "h-8 w-8 sm:h-9 sm:w-9",
+              )}
+            >
+              <FiShoppingBag className="h-4 w-4" />
+            </IconButton>
+          ) : null}
           <IconButton
             label={isCompared ? "Remove from compare" : "Add to compare"}
             onClick={toggleCompare}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E7E0D4] transition ${
-              isCompared
-                ? "bg-[#1B1C18] text-white"
-                : "text-[#5A564C] hover:text-[#1B1C18]"
-            }`}
+            className={getCompareIconButtonClassName(
+              isCompared,
+              "light",
+              "h-8 w-8 sm:h-9 sm:w-9",
+            )}
           >
             <FiShuffle className="h-4 w-4" />
           </IconButton>
@@ -437,7 +595,7 @@ const HotDealCard = ({
             disabled={wishlistLoading}
             className={`${getWishlistIconButtonClassName(
               isWishlisted,
-              "inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
+              "inline-flex h-8 w-8 items-center justify-center rounded-full border transition sm:h-9 sm:w-9",
             )} disabled:cursor-not-allowed disabled:opacity-60`}
           >
             <FiHeart className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`} />
@@ -452,10 +610,12 @@ const FeaturedCard = ({
   product,
   categoryLabel,
   pricing,
+  showCartButton,
   isCompared,
+  isInCart,
   isWishlisted,
   wishlistLoading,
-  addProductToCart,
+  toggleProductCart,
   onViewDetails,
   toggleCompare,
   toggleWishlist,
@@ -470,10 +630,10 @@ const FeaturedCard = ({
         onViewDetails();
       }
     }}
-    className="home-showcase-font group flex h-full min-h-[18.5rem] cursor-pointer flex-col rounded-2xl bg-white p-3 transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/35 md:min-h-[19.75rem] lg:min-h-[21rem]"
+    className="home-showcase-font group flex h-full min-h-[13.5rem] cursor-pointer flex-col rounded-2xl bg-white p-2.5 transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/35 sm:min-h-[15.25rem] sm:p-3 md:min-h-[17.75rem] lg:min-h-[19rem]"
   >
-    <div className="relative aspect-[4/5] overflow-hidden rounded-[1rem] bg-[#F5F3ED] home-showcase-shadow">
-      <span className="home-showcase-label absolute left-3 top-3 z-10 rounded-full bg-white/90 px-2 py-1 text-[8px] uppercase tracking-[0.26em] text-[#5C5346]">
+    <div className="relative aspect-[4/4.8] overflow-hidden rounded-[1rem] bg-[#F5F3ED] home-showcase-shadow sm:aspect-[4/5]">
+      <span className="home-showcase-label absolute left-3 top-3 z-10 rounded-full bg-white/90 px-2 py-1 text-[7px] uppercase tracking-[0.18em] text-[#5C5346] sm:text-[8px] sm:tracking-[0.26em]">
         {categoryLabel}
       </span>
       <IconButton
@@ -482,7 +642,7 @@ const FeaturedCard = ({
         disabled={wishlistLoading}
         className={`${getWishlistIconButtonClassName(
           isWishlisted,
-          "absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
+          "absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border transition sm:h-9 sm:w-9",
         )} disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <FiHeart className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`} />
@@ -494,39 +654,35 @@ const FeaturedCard = ({
       />
     </div>
 
-    <div className="flex flex-1 flex-col px-1 pt-4 text-left">
-      <span className="home-showcase-label text-[10px] uppercase tracking-[0.3em] text-[#807462]">
+    <div className="flex flex-1 flex-col px-1 pt-3 text-left sm:pt-4">
+      <span className="home-showcase-label text-[9px] uppercase tracking-[0.2em] text-[#807462] sm:text-[10px] sm:tracking-[0.3em]">
         {pricing.isTba ? "Price on request" : `From ${formatPrice(pricing.currentPrice)}`}
       </span>
-      <h3 className="mt-2 line-clamp-1 text-lg font-extrabold text-[#1B1C18]">
+      <h3 className="mt-2 line-clamp-1 text-sm font-extrabold text-[#1B1C18] sm:text-base lg:text-lg">
         {product?.title}
       </h3>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onViewDetails();
-        }}
-        className="home-showcase-label mt-4 self-start border-b border-[#1B1C18] pb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#1B1C18]"
-      >
-        View Details
-      </button>
-      <div className="mt-auto flex items-center gap-4 pt-4">
-        <IconButton
-          label="Add to cart"
-          onClick={addProductToCart}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#62594C] transition hover:text-[#1B1C18]"
-        >
-          <FiShoppingBag className="h-4 w-4" />
-        </IconButton>
+      <div className="mt-auto flex items-center gap-2.5 pt-3 sm:gap-4 sm:pt-4">
+        {showCartButton ? (
+          <IconButton
+            label={isInCart ? "Remove from cart" : "Add to cart"}
+            onClick={toggleProductCart}
+            className={getCartIconButtonClassName(
+              isInCart,
+              "light",
+              "h-8 w-8 sm:h-9 sm:w-9",
+            )}
+          >
+            <FiShoppingBag className="h-4 w-4" />
+          </IconButton>
+        ) : null}
         <IconButton
           label={isCompared ? "Remove from compare" : "Add to compare"}
           onClick={toggleCompare}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition ${
-            isCompared
-              ? "bg-[#1B1C18] text-white"
-              : "text-[#62594C] hover:text-[#1B1C18]"
-          }`}
+          className={getCompareIconButtonClassName(
+            isCompared,
+            "light",
+            "h-8 w-8 sm:h-9 sm:w-9",
+          )}
         >
           <FiShuffle className="h-4 w-4" />
         </IconButton>
@@ -536,9 +692,9 @@ const FeaturedCard = ({
             event.stopPropagation();
             onViewDetails();
           }}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#62594C] transition hover:text-[#1B1C18]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#62594C] transition hover:text-[#1B1C18] sm:h-9 sm:w-9"
         >
-          <FiArrowRight className="h-4 w-4" />
+          <FiEye className="h-4 w-4" />
         </IconButton>
       </div>
     </div>
@@ -549,10 +705,12 @@ const BestSellingCard = ({
   product,
   categoryLabel,
   pricing,
+  showCartButton,
   isCompared,
+  isInCart,
   isWishlisted,
   wishlistLoading,
-  addProductToCart,
+  toggleProductCart,
   onViewDetails,
   toggleCompare,
   toggleWishlist,
@@ -571,22 +729,22 @@ const BestSellingCard = ({
           onViewDetails();
         }
       }}
-      className="home-showcase-font group flex h-full min-h-[16.75rem] cursor-pointer flex-col text-left transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/35 md:min-h-[17.75rem] lg:min-h-[19rem]"
+      className="home-showcase-font group flex h-full min-h-[13rem] cursor-pointer flex-col text-left transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/35 sm:min-h-[14.5rem] md:min-h-[16.25rem] lg:min-h-[17.5rem]"
     >
-      <div className="home-showcase-shadow relative mb-4 flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-white p-6">
+      <div className="home-showcase-shadow relative mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-white p-4 sm:mb-4 sm:p-6">
         <ProductImage
           src={product?.images?.[0] || product?.image}
           alt={product?.title}
           className="max-h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
         />
-        <div className="home-showcase-label absolute left-3 top-3 rounded px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.28em] text-[#575042] backdrop-blur-sm bg-[#F5F3ED]/90">
+        <div className="home-showcase-label absolute left-3 top-3 rounded px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.18em] text-[#575042] backdrop-blur-sm bg-[#F5F3ED]/90 sm:text-[8px] sm:tracking-[0.28em]">
           {categoryLabel}
         </div>
       </div>
 
       <div className="px-1">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <h3 className="line-clamp-1 text-sm font-extrabold text-[#1B1C18]">
+          <h3 className="line-clamp-1 text-[13px] font-extrabold text-[#1B1C18] sm:text-sm">
             {product?.title}
           </h3>
           <div className="flex items-center text-[10px] font-bold text-[#1B1C18]">
@@ -599,38 +757,44 @@ const BestSellingCard = ({
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <span className="home-showcase-label text-sm font-bold text-[#1B1C18]">
+          <span className="home-showcase-label text-xs font-bold text-[#1B1C18] sm:text-sm">
             {pricing.isTba ? "TBA" : formatPrice(pricing.currentPrice)}
           </span>
-          <div className="flex items-center gap-2">
-            <IconButton
-              label="Add to cart"
-              onClick={addProductToCart}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#5A5448] transition hover:text-[#1B1C18]"
-            >
-              <FiShoppingBag className="h-4 w-4" />
-            </IconButton>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {showCartButton ? (
+              <IconButton
+                label={isInCart ? "Remove from cart" : "Add to cart"}
+                onClick={toggleProductCart}
+                className={getCartIconButtonClassName(
+                  isInCart,
+                  "light",
+                  "h-8 w-8 sm:h-9 sm:w-9",
+                )}
+              >
+                <FiShoppingBag className="h-4 w-4" />
+              </IconButton>
+            ) : null}
             <IconButton
               label={isCompared ? "Remove from compare" : "Add to compare"}
               onClick={toggleCompare}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition ${
-                isCompared
-                  ? "bg-[#1B1C18] text-white"
-                  : "text-[#5A5448] hover:text-[#1B1C18]"
-              }`}
+              className={getCompareIconButtonClassName(
+                isCompared,
+                "light",
+                "h-8 w-8 sm:h-9 sm:w-9",
+              )}
             >
               <FiShuffle className="h-4 w-4" />
             </IconButton>
             <IconButton
               label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-              onClick={toggleWishlist}
-              disabled={wishlistLoading}
-              className={`${getWishlistIconButtonClassName(
-                isWishlisted,
-                "inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
-              )} disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              <FiHeart className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`} />
+            onClick={toggleWishlist}
+            disabled={wishlistLoading}
+            className={`${getWishlistIconButtonClassName(
+              isWishlisted,
+              "inline-flex h-8 w-8 items-center justify-center rounded-full border transition sm:h-9 sm:w-9",
+            )} disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            <FiHeart className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`} />
             </IconButton>
           </div>
         </div>
@@ -642,10 +806,12 @@ const BestSellingCard = ({
 const LatestCard = ({
   product,
   pricing,
+  showCartButton,
   isCompared,
+  isInCart,
   isWishlisted,
   wishlistLoading,
-  addProductToCart,
+  toggleProductCart,
   onViewDetails,
   toggleCompare,
   toggleWishlist,
@@ -660,10 +826,10 @@ const LatestCard = ({
         onViewDetails();
       }
     }}
-    className="home-showcase-font group flex h-full min-h-[16.75rem] cursor-pointer flex-col text-center transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/35 md:min-h-[17.75rem] lg:min-h-[19rem]"
+    className="home-showcase-font group flex h-full min-h-[13rem] cursor-pointer flex-col text-center transition duration-300 hover:-translate-y-[2px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/35 sm:min-h-[14.5rem] md:min-h-[16.25rem] lg:min-h-[17.5rem]"
   >
-    <div className="home-showcase-shadow relative mb-4 aspect-square overflow-hidden rounded-2xl bg-[#F5F3ED]">
-      <div className="home-showcase-label absolute right-3 top-3 z-10 rounded-full bg-white/80 px-2 py-1 text-[8px] font-bold uppercase tracking-[0.28em] text-[#1B1C18] backdrop-blur-md">
+    <div className="home-showcase-shadow relative mb-3 aspect-square overflow-hidden rounded-2xl bg-[#F5F3ED] sm:mb-4">
+      <div className="home-showcase-label absolute right-3 top-3 z-10 rounded-full bg-white/80 px-2 py-1 text-[7px] font-bold uppercase tracking-[0.18em] text-[#1B1C18] backdrop-blur-md sm:text-[8px] sm:tracking-[0.28em]">
         New
       </div>
       <ProductImage
@@ -671,47 +837,53 @@ const LatestCard = ({
         alt={product?.title}
         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
       />
-      <div className="absolute bottom-3 right-3 flex gap-2">
-        <IconButton
-          label="Add to cart"
-          onClick={addProductToCart}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white bg-white text-black transition hover:border-black hover:text-black"
-        >
-          <FiShoppingBag className="h-4 w-4" />
-        </IconButton>
+      <div className="absolute bottom-3 right-3 flex gap-1.5 sm:gap-2">
+        {showCartButton ? (
+          <IconButton
+            label={isInCart ? "Remove from cart" : "Add to cart"}
+            onClick={toggleProductCart}
+            className={getCartIconButtonClassName(
+              isInCart,
+              "overlay",
+              "h-8 w-8 sm:h-9 sm:w-9",
+            )}
+          >
+            <FiShoppingBag className="h-4 w-4" />
+          </IconButton>
+        ) : null}
         <IconButton
           label={isCompared ? "Remove from compare" : "Add to compare"}
           onClick={toggleCompare}
-          className={`inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/85 backdrop-blur-sm transition ${
-            isCompared
-              ? "text-[#1B1C18]"
-              : "text-[#535A63] hover:text-[#1B1C18]"
-          }`}
+          className={getCompareIconButtonClassName(
+            isCompared,
+            "overlay",
+            "h-8 w-8 backdrop-blur-sm sm:h-9 sm:w-9",
+          )}
         >
           <FiShuffle className="h-4 w-4" />
         </IconButton>
         <IconButton
           label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          onClick={toggleWishlist}
-          disabled={wishlistLoading}
-          className={`${getWishlistIconButtonClassName(
-            isWishlisted,
-            "inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
-          )} disabled:cursor-not-allowed disabled:opacity-60`}
-        >
-          <FiHeart className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`} />
+            onClick={toggleWishlist}
+            disabled={wishlistLoading}
+            className={`${getWishlistIconButtonClassName(
+              isWishlisted,
+              "inline-flex h-8 w-8 items-center justify-center rounded-full border transition sm:h-9 sm:w-9",
+            )} disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            <FiHeart className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`} />
         </IconButton>
       </div>
     </div>
 
     <div className="px-2">
-      <span className="home-showcase-label mb-1 block text-[9px] font-bold uppercase tracking-[0.34em] text-[#1B1C18]">
+      <span className="home-showcase-label mb-1 block text-[8px] font-bold uppercase tracking-[0.2em] text-[#1B1C18] sm:text-[9px] sm:tracking-[0.34em]">
         Fresh Arrival
       </span>
-      <h3 className="line-clamp-1 text-sm font-extrabold text-[#1B1C18]">
+      <h3 className="line-clamp-1 text-[13px] font-extrabold text-[#1B1C18] sm:text-sm">
         {product?.title}
       </h3>
-      <p className="home-showcase-label mt-1 text-xs font-bold text-[#1B1C18]">
+      <p className="home-showcase-label mt-1 text-[11px] font-bold text-[#1B1C18] sm:text-xs">
         {pricing.isTba ? "TBA" : formatPrice(pricing.currentPrice)}
       </p>
     </div>
@@ -727,12 +899,14 @@ const LandingSectionProductCard = ({
   const {
     pricing,
     isCompared,
+    isInCart,
     isWishlisted,
     wishlistLoading,
-    addProductToCart,
+    toggleProductCart,
     toggleCompare,
     toggleWishlist,
   } = useProductCardState(product);
+  const showCartButton = true;
   const discountLabel = buildDiscountLabel(pricing);
   const categoryLabel = getCategoryLabel(product, badgeText);
   const sectionBadgeLabel = getSectionBadgeLabel(categoryLabel, badgeText);
@@ -748,10 +922,12 @@ const LandingSectionProductCard = ({
     sectionBadgeLabel,
     discountLabel,
     pricing,
+    showCartButton,
     isCompared,
+    isInCart,
     isWishlisted,
     wishlistLoading,
-    addProductToCart,
+    toggleProductCart,
     onViewDetails: handleViewDetails,
     toggleCompare,
     toggleWishlist,

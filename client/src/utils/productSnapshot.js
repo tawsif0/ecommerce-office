@@ -13,9 +13,14 @@ export const createProductSnapshot = (product) => {
     price: product.price ?? 0,
     salePrice: product.salePrice ?? null,
     priceType: normalizeEmbeddedValue(product.priceType, "single"),
+    brand: normalizeEmbeddedValue(product.brand),
     stock: Number(product.stock || 0),
     colors: Array.isArray(product.colors) ? product.colors.filter(Boolean) : [],
     marketplaceType: normalizeEmbeddedValue(product.marketplaceType, "simple"),
+    variantDefinitions: Array.isArray(product.variantDefinitions)
+      ? product.variantDefinitions
+      : [],
+    variations: Array.isArray(product.variations) ? product.variations : [],
     deliveryMinDays: Number(product.deliveryMinDays || 0),
     deliveryMaxDays: Number(product.deliveryMaxDays || 0),
     ratingAverage: Number(product.ratingAverage || 0),

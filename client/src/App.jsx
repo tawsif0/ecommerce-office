@@ -1,10 +1,12 @@
-import React, { Suspense, lazy, useEffect } from "react";
+import React, { Suspense, lazy, useEffect, useRef } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
   useLocation,
+  matchPath,
+  useNavigationType,
 } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useAuth } from "./hooks/useAuth";
@@ -24,7 +26,10 @@ import {
 } from "./store/notificationsSlice";
 import { loadPublicSettings } from "./store/publicSettingsSlice";
 import { loadWishlist } from "./store/wishlistSlice";
-import { applyPublicSettingsDocument } from "./utils/publicSettings";
+import {
+  applyPublicSettingsDocument,
+  formatDocumentTitle,
+} from "./utils/publicSettings";
 
 const normalizeThemeColor = (value) => {
   const raw = String(value || "")
@@ -104,13 +109,69 @@ function HashScrollHandler() {
   return null;
 }
 
-function RouteScrollHandler() {
+function NavigationScrollManager() {
   const location = useLocation();
+  const navigationType = useNavigationType();
+  const previousLocationRef = useRef(location);
+
+  const getShopScrollStorageKey = (targetLocation) =>
+    `shop-scroll:${String(targetLocation?.pathname || "")}${String(targetLocation?.search || "")}`;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const historyState = window.history;
+    if (!("scrollRestoration" in historyState)) return undefined;
+
+    const previousValue = historyState.scrollRestoration;
+    historyState.scrollRestoration = "manual";
+
+    return () => {
+      historyState.scrollRestoration = previousValue;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+
+    const previousLocation = previousLocationRef.current;
+    if (
+      previousLocation &&
+      previousLocation.key !== location.key &&
+      previousLocation.pathname === "/shop"
+    ) {
+      window.sessionStorage.setItem(
+        getShopScrollStorageKey(previousLocation),
+        String(window.scrollY || window.pageYOffset || 0),
+      );
+    }
+
+    previousLocationRef.current = location;
+  }, [location]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const shouldRestoreShopScroll =
+        location.pathname === "/shop" && navigationType === "POP";
+
+      if (shouldRestoreShopScroll) {
+        const savedScrollTop = Number(
+          window.sessionStorage.getItem(getShopScrollStorageKey(location)),
+        );
+
+        if (Number.isFinite(savedScrollTop) && savedScrollTop > 0) {
+          window.scrollTo({ top: savedScrollTop, left: 0, behavior: "auto" });
+          return;
+        }
+      }
+
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [location, navigationType]);
 
   return null;
 }
@@ -130,7 +191,6 @@ function PublicLayout() {
   return (
     <>
       <Navbar />
-      <RouteScrollHandler />
       <HashScrollHandler />
       <main className="min-h-screen">
         <Suspense fallback={<RouteLoadingFallback />}>
@@ -199,6 +259,93 @@ function PageViewTracker() {
         typeof window !== "undefined" ? window.location.href : "",
     });
   }, [location.pathname, location.search]);
+
+  return null;
+}
+
+const toTitleLabel = (value) =>
+  String(value || "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+
+const resolveStaticPageTitle = (pathname) => {
+  const routeTitleMap = [
+    ["/", "Home"],
+    ["/home", "Home"],
+    ["/shop", "Shop"],
+    ["/compare", "Compare"],
+    ["/wishlist", "Wishlist"],
+    ["/about", "About"],
+    ["/contact", "Contact"],
+    ["/faqs", "FAQs"],
+    ["/cart", "Cart"],
+    ["/checkout", "Checkout"],
+    ["/thank-you", "Thank You"],
+    ["/track-order", "Track Order"],
+    ["/login", "Login"],
+    ["/register", "Register"],
+    ["/forgot-password", "Forgot Password"],
+    ["/dashboard", "Dashboard"],
+  ];
+
+  const directMatch = routeTitleMap.find(([path]) => path === pathname);
+  if (directMatch) return directMatch[1];
+
+  const productMatch = matchPath("/product/:id", pathname);
+  if (productMatch) return "Product";
+
+  const orderMatch = matchPath("/track-order/:orderNumber", pathname);
+  if (orderMatch) {
+    return `Track Order ${decodeURIComponent(orderMatch.params.orderNumber || "").trim()}`;
+  }
+
+  const resetMatch = matchPath("/reset-password/:token", pathname);
+  if (resetMatch) return "Reset Password";
+
+  const storeMatch = matchPath("/store/:slug", pathname);
+  if (storeMatch) {
+    return toTitleLabel(decodeURIComponent(storeMatch.params.slug || "Store"));
+  }
+
+  const landingMatch = matchPath("/lp/:slug", pathname);
+  if (landingMatch) return "Landing Page";
+
+  const policyMatch = matchPath("/policy/:policyType", pathname);
+  if (policyMatch) {
+    return `${toTitleLabel(decodeURIComponent(policyMatch.params.policyType || ""))} Policy`;
+  }
+
+  if (pathname.startsWith("/dashboard")) return "Dashboard";
+
+  const segments = String(pathname || "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.length > 0) {
+    return toTitleLabel(decodeURIComponent(segments[segments.length - 1] || ""));
+  }
+
+  return "Home";
+};
+
+function PageTitleManager({ settings }) {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const nextTitle = formatDocumentTitle(
+      settings,
+      resolveStaticPageTitle(location.pathname),
+    );
+
+    const timer = window.requestAnimationFrame(() => {
+      document.title = nextTitle;
+    });
+
+    return () => window.cancelAnimationFrame(timer);
+  }, [location.key, location.pathname, location.search, settings]);
 
   return null;
 }
@@ -373,6 +520,8 @@ function App() {
 
   return (
     <Router>
+      <NavigationScrollManager />
+      <PageTitleManager settings={settings} />
       <PageViewTracker />
       <Toaster
         position="top-center"

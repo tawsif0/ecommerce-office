@@ -79,6 +79,21 @@ const productVariantOptionSchema = new mongoose.Schema(
       default: "",
       maxlength: 20,
     },
+    priceMode: {
+      type: String,
+      enum: ["default", "direct", "compare"],
+      default: "default",
+    },
+    price: {
+      type: Number,
+      default: null,
+      min: [0, "Variant option price cannot be negative"],
+    },
+    comparePrice: {
+      type: Number,
+      default: null,
+      min: [0, "Variant option compare price cannot be negative"],
+    },
   },
   { _id: false },
 );
@@ -347,6 +362,52 @@ const productSchema = new mongoose.Schema({
   images: [
     {
       type: mongoose.Schema.Types.Mixed,
+    },
+  ],
+  videos: [
+    {
+      url: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      publicId: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      mimeType: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+    },
+  ],
+  video: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  videoPublicId: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  videoMimeType: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  youtubeVideoUrl: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  youtubeVideoUrls: [
+    {
+      type: String,
+      trim: true,
+      default: "",
     },
   ],
   isActive: {

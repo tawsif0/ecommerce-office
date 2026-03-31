@@ -219,6 +219,10 @@ const ProductShowcaseSection = ({
     return currentCategory.products.slice(0, INITIAL_VISIBLE_PRODUCTS);
   }, [currentCategory, isExpanded]);
 
+  if (!loading && (!categories.length || !currentCategory)) {
+    return null;
+  }
+
   const toggleExpanded = () => {
     if (!activeCategory) return;
     setExpandedCategories((prev) => ({
@@ -267,13 +271,6 @@ const ProductShowcaseSection = ({
 
           {loading
             ? renderEmptyState(loadingTitle || `Loading ${title}`, loadingDescription)
-            : null}
-
-          {!loading && (!categories.length || !currentCategory)
-            ? renderEmptyState(
-                emptyTitle || `No ${title} Available`,
-                emptyDescription,
-              )
             : null}
 
           {!loading && categories.length && currentCategory ? (

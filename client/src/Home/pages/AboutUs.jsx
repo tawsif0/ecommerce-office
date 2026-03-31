@@ -3,12 +3,18 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import {
   ContactShadows,
   Environment,
-  Html,
   OrbitControls,
   RoundedBox,
 } from "@react-three/drei";
-import { FiTruck, FiShield, FiRefreshCw, FiPackage } from "react-icons/fi";
 import usePublicSettings from "../../hooks/usePublicSettings";
+import { hasHtmlContent } from "../../utils/richText";
+import {
+  DEFAULT_ABOUT_CARDS,
+  DEFAULT_ABOUT_STORY_CONTENT,
+  DEFAULT_ABOUT_STORY_TITLE,
+  getAboutCardIconComponent,
+  normalizeAboutCards,
+} from "../../utils/aboutSection";
 
 const Wheel = ({ position }) => (
   <group position={position} rotation={[Math.PI / 2, 0, 0]}>
@@ -409,39 +415,22 @@ const AboutUs = () => {
   const { settings } = usePublicSettings();
   const storeName = String(settings?.website?.storeName || "E-Commerce").trim() || "E-Commerce";
   const tagline = String(settings?.website?.tagline || "").trim();
-  const features = [
-    {
-      icon: <FiTruck className="text-2xl" />,
-      title: "Fast Shipping",
-      description:
-        "Free shipping on orders over $50. 2-3 day delivery guaranteed.",
-      stat: "24-72 hrs",
-      color: "from-blue-500 to-blue-700",
-    },
-    {
-      icon: <FiShield className="text-2xl" />,
-      title: "Secure Payment",
-      description:
-        "256-bit SSL encryption. Your payment information is always safe.",
-      stat: "100% Safe",
-      color: "from-green-500 to-green-700",
-    },
-    {
-      icon: <FiRefreshCw className="text-2xl" />,
-      title: "Easy Returns",
-      description: "30-day return policy. No questions asked on unworn items.",
-      stat: "30 Days",
-      color: "from-purple-500 to-purple-700",
-    },
-    {
-      icon: <FiPackage className="text-2xl" />,
-      title: "Quality Products",
-      description:
-        "Every product is quality-checked before shipping to ensure perfection.",
-      stat: "10k+ Items",
-      color: "from-amber-500 to-amber-700",
-    },
-  ];
+  const aboutStoryTitle =
+    String(settings?.about?.storyTitle || "").trim() || DEFAULT_ABOUT_STORY_TITLE;
+  const aboutStoryContent =
+    String(settings?.about?.storyContent || "").trim() ||
+    (tagline
+      ? `<p>${tagline}</p><p>${storeName} now brings products, banners, categories, support, compare flows, wishlist behavior, and branded landing content into one office ecommerce system that feels much closer to a full marketplace experience.</p><p>Our mission is simple: give shoppers a more polished buying journey while giving operators a stronger control layer for stock, pricing, orders, and storefront presentation.</p>`
+      : DEFAULT_ABOUT_STORY_CONTENT);
+  const features = normalizeAboutCards(settings?.about?.cards || DEFAULT_ABOUT_CARDS);
+  const cardsLayoutClass =
+    features.length <= 1
+      ? "mx-auto max-w-sm grid grid-cols-1"
+      : features.length === 2
+        ? "mx-auto max-w-4xl grid grid-cols-1 gap-6 md:grid-cols-2"
+        : features.length === 3
+          ? "mx-auto max-w-6xl grid grid-cols-1 gap-6 md:grid-cols-3"
+          : "grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4";
 
   return (
     <section className="min-h-screen bg-white">
@@ -449,25 +438,20 @@ const AboutUs = () => {
         <div className="mb-20 grid grid-cols-1 gap-12 lg:grid-cols-2">
           <div>
             <h2 className="mb-6 text-3xl font-bold text-black md:text-4xl">
-              Our Story
+              {aboutStoryTitle}
             </h2>
-            <div className="space-y-6">
-              <p className="text-lg leading-relaxed text-gray-700">
-                {tagline ||
-                  `${storeName} was shaped to close the gap between a basic online catalog and a serious ecommerce operation with stronger discovery, cleaner checkout, and tighter inventory-aware storefront control.`}
-              </p>
-              <p className="text-lg leading-relaxed text-gray-700">
-                The platform now brings products, banners, categories, support,
-                compare flows, wishlist behavior, and branded landing content
-                into one office ecommerce system that feels much closer to a
-                full marketplace experience.
-              </p>
-              <p className="text-lg leading-relaxed text-gray-700">
-                Our mission is simple: give shoppers a more polished buying
-                journey while giving operators a stronger control layer for
-                stock, pricing, orders, and storefront presentation.
-              </p>
-            </div>
+            {hasHtmlContent(aboutStoryContent) ? (
+              <div
+                className="prose max-w-none space-y-6 text-lg leading-relaxed text-gray-700"
+                dangerouslySetInnerHTML={{ __html: aboutStoryContent }}
+              />
+            ) : (
+              <div className="space-y-6">
+                <p className="text-lg leading-relaxed text-gray-700">
+                  {aboutStoryContent}
+                </p>
+              </div>
+            )}
           </div>
 
           <DeliveryScene />
@@ -484,24 +468,36 @@ const AboutUs = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className={cardsLayoutClass}>
             {features.map((feature, index) => (
               <div
-                key={index}
+                key={`${feature.title}-${index}`}
                 className="group rounded-xl border border-gray-200 bg-white p-6 transition-all duration-300 hover:border-black hover:shadow-xl"
               >
-                <div
-                  className={`mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-linear-to-br ${feature.color} transition-transform duration-300 group-hover:scale-110`}
-                >
-                  <div className="text-white">{feature.icon}</div>
-                </div>
-                <div className="mb-2 text-2xl font-bold text-black">
-                  {feature.stat}
-                </div>
+                {(() => {
+                  const Icon = getAboutCardIconComponent(feature.icon);
+                  return (
+                    <div
+                      className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-110"
+                      style={{ backgroundColor: feature.backgroundColor || "#111827" }}
+                    >
+                      <div style={{ color: feature.iconColor || "#ffffff" }}>
+                        <Icon className="text-2xl" />
+                      </div>
+                    </div>
+                  );
+                })()}
                 <h3 className="mb-2 text-lg font-bold text-black">
                   {feature.title}
                 </h3>
-                <p className="text-sm text-gray-600">{feature.description}</p>
+                {hasHtmlContent(feature.description) ? (
+                  <div
+                    className="space-y-3 text-sm leading-6 text-gray-600"
+                    dangerouslySetInnerHTML={{ __html: feature.description }}
+                  />
+                ) : (
+                  <p className="text-sm leading-6 text-gray-600">{feature.description}</p>
+                )}
               </div>
             ))}
           </div>

@@ -8,6 +8,11 @@ import RichTextEditor from "../../components/RichTextEditor";
 import SearchableSelect from "../../components/SearchableSelect";
 import { stripHtml } from "../../utils/richText";
 import {
+  isAllowedProductVideoType,
+  MAX_PRODUCT_VIDEO_UPLOADS,
+  MAX_PRODUCT_VIDEO_SIZE_BYTES,
+} from "../../utils/productMedia";
+import {
   FiImage,
   FiUpload,
   FiType,
@@ -36,6 +41,9 @@ const ProductCreate = () => {
   const [mainImagePreview, setMainImagePreview] = useState("");
   const [galleryFiles, setGalleryFiles] = useState([]);
   const [galleryPreviews, setGalleryPreviews] = useState([]);
+  const [videoFiles, setVideoFiles] = useState([]);
+  const [videoPreviews, setVideoPreviews] = useState([]);
+  const [youtubeVideoUrls, setYoutubeVideoUrls] = useState([""]);
 
   // Form state
   const [form, setForm] = useState({
@@ -192,6 +200,15 @@ const ProductCreate = () => {
     fetchBrandOptions();
   }, []);
 
+  useEffect(
+    () => () => {
+      videoPreviews.forEach((preview) => {
+        if (preview) URL.revokeObjectURL(preview);
+      });
+    },
+    [videoPreviews],
+  );
+
   // Handle product type change
   const handleProductTypeChange = (e) => {
     const { value } = e.target;
@@ -276,6 +293,71 @@ const ProductCreate = () => {
     const newPreviews = galleryPreviews.filter((_, i) => i !== index);
     setGalleryFiles(newFiles);
     setGalleryPreviews(newPreviews);
+  };
+
+  const handleVideoChange = (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (!selectedFiles.length) return;
+
+    const availableSlots = Math.max(0, MAX_PRODUCT_VIDEO_UPLOADS - videoFiles.length);
+    if (availableSlots <= 0) {
+      toast.error(`You can upload up to ${MAX_PRODUCT_VIDEO_UPLOADS} videos.`);
+      e.target.value = "";
+      return;
+    }
+
+    const nextFiles = [];
+    const nextPreviews = [];
+
+    selectedFiles.slice(0, availableSlots).forEach((file) => {
+      if (!isAllowedProductVideoType(file)) {
+        toast.error("Only MP4, WebM, OGG, or MOV videos are allowed.");
+        return;
+      }
+
+      if (file.size > MAX_PRODUCT_VIDEO_SIZE_BYTES) {
+        toast.error("Each product video must be 9 MB or smaller.");
+        return;
+      }
+
+      nextFiles.push(file);
+      nextPreviews.push(URL.createObjectURL(file));
+    });
+
+    if (nextFiles.length > 0) {
+      setVideoFiles((prev) => [...prev, ...nextFiles].slice(0, MAX_PRODUCT_VIDEO_UPLOADS));
+      setVideoPreviews((prev) => [
+        ...prev,
+        ...nextPreviews,
+      ].slice(0, MAX_PRODUCT_VIDEO_UPLOADS));
+    }
+
+    e.target.value = "";
+  };
+
+  const removeVideo = (index) => {
+    if (videoPreviews[index]) {
+      URL.revokeObjectURL(videoPreviews[index]);
+    }
+    setVideoFiles((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+    setVideoPreviews((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+  };
+
+  const handleYoutubeUrlChange = (index, value) => {
+    setYoutubeVideoUrls((prev) =>
+      prev.map((entry, currentIndex) => (currentIndex === index ? value : entry)),
+    );
+  };
+
+  const addYoutubeField = () => {
+    setYoutubeVideoUrls((prev) => [...prev, ""]);
+  };
+
+  const removeYoutubeField = (index) => {
+    setYoutubeVideoUrls((prev) => {
+      if (prev.length === 1) return [""];
+      return prev.filter((_, currentIndex) => currentIndex !== index);
+    });
   };
 
   const validateField = (name, value) => {
@@ -446,6 +528,10 @@ const ProductCreate = () => {
       formData.append("dimensions", form.dimensions.trim());
       formData.append("deliveryMinDays", form.deliveryMinDays || "2");
       formData.append("deliveryMaxDays", form.deliveryMaxDays || "5");
+      formData.append(
+        "youtubeVideoUrls",
+        JSON.stringify(youtubeVideoUrls.map((value) => value.trim()).filter(Boolean)),
+      );
       formData.append("colors", JSON.stringify(form.colors));
       formData.append(
         "features",
@@ -467,6 +553,10 @@ const ProductCreate = () => {
       // Append gallery images
       galleryFiles.forEach((image) => {
         formData.append("images", image);
+      });
+
+      videoFiles.forEach((video) => {
+        formData.append("videos", video);
       });
 
       const response = await axios.post(`${baseUrl}/products`, formData, {
@@ -503,6 +593,12 @@ const ProductCreate = () => {
         setMainImagePreview("");
         setGalleryFiles([]);
         setGalleryPreviews([]);
+        videoPreviews.forEach((preview) => {
+          if (preview) URL.revokeObjectURL(preview);
+        });
+        setVideoFiles([]);
+        setVideoPreviews([]);
+        setYoutubeVideoUrls([""]);
         setErrors({});
         setCustomColorValue("#2563eb");
 
@@ -1074,6 +1170,103 @@ const ProductCreate = () => {
                       </div>
                     </div>
                   )}
+                </div>
+
+                <div className="mt-4 md:mt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Product Video (Optional)
+                  </label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 md:p-4 text-center hover:border-gray-500 transition-colors">
+                    {videoPreviews.length > 0 ? (
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {videoPreviews.map((preview, index) => (
+                          <div key={`product-video-${index}`} className="relative">
+                            <video
+                              src={preview}
+                              className="h-40 w-full rounded-lg bg-black object-contain"
+                              preload="metadata"
+                              controls
+                              controlsList="nodownload"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeVideo(index)}
+                              className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700"
+                            >
+                              <FiX size={14} />
+                            </button>
+                            <div className="text-xs text-gray-500 mt-2 text-center">
+                              {videoFiles[index]?.name || `Video ${index + 1}`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {videoFiles.length < MAX_PRODUCT_VIDEO_UPLOADS ? (
+                      <>
+                        <FiUpload className="mx-auto text-gray-400 text-2xl md:text-3xl mb-2 mt-2" />
+                        <p className="text-gray-600 mb-2 text-sm md:text-base">
+                          Upload up to {MAX_PRODUCT_VIDEO_UPLOADS} product videos, 9 MB each
+                        </p>
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                          onChange={handleVideoChange}
+                          className="hidden"
+                          id="product-video-upload"
+                          multiple
+                        />
+                        <label
+                          htmlFor="product-video-upload"
+                          className="inline-flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-900 text-white rounded-lg cursor-pointer hover:bg-gray-800 transition-colors text-sm md:text-base"
+                        >
+                          <FiUpload /> Upload Video
+                        </label>
+                        <p className="text-xs text-gray-500 mt-2">
+                          MP4, WebM, OGG, MOV. Keep each file at 9 MB or less.
+                        </p>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    YouTube Video Links (Optional)
+                  </label>
+                  <div className="space-y-3">
+                    {youtubeVideoUrls.map((value, index) => (
+                      <div key={`youtube-link-${index}`} className="flex gap-2">
+                        <input
+                          type="url"
+                          value={value}
+                          onChange={(event) =>
+                            handleYoutubeUrlChange(index, event.target.value)
+                          }
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:border-gray-500 transition-all text-sm md:text-base"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeYoutubeField(index)}
+                          className="inline-flex items-center justify-center rounded-lg border border-red-200 px-3 text-red-600 transition hover:bg-red-50"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addYoutubeField}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:text-black"
+                    >
+                      <FiPlus /> Add YouTube Link
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    These links will appear in the product gallery beside the images and uploaded videos.
+                  </p>
                 </div>
               </motion.div>
 

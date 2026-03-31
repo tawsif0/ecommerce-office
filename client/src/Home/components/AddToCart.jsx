@@ -7,6 +7,8 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import { useCart } from "../../context/CartContext";
 import ConfirmModal from "../../components/ConfirmModal";
+import { getOrderItemVariantLines } from "../../utils/orderPresentation";
+import { getSelectedVariantSignature } from "../../utils/productVariants";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const COUPON_STORAGE_KEY = "appliedCoupon";
@@ -157,11 +159,19 @@ const AddToCart = () => {
     color = "",
     dimensions = "",
     variationId = "",
+    selectedVariantSignature = "",
   ) => {
-    const lineKey = `${productId}-${variationId || ""}-${color || ""}-${dimensions || ""}`;
+    const lineKey = `${productId}-${variationId || ""}-${color || ""}-${dimensions || ""}-${selectedVariantSignature || ""}`;
     setUpdatingItemId(lineKey);
     try {
-      await updateCartItem(productId, newQuantity, color, dimensions, variationId);
+      await updateCartItem(
+        productId,
+        newQuantity,
+        color,
+        dimensions,
+        variationId,
+        selectedVariantSignature,
+      );
     } catch (error) {
       console.error("Error updating cart item:", error);
     } finally {
@@ -174,9 +184,17 @@ const AddToCart = () => {
     color = "",
     dimensions = "",
     variationId = "",
+    selectedVariantSignature = "",
     title = "",
   ) => {
-    setRemoveConfirm({ productId, color, dimensions, variationId, title });
+    setRemoveConfirm({
+      productId,
+      color,
+      dimensions,
+      variationId,
+      selectedVariantSignature,
+      title,
+    });
   };
 
   const confirmRemoveCartItem = async () => {
@@ -189,6 +207,7 @@ const AddToCart = () => {
         removeConfirm.color,
         removeConfirm.dimensions,
         removeConfirm.variationId,
+        removeConfirm.selectedVariantSignature,
       );
     } catch (error) {
       console.error("Error removing cart item:", error);
@@ -302,6 +321,7 @@ const AddToCart = () => {
 
   const getItemData = (item) => {
     const product = typeof item.product === "object" ? item.product : null;
+    const selectedVariants = Array.isArray(item.selectedVariants) ? item.selectedVariants : [];
     return {
       productId: item.productId || product?._id || item.product,
       title: item.title || product?.title || "Product",
@@ -320,6 +340,10 @@ const AddToCart = () => {
       dimensions: item.dimensions || "",
       variationId: String(item.variationId || "").trim(),
       variationLabel: String(item.variationLabel || "").trim(),
+      selectedVariants,
+      selectedVariantSignature:
+        String(item.selectedVariantSignature || "").trim() ||
+        getSelectedVariantSignature(selectedVariants),
     };
   };
 
@@ -396,7 +420,19 @@ const AddToCart = () => {
                 <div className="divide-y divide-gray-100">
                   {cartItems.map((item) => {
                     const itemData = getItemData(item);
-                    const key = `${itemData.productId}-${itemData.variationId || ""}-${itemData.color || ""}-${itemData.dimensions || ""}`;
+                    const variantLines = getOrderItemVariantLines(itemData);
+                    const key = `${itemData.productId}-${itemData.variationId || ""}-${itemData.color || ""}-${itemData.dimensions || ""}-${itemData.selectedVariantSignature || ""}`;
+                    const legacyFallbackChips =
+                      variantLines.length === 0
+                        ? [
+                            itemData.variationLabel
+                              ? `Variant: ${itemData.variationLabel}`
+                              : "",
+                            itemData.dimensions
+                              ? `Size: ${itemData.dimensions}`
+                              : "",
+                          ].filter(Boolean)
+                        : [];
                     return (
                       <div
                         key={key}
@@ -414,20 +450,30 @@ const AddToCart = () => {
                               <h3 className="text-base font-semibold leading-6 text-gray-900">
                                 {itemData.title}
                               </h3>
-                              <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
-                                {itemData.variationLabel ? (
-                                  <span className="rounded-full bg-gray-100 px-2.5 py-1">
-                                    Variant: {itemData.variationLabel}
-                                  </span>
-                                ) : null}
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                                {variantLines.length > 0
+                                  ? variantLines.map((line) => (
+                                      <span
+                                        key={`${key}-${line}`}
+                                        className="rounded-full bg-gray-100 px-2.5 py-1"
+                                      >
+                                        {line}
+                                      </span>
+                                    ))
+                                  : legacyFallbackChips.map((line) => (
+                                      <span
+                                        key={`${key}-legacy-${line}`}
+                                        className="rounded-full bg-gray-100 px-2.5 py-1"
+                                      >
+                                        {line}
+                                      </span>
+                                    ))}
                                 {itemData.color ? (
-                                  <span className="rounded-full bg-gray-100 px-2.5 py-1">
-                                    Color: {itemData.color}
-                                  </span>
-                                ) : null}
-                                {itemData.dimensions ? (
-                                  <span className="rounded-full bg-gray-100 px-2.5 py-1">
-                                    Size: {itemData.dimensions}
+                                  <span className="inline-flex items-center rounded-full bg-gray-100 p-1">
+                                    <span
+                                      className="h-3 w-3 rounded-full border border-gray-300"
+                                      style={{ backgroundColor: itemData.color }}
+                                    />
                                   </span>
                                 ) : null}
                               </div>
@@ -439,6 +485,7 @@ const AddToCart = () => {
                                   itemData.color,
                                   itemData.dimensions,
                                   itemData.variationId,
+                                  itemData.selectedVariantSignature,
                                   itemData.title,
                                 )
                               }
@@ -450,39 +497,49 @@ const AddToCart = () => {
                           </div>
 
                           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="inline-flex items-center overflow-hidden rounded-full border border-gray-200 bg-white">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="inline-flex items-center overflow-hidden rounded-full border border-gray-200 bg-white">
+                                <button
+                                  onClick={() =>
+                                    handleUpdateCartItem(
+                                      itemData.productId,
+                                      Math.max(1, itemData.quantity - 1),
+                                      itemData.color,
+                                      itemData.dimensions,
+                                      itemData.variationId,
+                                      itemData.selectedVariantSignature,
+                                    )
+                                  }
+                                  className="px-4 py-2.5 text-gray-700 transition hover:bg-gray-50"
+                                  disabled={updatingItemId === key}
+                                >
+                                  <FiMinus />
+                                </button>
+                                <span className="min-w-[3rem] px-3 py-2.5 text-center text-sm font-semibold text-black">
+                                  {itemData.quantity}
+                                </span>
+                                <button
+                                  onClick={() =>
+                                    handleUpdateCartItem(
+                                      itemData.productId,
+                                      itemData.quantity + 1,
+                                      itemData.color,
+                                      itemData.dimensions,
+                                      itemData.variationId,
+                                      itemData.selectedVariantSignature,
+                                    )
+                                  }
+                                  className="px-4 py-2.5 text-gray-700 transition hover:bg-gray-50"
+                                  disabled={updatingItemId === key}
+                                >
+                                  <FiPlus />
+                                </button>
+                              </div>
                               <button
-                                onClick={() =>
-                                  handleUpdateCartItem(
-                                    itemData.productId,
-                                    Math.max(1, itemData.quantity - 1),
-                                    itemData.color,
-                                    itemData.dimensions,
-                                    itemData.variationId,
-                                  )
-                                }
-                                className="px-4 py-2.5 text-gray-700 transition hover:bg-gray-50"
-                                disabled={updatingItemId === key}
+                                onClick={() => navigate(`/product/${itemData.productId}`)}
+                                className="inline-flex items-center rounded-full border border-gray-200 px-4 py-2.5 text-xs font-semibold text-gray-700 transition hover:border-black hover:text-black"
                               >
-                                <FiMinus />
-                              </button>
-                              <span className="min-w-[3rem] px-3 py-2.5 text-center text-sm font-semibold text-black">
-                                {itemData.quantity}
-                              </span>
-                              <button
-                                onClick={() =>
-                                  handleUpdateCartItem(
-                                    itemData.productId,
-                                    itemData.quantity + 1,
-                                    itemData.color,
-                                    itemData.dimensions,
-                                    itemData.variationId,
-                                  )
-                                }
-                                className="px-4 py-2.5 text-gray-700 transition hover:bg-gray-50"
-                                disabled={updatingItemId === key}
-                              >
-                                <FiPlus />
+                                View
                               </button>
                             </div>
 

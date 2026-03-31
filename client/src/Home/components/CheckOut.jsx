@@ -26,6 +26,12 @@ import {
   clearLandingAttribution,
   getLandingAttribution,
 } from "../../utils/landingAttribution";
+import { getOrderItemVariantLines } from "../../utils/orderPresentation";
+import { getSelectedVariantSignature } from "../../utils/productVariants";
+import {
+  BANGLADESH_DISTRICT_OPTIONS,
+  getCodDeliveryChargeForDistrict,
+} from "../../utils/bangladeshLocations";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const COUPON_STORAGE_KEY = "appliedCoupon";
@@ -235,6 +241,7 @@ const CheckOut = () => {
   const selectedPaymentIsGateway = isGatewayPaymentMethod(selectedPaymentMethod);
   const selectedPaymentIsCod =
     paymentMethodChannel === "cod" || isCashOnDeliveryMethod(paymentMethodValue);
+  const hasSelectedDistrict = Boolean(String(formData.district || "").trim());
   const requiresTransactionProof =
     !selectedPaymentMethod
       ? false
@@ -244,7 +251,7 @@ const CheckOut = () => {
   const selectedPaymentAccount = String(selectedPaymentMethod?.accountNo || "").trim();
   const selectedCodShippingCost =
     selectedPaymentIsCod && selectedPaymentMethod
-      ? Math.max(0, Number(selectedPaymentMethod?.shippingCost || 0))
+      ? getCodDeliveryChargeForDistrict(selectedPaymentMethod, formData.district)
       : 0;
 
   const discount = Math.min(
@@ -261,7 +268,9 @@ const CheckOut = () => {
   const shippingFeeStatusLabel = isFreeShippingCoupon
     ? "FREE"
     : selectedPaymentIsCod
-      ? formatCurrency(selectedCodShippingCost)
+      ? hasSelectedDistrict
+        ? formatCurrency(selectedCodShippingCost)
+        : "Select district"
       : isEstimatingShipping
         ? "Calculating..."
       : shippingEstimate
@@ -271,6 +280,7 @@ const CheckOut = () => {
 
   const getItemData = (item) => {
     const product = typeof item.product === "object" ? item.product : null;
+    const selectedVariants = Array.isArray(item.selectedVariants) ? item.selectedVariants : [];
     return {
       productId: item.productId || product?._id || item.product,
       title: item.title || product?.title || "Product",
@@ -289,6 +299,10 @@ const CheckOut = () => {
       dimensions: item.dimensions || "",
       variationId: String(item.variationId || "").trim(),
       variationLabel: String(item.variationLabel || "").trim(),
+      selectedVariants,
+      selectedVariantSignature:
+        String(item.selectedVariantSignature || "").trim() ||
+        getSelectedVariantSignature(selectedVariants),
     };
   };
 
@@ -341,6 +355,7 @@ const CheckOut = () => {
           image: itemData.image,
           variationId: itemData.variationId || "",
           variationLabel: itemData.variationLabel || "",
+          selectedVariants: itemData.selectedVariants || [],
         };
       }),
       subtotal: snapshotSubtotal,
@@ -886,6 +901,7 @@ const CheckOut = () => {
             price: itemData.price,
             variationId: itemData.variationId || "",
             variationLabel: itemData.variationLabel || "",
+            selectedVariants: itemData.selectedVariants || [],
             color: itemData.color,
             dimensions: itemData.dimensions,
             title: itemData.title,
@@ -1177,14 +1193,23 @@ const CheckOut = () => {
                   list="checkout-subcity-options"
                   className={inputClassName}
                 />
-                <input
+                <select
                   name="district"
                   value={formData.district}
                   onChange={handleInputChange}
-                  placeholder="District*"
-                  list="checkout-subcity-options"
                   className={inputClassName}
-                />
+                >
+                  <option value="">Select district*</option>
+                  {formData.district &&
+                  !BANGLADESH_DISTRICT_OPTIONS.includes(formData.district) ? (
+                    <option value={formData.district}>{formData.district}</option>
+                  ) : null}
+                  {BANGLADESH_DISTRICT_OPTIONS.map((district) => (
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
+                  ))}
+                </select>
                 <input
                   name="postalCode"
                   value={formData.postalCode}
@@ -1306,12 +1331,30 @@ const CheckOut = () => {
                                   : "Manual payment instructions will appear below."}
                             </p>
                             {methodIsCod ? (
-                              <p className="text-xs leading-5 text-gray-500">
-                                Delivery charge:{" "}
-                                <span className="font-semibold text-black">
-                                  {shippingFeeStatusLabel}
-                                </span>
-                              </p>
+                              <div className="space-y-1 text-xs leading-5 text-gray-500">
+                                <p>
+                                  Inside Dhaka:{" "}
+                                  <span className="font-semibold text-black">
+                                    {formatCurrency(
+                                      method.insideDhakaShippingCost ?? method.shippingCost ?? 0,
+                                    )}
+                                  </span>
+                                </p>
+                                <p>
+                                  Outside Dhaka:{" "}
+                                  <span className="font-semibold text-black">
+                                    {formatCurrency(
+                                      method.outsideDhakaShippingCost ?? method.shippingCost ?? 0,
+                                    )}
+                                  </span>
+                                </p>
+                                <p>
+                                  Selected delivery charge:{" "}
+                                  <span className="font-semibold text-black">
+                                    {shippingFeeStatusLabel}
+                                  </span>
+                                </p>
+                              </div>
                             ) : null}
                           </div>
                         </div>
@@ -1357,7 +1400,8 @@ const CheckOut = () => {
                   </p>
                 ) : selectedPaymentIsCod ? (
                   <p className="mt-4 rounded-[22px] border border-emerald-100 bg-emerald-50 p-4 text-xs leading-5 text-emerald-700">
-                    No transaction ID is needed for Cash on Delivery orders.
+                    No transaction ID is needed for Cash on Delivery orders. Select the district to
+                    apply the correct inside/outside Dhaka shipping charge.
                   </p>
                 ) : (
                   <p className="mt-4 rounded-[22px] border border-emerald-100 bg-emerald-50 p-4 text-xs leading-5 text-emerald-700">
@@ -1413,9 +1457,10 @@ const CheckOut = () => {
               <div className="mt-5 space-y-3 max-h-[27rem] overflow-auto pr-1">
                 {cartItems.map((item) => {
                   const itemData = getItemData(item);
+                  const variantLines = getOrderItemVariantLines(itemData);
                   return (
                     <div
-                      key={`${itemData.productId}-${itemData.variationId || ""}-${itemData.color || ""}-${itemData.dimensions || ""}`}
+                      key={`${itemData.productId}-${itemData.variationId || ""}-${itemData.color || ""}-${itemData.dimensions || ""}-${itemData.selectedVariantSignature || ""}`}
                       className="flex gap-3 rounded-2xl border border-gray-100 bg-[#fafafa] p-3"
                     >
                       <ProductImage
@@ -1427,10 +1472,23 @@ const CheckOut = () => {
                         <p className="line-clamp-2 text-sm font-medium text-gray-900">
                           {itemData.title}
                         </p>
-                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-500">
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
                           <span>Qty: {itemData.quantity}</span>
-                          {itemData.variationLabel ? (
+                          {variantLines.length > 0
+                            ? variantLines.map((line) => (
+                                <span key={`${itemData.productId}-${line}`}>{line}</span>
+                              ))
+                            : itemData.variationLabel ? (
                             <span>Variant: {itemData.variationLabel}</span>
+                              )
+                            : null}
+                          {itemData.color ? (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 p-1">
+                              <span
+                                className="h-3 w-3 rounded-full border border-gray-300"
+                                style={{ backgroundColor: itemData.color }}
+                              />
+                            </span>
                           ) : null}
                         </div>
                       </div>

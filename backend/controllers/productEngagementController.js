@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const ProductReview = require("../models/ProductReview");
 const Vendor = require("../models/Vendor");
@@ -90,9 +91,12 @@ const buildAdminReviewStatusQuery = (status) => {
 };
 
 const recalculateProductRating = async (productId) => {
+  const normalizedProductId = isObjectId(productId)
+    ? new mongoose.Types.ObjectId(String(productId))
+    : productId;
   const result = await ProductReview.aggregate([
     {
-      $match: buildApprovedReviewQuery(productId),
+      $match: buildApprovedReviewQuery(normalizedProductId),
     },
     {
       $group: {

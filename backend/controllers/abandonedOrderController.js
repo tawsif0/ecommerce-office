@@ -4,6 +4,11 @@ const Product = require("../models/Product");
 const Order = require("../models/Order");
 const LandingPage = require("../models/LandingPage");
 const {
+  normalizeSelectedVariantsForProduct,
+  normalizeSelectedVariantsPayload,
+  resolveProductPricingForSelection,
+} = require("../utils/productVariants");
+const {
   isAdmin,
   getVendorForUser,
   getUserId,
@@ -113,6 +118,25 @@ const getBasePrice = (product, variation = null) => {
   return Math.max(0, parseNumber(product?.price, 0));
 };
 
+const getBaseComparePrice = (product, variation = null) => {
+  if (variation) {
+    if (variation.salePrice !== null && variation.salePrice !== undefined) {
+      return Math.max(0, parseNumber(variation.price, 0));
+    }
+    return null;
+  }
+
+  if (
+    String(product?.priceType || "single") === "best" &&
+    product?.salePrice !== null &&
+    product?.salePrice !== undefined
+  ) {
+    return Math.max(0, parseNumber(product.price, 0));
+  }
+
+  return null;
+};
+
 const buildCapturedItems = async (rawItems = []) => {
   const normalized = rawItems
     .map((entry) => ({
@@ -123,6 +147,7 @@ const buildCapturedItems = async (rawItems = []) => {
       image: normalizeString(entry?.image || "", 1000),
       variationId: String(entry?.variationId || "").trim(),
       variationLabel: normalizeString(entry?.variationLabel || "", 180),
+      selectedVariants: normalizeSelectedVariantsPayload(entry?.selectedVariants || []),
     }))
     .filter((entry) => mongoose.Types.ObjectId.isValid(entry.productId));
 
@@ -136,7 +161,7 @@ const buildCapturedItems = async (rawItems = []) => {
 
   const productIds = [...new Set(normalized.map((entry) => entry.productId))];
   const products = await Product.find({ _id: { $in: productIds } })
-    .select("_id vendor title price salePrice priceType images variations")
+    .select("_id vendor title price salePrice priceType images variations variantDefinitions")
     .lean();
   const productMap = new Map(products.map((product) => [String(product._id), product]));
 
@@ -156,10 +181,22 @@ const buildCapturedItems = async (rawItems = []) => {
         ? product.variations.find((row) => String(row?._id || "") === variationId) || null
         : null
       : null;
+    const selectedVariantContext =
+      entry.selectedVariants.length > 0
+        ? normalizeSelectedVariantsForProduct(product, entry.selectedVariants)
+        : { selectedVariants: [], variationLabel: "" };
+    const selectedVariants = Array.isArray(selectedVariantContext?.selectedVariants)
+      ? selectedVariantContext.selectedVariants
+      : [];
+    const pricing = resolveProductPricingForSelection({
+      basePrice: getBasePrice(product, variation),
+      baseComparePrice: getBaseComparePrice(product, variation),
+      selectedVariants,
+    });
 
     const price = Number.isFinite(entry.price)
       ? Math.max(0, entry.price)
-      : getBasePrice(product, variation);
+      : Math.max(0, Number(pricing?.price || 0));
 
     const row = {
       product: product._id,
@@ -169,7 +206,12 @@ const buildCapturedItems = async (rawItems = []) => {
       quantity: entry.quantity,
       price,
       variationId: variation ? variation._id : null,
-      variationLabel: entry.variationLabel || String(variation?.label || ""),
+      variationLabel:
+        entry.variationLabel ||
+        [String(variation?.label || ""), String(selectedVariantContext?.variationLabel || "")]
+          .filter(Boolean)
+          .join(" | "),
+      selectedVariants,
     };
 
     if (row.vendor) {
@@ -472,6 +514,7 @@ const createOrderFromAbandoned = async (abandonedOrder) => {
     let variation = null;
     let unitPrice = Math.max(0, parseNumber(item?.price, NaN));
     let variationLabel = normalizeString(item?.variationLabel || "", 180);
+    let selectedVariants = normalizeSelectedVariantsPayload(item?.selectedVariants || []);
     let sku = "";
 
     if (variationId) {
@@ -514,6 +557,28 @@ const createOrderFromAbandoned = async (abandonedOrder) => {
       sku = String(product.sku || "");
     }
 
+    if (selectedVariants.length > 0) {
+      const selectedVariantContext = normalizeSelectedVariantsForProduct(
+        product,
+        selectedVariants,
+      );
+
+      if (!selectedVariantContext?.error) {
+        selectedVariants = Array.isArray(selectedVariantContext.selectedVariants)
+          ? selectedVariantContext.selectedVariants
+          : [];
+        variationLabel = [variationLabel, selectedVariantContext.variationLabel]
+          .filter(Boolean)
+          .join(" | ");
+        const pricing = resolveProductPricingForSelection({
+          basePrice: Number.isFinite(unitPrice) ? unitPrice : getBasePrice(product, variation),
+          baseComparePrice: getBaseComparePrice(product, variation),
+          selectedVariants,
+        });
+        unitPrice = Math.max(0, Number(pricing?.price || unitPrice || 0));
+      }
+    }
+
     touchedProducts.add(String(product._id));
 
     const safePrice = Number(Math.max(0, unitPrice).toFixed(2));
@@ -526,6 +591,7 @@ const createOrderFromAbandoned = async (abandonedOrder) => {
       price: safePrice,
       variationId: variation ? variation._id : null,
       variationLabel,
+      selectedVariants,
       sku,
       color: "",
       dimensions: "",

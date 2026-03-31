@@ -75,6 +75,12 @@ const sanitizePaymentMethodForPublic = (method) => {
     instructions: method.instructions || "",
     requiresTransactionProof: Boolean(method.requiresTransactionProof),
     shippingCost: Number(method.shippingCost || 0),
+    insideDhakaShippingCost: Number(
+      method.insideDhakaShippingCost ?? method.shippingCost ?? 0,
+    ),
+    outsideDhakaShippingCost: Number(
+      method.outsideDhakaShippingCost ?? method.shippingCost ?? 0,
+    ),
     displayOrder: Number(method.displayOrder || 0),
     isActive: Boolean(method.isActive),
     createdAt: method.createdAt,

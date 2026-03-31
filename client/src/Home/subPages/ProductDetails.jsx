@@ -15,12 +15,13 @@ import {
   FaLink,
   FaPaperPlane,
   FaStar,
+  FaYoutube,
   FaChevronLeft,
   FaChevronRight,
   FaTruck,
   FaUndo,
 } from "react-icons/fa";
-import { FiHeart, FiShare2, FiShuffle } from "react-icons/fi";
+import { FiArrowLeft, FiHeart, FiShare2, FiShuffle } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
@@ -28,7 +29,12 @@ import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../hooks/useAuth";
 import usePublicSettings from "../../hooks/usePublicSettings";
 import StorefrontProductCard from "../components/StorefrontProductCard";
-import { toggleCompareItem } from "../../store/compareSlice";
+import ProductReviewsPanel from "../components/ProductReviewsPanel";
+import {
+  COMPARE_LIMIT_MESSAGE,
+  MAX_COMPARE_ITEMS,
+  toggleCompareItem,
+} from "../../store/compareSlice";
 import { addRecentlyViewedItem } from "../../store/recentlyViewedSlice";
 import {
   selectWishlistPendingIds,
@@ -43,9 +49,46 @@ import { createProductSnapshot } from "../../utils/productSnapshot";
 import {
   isPublicStockVisible,
 } from "../../utils/publicProduct";
+import { formatDocumentTitle } from "../../utils/publicSettings";
+import {
+  buildSelectedVariantLabel,
+  getEffectiveProductPricing,
+  getReadableColorLabel,
+  getReadableVariantOptionLabel,
+  getResolvedSelectedVariants,
+  normalizeProductVariantDefinitions,
+  normalizeSelectedVariantsPayload,
+} from "../../utils/productVariants";
+import {
+  getYouTubeEmbedUrl,
+  getYouTubeThumbnailUrl,
+  normalizeProductVideoEntries,
+  normalizeProductYouTubeUrls,
+} from "../../utils/productMedia";
 import { hasHtmlContent, stripHtml } from "../../utils/richText";
 
 const baseUrl = import.meta.env.VITE_API_URL;
+const VALID_PRODUCT_TABS = new Set(["description", "additional", "reviews"]);
+
+const normalizeProductTabValue = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return VALID_PRODUCT_TABS.has(normalized) ? normalized : "";
+};
+
+const getStoredProductTab = (productId) => {
+  if (typeof window === "undefined" || !productId) return "";
+
+  const hashTab = normalizeProductTabValue(window.location.hash.replace(/^#/, ""));
+  if (hashTab) return hashTab;
+
+  try {
+    return normalizeProductTabValue(
+      window.sessionStorage.getItem(`product-detail-tab:${productId}`),
+    );
+  } catch {
+    return "";
+  }
+};
 
 const resolveImageValue = (value) => {
   if (!value) return "";
@@ -154,12 +197,31 @@ const ProductImage = ({ src, alt, className, isCurrent = false }) => {
 const ProductDetails = () => {
   const { id } = useParams();
   const buildEmptyReviewForm = () => ({
-    rating: 5,
+    rating: 0,
     title: "",
     comment: "",
     reviewerName: "",
     reviewerEmail: "",
   });
+  const normalizeReviewSummary = (summary, fallbackReviews = []) => {
+    const fallbackList = Array.isArray(fallbackReviews) ? fallbackReviews : [];
+    const explicitCount = Number(summary?.ratingCount);
+    const explicitAverage = Number(summary?.ratingAverage);
+    const fallbackCount = fallbackList.length;
+    const fallbackAverage =
+      fallbackCount > 0
+        ? fallbackList.reduce((sum, entry) => sum + Number(entry?.rating || 0), 0) / fallbackCount
+        : 0;
+
+    return {
+      ratingAverage:
+        Number.isFinite(explicitAverage) && explicitAverage >= 0
+          ? explicitAverage
+          : fallbackAverage,
+      ratingCount:
+        Number.isFinite(explicitCount) && explicitCount >= 0 ? explicitCount : fallbackCount,
+    };
+  };
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState("");
   const [selectedVariantOptions, setSelectedVariantOptions] = useState({});
@@ -188,7 +250,10 @@ const ProductDetails = () => {
     canScrollUp: false,
     canScrollDown: false,
   });
-  const { addToCart, isLoading: cartLoading } = useCart();
+  const {
+    addToCart,
+    isLoading: cartLoading,
+  } = useCart();
   const { user } = useAuth();
   const { settings } = usePublicSettings();
   const dispatch = useDispatch();
@@ -205,6 +270,48 @@ const ProductDetails = () => {
   const shareText = product?.description
     ? stripHtml(product.description).slice(0, 140)
     : "Check this product";
+  const productMediaItems = useMemo(() => {
+    const imageItems = Array.isArray(product?.images)
+      ? product.images
+          .map((image, index) => ({
+            key: `image-${index}`,
+            type: "image",
+            src: image,
+            thumbnailSrc: image,
+            alt: `${product?.title || "Product"} - ${index + 1}`,
+          }))
+          .filter((item) => Boolean(getFullImageUrl(item.src)))
+      : [];
+
+    const uploadedVideoItem = normalizeProductVideoEntries(product).map((video, index) => ({
+      key: `video-upload-${index}`,
+      type: "video",
+      src: getFullImageUrl(video.url),
+      thumbnailSrc: getFullImageUrl(video.url),
+      alt: `${product?.title || "Product"} video ${index + 1}`,
+    }));
+
+    const youtubeItem = normalizeProductYouTubeUrls(product)
+      .map((videoUrl, index) => {
+        const youtubeThumbnail = getYouTubeThumbnailUrl(videoUrl);
+        const youtubeEmbedUrl = getYouTubeEmbedUrl(videoUrl);
+        if (!youtubeEmbedUrl || !youtubeThumbnail) return null;
+
+        return {
+          key: `video-youtube-${index}`,
+          type: "youtube",
+          src: youtubeEmbedUrl,
+          thumbnailSrc: youtubeThumbnail,
+          alt: `${product?.title || "Product"} YouTube video ${index + 1}`,
+        };
+      })
+      .filter(Boolean);
+
+    return [...imageItems, ...uploadedVideoItem, ...youtubeItem];
+  }, [product]);
+  const currentMediaItem = productMediaItems[selectedImage] || productMediaItems[0] || null;
+  const currentModalMediaItem =
+    productMediaItems[currentImageIndex] || productMediaItems[0] || null;
   const isCompared = compareItems.some(
     (item) => String(item?._id || "") === String(product?._id || ""),
   );
@@ -226,6 +333,15 @@ const ProductDetails = () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  const handleBackNavigation = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate("/shop");
+  };
+
   useEffect(() => {
     const activeThumb = thumbnailButtonRefs.current?.[selectedImage];
     if (
@@ -236,6 +352,12 @@ const ProductDetails = () => {
       activeThumb.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
   }, [selectedImage]);
+
+  useEffect(() => {
+    const maxIndex = Math.max(productMediaItems.length - 1, 0);
+    setSelectedImage((prev) => Math.min(prev, maxIndex));
+    setCurrentImageIndex((prev) => Math.min(prev, maxIndex));
+  }, [productMediaItems.length]);
 
   useEffect(() => {
     const container = verticalThumbsRef.current;
@@ -360,19 +482,19 @@ const ProductDetails = () => {
       try {
         setReviewsLoading(true);
         const response = await axios.get(`${baseUrl}/products/public/${id}/reviews`);
-        setReviews(response.data?.reviews || []);
+        const nextReviews = Array.isArray(response.data?.reviews) ? response.data.reviews : [];
+        setReviews(nextReviews);
         setReviewSummary(
-          response.data?.summary || {
-            ratingAverage: Number(product?.ratingAverage || 0),
-            ratingCount: Number(product?.ratingCount || 0),
-          },
+          normalizeReviewSummary(response.data?.summary, nextReviews),
         );
       } catch (error) {
         setReviews([]);
-        setReviewSummary({
-          ratingAverage: Number(product?.ratingAverage || 0),
-          ratingCount: Number(product?.ratingCount || 0),
-        });
+        setReviewSummary(
+          normalizeReviewSummary({
+            ratingAverage: Number(product?.ratingAverage || 0),
+            ratingCount: Number(product?.ratingCount || 0),
+          }),
+        );
       } finally {
         setReviewsLoading(false);
       }
@@ -397,7 +519,7 @@ const ProductDetails = () => {
         setMyReview(review);
         if (review) {
           setReviewForm({
-            rating: Number(review.rating || 5),
+            rating: Number(review.rating || 0),
             title: review.title || "",
             comment: review.comment || "",
             reviewerName: review.reviewerName || user?.name || "",
@@ -432,51 +554,15 @@ const ProductDetails = () => {
         if (productData) {
           setProduct(productData);
 
-          const variantDefaults = {};
-          if (Array.isArray(productData.variantDefinitions)) {
-            productData.variantDefinitions.forEach((definition, index) => {
-              const firstOption = Array.isArray(definition?.options)
-                ? definition.options.find((option) =>
-                    String(option?.label || option?.value || option?.colorHex || "").trim(),
-                  )
-                : null;
-              if (firstOption) {
-                variantDefaults[index] = firstOption;
-              }
-            });
-          }
-          setSelectedVariantOptions(variantDefaults);
-
-          const colorVariantDefinition = Array.isArray(productData.variantDefinitions)
-            ? productData.variantDefinitions.find(
-                (definition) =>
-                  String(definition?.preset || "").trim().toLowerCase() === "color" ||
-                  String(definition?.name || "").trim().toLowerCase() === "color",
-              )
-            : null;
-
-          const firstColorVariant = Array.isArray(colorVariantDefinition?.options)
-            ? colorVariantDefinition.options.find((option) =>
-                String(option?.colorHex || option?.value || "").trim(),
-              )
-            : null;
-
-          if (firstColorVariant) {
-            setSelectedColor(
-              String(firstColorVariant.colorHex || firstColorVariant.value || "").trim(),
-            );
-          } else if (productData.colors && productData.colors.length > 0) {
-            setSelectedColor(productData.colors[0]);
-          } else {
-            setSelectedColor("");
-          }
+          setSelectedVariantOptions({});
+          setSelectedColor("");
 
           if (
             productData.marketplaceType === "variable" &&
             Array.isArray(productData.variations) &&
             productData.variations.length > 0
           ) {
-            setSelectedVariationId(String(productData.variations[0]._id || ""));
+            setSelectedVariationId("");
           }
         }
       } catch (err) {
@@ -497,25 +583,81 @@ const ProductDetails = () => {
   useEffect(() => {
     if (!product?._id) return;
 
-	    const hasAdditionalInfo = Boolean(
-	      (Array.isArray(product.specifications) && product.specifications.length > 0) ||
-	        product.brand ||
-	        product.weight ||
-	        product.dimensions,
-	    );
+    const hasAdditionalInfo = Boolean(
+      (Array.isArray(product.specifications) && product.specifications.length > 0) ||
+        product.brand ||
+        product.weight ||
+        product.dimensions,
+    );
 
-    if (product.description) {
-      setActiveTab("description");
+    const availableTabs = [
+      product.description ? "description" : null,
+      hasAdditionalInfo ? "additional" : null,
+      "reviews",
+    ].filter(Boolean);
+
+    const storedTab = getStoredProductTab(product._id);
+
+    setActiveTab((currentTab) => {
+      if (availableTabs.includes(storedTab)) {
+        return storedTab;
+      }
+
+      if (availableTabs.includes(currentTab)) {
+        return currentTab;
+      }
+
+      return availableTabs[0] || "reviews";
+    });
+  }, [
+    product?._id,
+    product?.brand,
+    product?.description,
+    product?.dimensions,
+    product?.weight,
+    product?.specifications,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !product?._id) return;
+
+    const normalizedTab = normalizeProductTabValue(activeTab);
+    if (!normalizedTab) return;
+
+    try {
+      window.sessionStorage.setItem(
+        `product-detail-tab:${product._id}`,
+        normalizedTab,
+      );
+    } catch {
+      // ignore storage errors
+    }
+
+    const currentHash = normalizeProductTabValue(window.location.hash.replace(/^#/, ""));
+    if (currentHash !== normalizedTab) {
+      const nextUrl = `${window.location.pathname}${window.location.search}#${normalizedTab}`;
+      window.history.replaceState(window.history.state, "", nextUrl);
+    }
+  }, [activeTab, product?._id]);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      activeTab !== "reviews" ||
+      normalizeProductTabValue(window.location.hash.replace(/^#/, "")) !== "reviews"
+    ) {
       return;
     }
 
-    if (hasAdditionalInfo) {
-      setActiveTab("additional");
-      return;
-    }
+    const reviewSection = document.getElementById("reviews");
+    if (!reviewSection) return;
 
-    setActiveTab("reviews");
-  }, [product?._id]);
+    const timer = window.setTimeout(() => {
+      reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [activeTab, product?._id]);
 
   useEffect(() => {
     if (!product?._id) return;
@@ -632,22 +774,8 @@ const ProductDetails = () => {
   const isRecurringProduct = Boolean(product?.isRecurring);
   const showPublicStock = isPublicStockVisible(product, settings);
   const productVariantDefinitions = useMemo(
-    () =>
-      Array.isArray(product?.variantDefinitions)
-        ? product.variantDefinitions
-            .map((definition) => ({
-              preset: String(definition?.preset || "custom").trim().toLowerCase(),
-              name: String(definition?.name || "").trim(),
-              options: Array.isArray(definition?.options)
-                ? definition.options.filter(
-                    (option) =>
-                      String(option?.label || option?.value || option?.colorHex || "").trim(),
-                  )
-                : [],
-            }))
-            .filter((definition) => definition.options.length > 0)
-        : [],
-    [product?.variantDefinitions],
+    () => normalizeProductVariantDefinitions(product || {}),
+    [product],
   );
   const hasColorVariantDefinition = productVariantDefinitions.some(
     (definition) =>
@@ -662,17 +790,42 @@ const ProductDetails = () => {
           (variation) => String(variation?._id || "") === String(selectedVariationId || ""),
         ) || null
       : null;
-  const selectedVariantLabel = useMemo(
+  const selectedVariantSelections = useMemo(
     () =>
       productVariantDefinitions
         .map((definition, index) => {
           const selected = selectedVariantOptions[index];
-          if (!selected) return "";
-          return `${definition.name || "Variant"}: ${selected.label || selected.value || ""}`;
+          if (!selected) return null;
+
+          return {
+            name: definition.name,
+            preset: definition.preset,
+            label: selected.label || selected.value || "",
+            value: selected.value || selected.label || "",
+            colorHex: selected.colorHex || "",
+            priceMode: selected.priceMode || "default",
+            price: selected.price,
+            comparePrice: selected.comparePrice,
+          };
         })
-        .filter(Boolean)
-        .join(", "),
+        .filter(Boolean),
     [productVariantDefinitions, selectedVariantOptions],
+  );
+  const hasAllVariantSelections = useMemo(
+    () =>
+      productVariantDefinitions.every((_, index) => Boolean(selectedVariantOptions[index])),
+    [productVariantDefinitions, selectedVariantOptions],
+  );
+  const resolvedSelectedVariants = useMemo(
+    () =>
+      hasAllVariantSelections
+        ? getResolvedSelectedVariants(product || {}, selectedVariantSelections)
+        : normalizeSelectedVariantsPayload(selectedVariantSelections),
+    [hasAllVariantSelections, product, selectedVariantSelections],
+  );
+  const selectedVariantLabel = useMemo(
+    () => buildSelectedVariantLabel(resolvedSelectedVariants),
+    [resolvedSelectedVariants],
   );
   const resolvedSelectedColor = useMemo(() => {
     const colorDefinitionIndex = productVariantDefinitions.findIndex(
@@ -691,20 +844,34 @@ const ProductDetails = () => {
 
     return String(selectedColor || "").trim().toLowerCase();
   }, [productVariantDefinitions, selectedColor, selectedVariantOptions]);
-
-  // Get current price based on marketplace type
-  const getCurrentPrice = () => {
-    if (!product) return 0;
+  const currentPricing = useMemo(() => {
+    if (!product) {
+      return {
+        currentPrice: 0,
+        previousPrice: null,
+      };
+    }
 
     if (marketplaceType === "variable" && selectedVariation) {
       const hasVariationSalePrice =
         selectedVariation?.salePrice !== null &&
         selectedVariation?.salePrice !== undefined &&
         String(selectedVariation.salePrice).trim() !== "";
-      const salePrice = hasVariationSalePrice ? Number(selectedVariation.salePrice) : NaN;
+      const salePrice = hasVariationSalePrice ? Number(selectedVariation.salePrice) : null;
       const regularPrice = Number(selectedVariation.price);
-      if (Number.isFinite(salePrice) && salePrice >= 0) return salePrice;
-      if (Number.isFinite(regularPrice) && regularPrice >= 0) return regularPrice;
+
+      return getEffectiveProductPricing({
+        basePrice:
+          Number.isFinite(salePrice) && salePrice >= 0 ? salePrice : regularPrice,
+        baseComparePrice:
+          Number.isFinite(salePrice) &&
+          salePrice >= 0 &&
+          Number.isFinite(regularPrice) &&
+          regularPrice > salePrice
+            ? regularPrice
+            : null,
+        selectedVariants: resolvedSelectedVariants,
+      });
     }
 
     const hasSalePrice =
@@ -712,12 +879,24 @@ const ProductDetails = () => {
       product?.salePrice !== null &&
       product?.salePrice !== undefined &&
       String(product.salePrice).trim() !== "";
-    const salePrice = hasSalePrice ? Number(product.salePrice) : NaN;
+    const salePrice = hasSalePrice ? Number(product.salePrice) : null;
     const regularPrice = Number(product.price);
-    if (Number.isFinite(salePrice) && salePrice >= 0) return salePrice;
-    if (Number.isFinite(regularPrice) && regularPrice >= 0) return regularPrice;
-    return 0;
-  };
+
+    return getEffectiveProductPricing({
+      basePrice:
+        Number.isFinite(salePrice) && salePrice >= 0 ? salePrice : regularPrice,
+      baseComparePrice:
+        Number.isFinite(salePrice) &&
+        salePrice >= 0 &&
+        Number.isFinite(regularPrice) &&
+        regularPrice > salePrice
+          ? regularPrice
+          : null,
+      selectedVariants: resolvedSelectedVariants,
+    });
+  }, [marketplaceType, product, resolvedSelectedVariants, selectedVariation]);
+
+  const getCurrentPrice = () => Number(currentPricing.currentPrice || 0);
 
   const getCurrentStock = () => {
     if (!product) return 0;
@@ -763,11 +942,6 @@ const ProductDetails = () => {
       return;
     }
 
-    if (productVariantDefinitions.some((_, index) => !selectedVariantOptions[index])) {
-      toast.error("Please select the product variants");
-      return;
-    }
-
     if (!isInStock()) {
       toast.error("This item is currently out of stock");
       return;
@@ -776,9 +950,16 @@ const ProductDetails = () => {
     setLoading(true);
 
     try {
+      const combinedVariationLabel = [
+        String(selectedVariation?.label || "").trim(),
+        selectedVariantLabel,
+      ]
+        .filter(Boolean)
+        .join(" | ");
       const result = await addToCart(product, quantity, resolvedSelectedColor, "", {
         variationId: selectedVariationId || "",
-        variationLabel: selectedVariation?.label || selectedVariantLabel || "",
+        variationLabel: combinedVariationLabel,
+        selectedVariants: resolvedSelectedVariants,
         unitPrice: getCurrentPrice(),
       });
       if (!result?.success) {
@@ -813,20 +994,22 @@ const ProductDetails = () => {
         return;
       }
 
-      if (productVariantDefinitions.some((_, index) => !selectedVariantOptions[index])) {
-        toast.error("Please select the product variants");
-        return;
-      }
-
       if (!isInStock()) {
         toast.error("This item is currently out of stock");
         return;
       }
 
+      const combinedVariationLabel = [
+        String(selectedVariation?.label || "").trim(),
+        selectedVariantLabel,
+      ]
+        .filter(Boolean)
+        .join(" | ");
       // Add to cart first
       const result = await addToCart(product, quantity, resolvedSelectedColor, "", {
         variationId: selectedVariationId || "",
-        variationLabel: selectedVariation?.label || selectedVariantLabel || "",
+        variationLabel: combinedVariationLabel,
+        selectedVariants: resolvedSelectedVariants,
         unitPrice: getCurrentPrice(),
       });
 
@@ -862,8 +1045,9 @@ const ProductDetails = () => {
     if (!id) return;
     try {
       const response = await axios.get(`${baseUrl}/products/public/${id}/reviews`);
-      setReviews(response.data?.reviews || []);
-      setReviewSummary(response.data?.summary || { ratingAverage: 0, ratingCount: 0 });
+      const nextReviews = Array.isArray(response.data?.reviews) ? response.data.reviews : [];
+      setReviews(nextReviews);
+      setReviewSummary(normalizeReviewSummary(response.data?.summary, nextReviews));
     } catch (_error) {
       // Keep the current UI state if refresh fails.
     }
@@ -887,6 +1071,10 @@ const ProductDetails = () => {
     const exists = compareItems.some(
       (item) => String(item?._id || "") === String(snapshot._id),
     );
+    if (!exists && compareItems.length >= MAX_COMPARE_ITEMS) {
+      toast.error(COMPARE_LIMIT_MESSAGE);
+      return;
+    }
     dispatch(toggleCompareItem(snapshot));
     toast.success(exists ? "Removed from compare" : "Added to compare");
   };
@@ -1069,6 +1257,10 @@ const ProductDetails = () => {
     const exists = compareItems.some(
       (item) => String(item?._id || "") === String(snapshot._id || ""),
     );
+    if (!exists && compareItems.length >= MAX_COMPARE_ITEMS) {
+      toast.error(COMPARE_LIMIT_MESSAGE);
+      return;
+    }
     dispatch(toggleCompareItem(snapshot));
     toast.success(exists ? "Removed from compare" : "Added to compare");
   };
@@ -1171,6 +1363,11 @@ const ProductDetails = () => {
       return;
     }
 
+    if (Number(reviewForm.rating || 0) < 1) {
+      toast.error("Please choose a star rating");
+      return;
+    }
+
     if (!isLoggedIn && !String(reviewForm.reviewerName || "").trim()) {
       toast.error("Please enter your name");
       return;
@@ -1192,7 +1389,7 @@ const ProductDetails = () => {
       const response = await axios.post(
         endpoint,
         {
-          rating: Number(reviewForm.rating || 5),
+          rating: Number(reviewForm.rating || 0),
           title: String(reviewForm.title || "").trim(),
           comment: String(reviewForm.comment || "").trim(),
           reviewerName: String(reviewForm.reviewerName || "").trim(),
@@ -1205,7 +1402,7 @@ const ProductDetails = () => {
         setMyReview(response.data.review);
       }
       if (response.data?.summary) {
-        setReviewSummary(response.data.summary);
+        setReviewSummary(normalizeReviewSummary(response.data.summary));
       }
 
       setReviewForm(
@@ -1242,7 +1439,7 @@ const ProductDetails = () => {
         reviewerEmail: user?.email || "",
       });
       if (response.data?.summary) {
-        setReviewSummary(response.data.summary);
+        setReviewSummary(normalizeReviewSummary(response.data.summary));
       }
       toast.success(response.data?.message || "Review deleted");
       await refreshReviews();
@@ -1255,29 +1452,27 @@ const ProductDetails = () => {
 
   // Image modal navigation
   const nextImage = () => {
-    if (product?.images) {
-      setCurrentImageIndex((prev) =>
-        prev === product.images.length - 1 ? 0 : prev + 1,
-      );
-    }
+    if (!productMediaItems.length) return;
+    setCurrentImageIndex((prev) =>
+      prev === productMediaItems.length - 1 ? 0 : prev + 1,
+    );
   };
 
   const prevImage = () => {
-    if (product?.images) {
-      setCurrentImageIndex((prev) =>
-        prev === 0 ? product.images.length - 1 : prev - 1,
-      );
-    }
+    if (!productMediaItems.length) return;
+    setCurrentImageIndex((prev) =>
+      prev === 0 ? productMediaItems.length - 1 : prev - 1,
+    );
   };
 
   const nextSelectedImage = () => {
-    if (!product?.images?.length) return;
-    setSelectedImage((prev) => (prev === product.images.length - 1 ? 0 : prev + 1));
+    if (!productMediaItems.length) return;
+    setSelectedImage((prev) => (prev === productMediaItems.length - 1 ? 0 : prev + 1));
   };
 
   const prevSelectedImage = () => {
-    if (!product?.images?.length) return;
-    setSelectedImage((prev) => (prev === 0 ? product.images.length - 1 : prev - 1));
+    if (!productMediaItems.length) return;
+    setSelectedImage((prev) => (prev === 0 ? productMediaItems.length - 1 : prev - 1));
   };
 
   const scrollVerticalThumbs = (direction) => {
@@ -1287,16 +1482,18 @@ const ProductDetails = () => {
     container.scrollBy({ top: delta, behavior: "smooth" });
   };
 
-  const currentPrice = getCurrentPrice();
+  const currentPrice = Number(currentPricing.currentPrice || 0);
   const currentStock = getCurrentStock();
   const recurringInterval = String(product?.recurringInterval || "monthly");
   const recurringIntervalCount = Math.max(1, Number(product?.recurringIntervalCount || 1));
   const recurringTotalCycles = Math.max(0, Number(product?.recurringTotalCycles || 0));
   const recurringTrialDays = Math.max(0, Number(product?.recurringTrialDays || 0));
   const regularPriceForDisplay =
-    marketplaceType === "variable"
-      ? Number(selectedVariation?.price || currentPrice || 0)
-      : Number(product?.price || currentPrice || 0);
+    currentPricing.previousPrice !== null
+      ? Number(currentPricing.previousPrice || 0)
+      : marketplaceType === "variable"
+        ? Number(selectedVariation?.price || currentPrice || 0)
+        : Number(product?.price || currentPrice || 0);
   const hasDiscountPrice =
     !isTbaPrice &&
     Number.isFinite(regularPriceForDisplay) &&
@@ -1343,6 +1540,14 @@ const ProductDetails = () => {
   ).trim();
   const brandLabel = String(product?.brand || "").trim();
   const vendorLabel = String(product?.vendor?.storeName || "").trim();
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const timer = window.setTimeout(() => {
+      document.title = formatDocumentTitle(settings, product?.title || "Product");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [id, product?.title, settings]);
   const vendorSlug = String(product?.vendor?.slug || "").trim();
   const recurringIntervalLabel = (
     {
@@ -1565,13 +1770,33 @@ const ProductDetails = () => {
               </button>
 
               <div className="relative">
-                <ProductImage
-                  src={product.images[currentImageIndex]}
-                  alt={product.title}
-                  className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
-                />
+                {currentModalMediaItem?.type === "video" ? (
+                  <video
+                    src={currentModalMediaItem.src}
+                    className="w-full max-h-[80vh] rounded-lg bg-black object-contain"
+                    controls
+                    controlsList="nodownload"
+                    preload="metadata"
+                  />
+                ) : currentModalMediaItem?.type === "youtube" ? (
+                  <div className="aspect-video overflow-hidden rounded-lg bg-black">
+                    <iframe
+                      src={currentModalMediaItem.src}
+                      title={currentModalMediaItem.alt}
+                      className="h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <ProductImage
+                    src={currentModalMediaItem?.src}
+                    alt={currentModalMediaItem?.alt || product.title}
+                    className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+                  />
+                )}
 
-                {product.images.length > 1 && (
+                {productMediaItems.length > 1 && (
                   <>
                     <button
                       onClick={prevImage}
@@ -1602,14 +1827,14 @@ const ProductDetails = () => {
           {/* Product images */}
           <div className="storefront-sticky-offset lg:sticky lg:self-start">
             <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-start sm:gap-6">
-              {product.images && product.images.length > 1 ? (
+              {productMediaItems.length > 1 ? (
                 <div
                   ref={verticalThumbsRef}
-                  className="flex gap-3 overflow-x-auto pb-1 sm:max-h-[38rem] sm:w-16 sm:flex-col sm:overflow-y-auto sm:pb-0 sm:pr-1 lg:w-18"
+                  className="scrollbar-none flex gap-3 overflow-x-auto pb-1 sm:max-h-[38rem] sm:w-16 sm:flex-col sm:overflow-x-hidden sm:overflow-y-auto sm:pb-0 sm:pr-1 lg:w-18"
                 >
-                  {product.images.map((image, index) => (
+                  {productMediaItems.map((mediaItem, index) => (
                     <button
-                      key={index}
+                      key={mediaItem.key}
                       type="button"
                       data-no-scroll-top
                       ref={(el) => {
@@ -1622,17 +1847,46 @@ const ProductDetails = () => {
                           : "border-black/10 hover:border-black/70"
                       }`}
                     >
-                      <ProductImage
-                        src={image}
-                        alt={`${product.title} - ${index + 1}`}
-                        className="h-full w-full object-contain mix-blend-multiply"
-                      />
+                      {mediaItem.type === "youtube" ? (
+                        <div className="relative h-full w-full overflow-hidden rounded-xl bg-black">
+                          <img
+                            src={mediaItem.thumbnailSrc}
+                            alt={mediaItem.alt}
+                            className="h-full w-full object-cover"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/92 shadow-lg ring-1 ring-black/5">
+                              <FaYoutube className="h-4 w-4 text-red-600" />
+                            </span>
+                          </div>
+                        </div>
+                      ) : mediaItem.type === "video" ? (
+                        <div className="relative h-full w-full overflow-hidden rounded-xl bg-black">
+                          <video
+                            src={mediaItem.src}
+                            className="h-full w-full object-cover"
+                            muted
+                            preload="metadata"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
+                            <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-black">
+                              Video
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <ProductImage
+                          src={mediaItem.src}
+                          alt={mediaItem.alt}
+                          className="h-full w-full object-contain mix-blend-multiply"
+                        />
+                      )}
                     </button>
                   ))}
                 </div>
               ) : null}
 
-              <div className="relative flex-1 rounded-[2rem] border border-black/8 bg-[#f8f8f8] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:rounded-[2.25rem] sm:p-8 lg:p-10">
+              <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-black/8 bg-[#f8f8f8] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:rounded-[2.25rem] sm:p-8 lg:p-10">
                 <div className="pointer-events-none absolute inset-4 rounded-[1.6rem] border border-black/5 bg-white/80 sm:inset-8 sm:rounded-[1.9rem]" />
                 <button
                   type="button"
@@ -1642,19 +1896,39 @@ const ProductDetails = () => {
                     setShowImageModal(true);
                   }}
                   className="relative z-10 block aspect-square w-full cursor-zoom-in"
-                  aria-label="Open product image"
+                  aria-label="Open product media"
                 >
                   <div className="flex h-full items-center justify-center">
-                    <ProductImage
-                      src={product.images?.[selectedImage]}
-                      alt={product.title}
-                      isCurrent
-                      className="h-full max-h-[34rem] w-full object-contain mix-blend-multiply drop-shadow-[0_30px_35px_rgba(0,0,0,0.14)]"
-                    />
+                    {currentMediaItem?.type === "video" ? (
+                      <video
+                        src={currentMediaItem.src}
+                        className="h-full max-h-[34rem] w-full rounded-[1.5rem] bg-black object-contain"
+                        controls
+                        controlsList="nodownload"
+                        preload="metadata"
+                      />
+                    ) : currentMediaItem?.type === "youtube" ? (
+                      <div className="aspect-video w-full overflow-hidden rounded-[1.5rem] bg-black">
+                        <iframe
+                          src={currentMediaItem.src}
+                          title={currentMediaItem.alt}
+                          className="h-full w-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      <ProductImage
+                        src={currentMediaItem?.src}
+                        alt={currentMediaItem?.alt || product.title}
+                        isCurrent
+                        className="h-full max-h-[34rem] w-full object-contain mix-blend-multiply drop-shadow-[0_30px_35px_rgba(0,0,0,0.14)]"
+                      />
+                    )}
                   </div>
                 </button>
 
-                {product.images && product.images.length > 1 ? (
+                {productMediaItems.length > 1 ? (
                   <>
                     <button
                       type="button"
@@ -1688,6 +1962,17 @@ const ProductDetails = () => {
 
           {/* Product summary */}
           <div className="rounded-[2rem] border border-black/8 bg-white p-5 text-left shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-6 lg:p-8">
+            <div className="mb-5">
+              <button
+                type="button"
+                data-no-scroll-top
+                onClick={handleBackNavigation}
+                className="group inline-flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-500 transition hover:-translate-x-1 hover:text-black"
+              >
+                <FiArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+                <span>Back</span>
+              </button>
+            </div>
             <nav aria-label="Breadcrumb" className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
               <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <li>
@@ -1929,12 +2214,16 @@ const ProductDetails = () => {
                               <button
                                 type="button"
                                 data-no-scroll-top
-                                onClick={() =>
-                                  setSelectedVariantOptions((prev) => ({
-                                    ...prev,
-                                    [definitionIndex]: null,
-                                  }))
-                                }
+                                onClick={() => {
+                                  setSelectedVariantOptions((prev) => {
+                                    const next = { ...prev };
+                                    delete next[definitionIndex];
+                                    return next;
+                                  });
+                                  if (isColorDefinition) {
+                                    setSelectedColor("");
+                                  }
+                                }}
                                 className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 transition hover:text-black"
                               >
                                 Clear
@@ -1962,18 +2251,45 @@ const ProductDetails = () => {
                                       type="button"
                                       data-no-scroll-top
                                       onClick={() => {
-                                        setSelectedVariantOptions((prev) => ({
-                                          ...prev,
-                                          [definitionIndex]: option,
-                                        }));
-                                        setSelectedColor(optionColor);
+                                        setSelectedVariantOptions((prev) => {
+                                          const currentValue = String(
+                                            prev?.[definitionIndex]?.colorHex ||
+                                              prev?.[definitionIndex]?.value ||
+                                              "",
+                                          )
+                                            .trim()
+                                            .toLowerCase();
+
+                                          if (currentValue === optionColor) {
+                                            const next = { ...prev };
+                                            delete next[definitionIndex];
+                                            return next;
+                                          }
+
+                                          return {
+                                            ...prev,
+                                            [definitionIndex]: option,
+                                          };
+                                        });
+                                        setSelectedColor((prev) =>
+                                          String(prev || "").trim().toLowerCase() === optionColor
+                                            ? ""
+                                            : optionColor,
+                                        );
                                       }}
                                       className={`group shrink-0 rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-black/40 ${
                                         isSelected
                                           ? "ring-2 ring-black ring-offset-2"
                                           : "hover:scale-110"
                                       }`}
-                                      title={option?.label || option?.value || `Color ${optionIndex + 1}`}
+                                      title={
+                                        getReadableVariantOptionLabel({
+                                          preset: "color",
+                                          label: option?.label,
+                                          value: option?.value,
+                                          colorHex: option?.colorHex,
+                                        }) || `Color ${optionIndex + 1}`
+                                      }
                                     >
                                       <div className="relative h-10 w-10 rounded-full border border-black/10 sm:h-11 sm:w-11">
                                         <div
@@ -2004,10 +2320,24 @@ const ProductDetails = () => {
                                       type="button"
                                       data-no-scroll-top
                                       onClick={() =>
-                                        setSelectedVariantOptions((prev) => ({
-                                          ...prev,
-                                          [definitionIndex]: option,
-                                        }))
+                                        setSelectedVariantOptions((prev) => {
+                                          const currentValue = String(
+                                            prev?.[definitionIndex]?.label ||
+                                              prev?.[definitionIndex]?.value ||
+                                              "",
+                                          ).trim();
+
+                                          if (currentValue === optionValue) {
+                                            const next = { ...prev };
+                                            delete next[definitionIndex];
+                                            return next;
+                                          }
+
+                                          return {
+                                            ...prev,
+                                            [definitionIndex]: option,
+                                          };
+                                        })
                                       }
                                       className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
                                         isSelected
@@ -2036,33 +2366,24 @@ const ProductDetails = () => {
                         aria-label="Color"
                       >
                         {legacyColorOptions.map((color, index) => {
-                          const isSelected =
-                            (selectedColor || legacyColorOptions[0]) === color;
+                          const isSelected = selectedColor === color;
                           const label = String(color || "").trim();
                           const displayLabel =
-                            label.toLowerCase() === "#000000" ||
-                            label.toLowerCase() === "#000" ||
-                            label.toLowerCase() === "black"
-                              ? "Black"
-                              : label.toLowerCase() === "#ffffff" ||
-                                  label.toLowerCase() === "#fff" ||
-                                  label.toLowerCase() === "white"
-                                ? "White"
-                                : label.toLowerCase() === "#f0deba" ||
-                                    label.toLowerCase() === "beige"
-                                  ? "Beige"
-                                  : label
-                                      ? label.startsWith("#")
-                                        ? label.toUpperCase()
-                                        : label
-                                      : `Color ${index + 1}`;
+                            getReadableColorLabel(label, `Color ${index + 1}`);
 
                           return (
                             <button
                               key={`${color}-${index}`}
                               type="button"
                               data-no-scroll-top
-                              onClick={() => setSelectedColor(color)}
+                              onClick={() =>
+                                setSelectedColor((prev) =>
+                                  String(prev || "").trim().toLowerCase() ===
+                                  String(color || "").trim().toLowerCase()
+                                    ? ""
+                                    : color,
+                                )
+                              }
                               role="radio"
                               aria-checked={isSelected}
                               aria-label={displayLabel}
@@ -2176,7 +2497,7 @@ const ProductDetails = () => {
                       <button
                         type="submit"
                         disabled={purchaseActionDisabled}
-                        className="inline-flex items-center justify-center gap-3 rounded-xl bg-black px-6 py-5 text-sm font-bold uppercase tracking-[0.18em] text-white transition-all hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                        className="inline-flex items-center justify-center gap-3 rounded-xl bg-black px-6 py-5 text-sm font-bold uppercase tracking-[0.18em] text-white transition-all hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-300 disabled:text-white"
                       >
                         <FaShoppingCart className="h-4 w-4" />
                         {loading || cartLoading ? "Adding..." : "Add to Cart"}
@@ -2323,11 +2644,12 @@ const ProductDetails = () => {
 	        </div>
 	        {/* Tabs */}
 	        <div className="pt-16 sm:pt-20">
-	          <div className="bg-white">
+	          <div className="overflow-hidden bg-white">
+              <div className="border-b border-black/10">
 		            <div
 		              role="tablist"
 		              aria-label="Product details tabs"
-		              className="flex min-w-max gap-10 overflow-x-auto border-b border-black/10 px-0"
+		              className="flex flex-wrap gap-x-8 gap-y-3 px-0"
 		            >
 	              <button
 	                type="button"
@@ -2338,7 +2660,7 @@ const ProductDetails = () => {
                 aria-controls="product-tabpanel-description"
                 tabIndex={activeTab === "description" ? 0 : -1}
                 onClick={() => setActiveTab("description")}
-		                className={`-mb-px border-b-2 pb-6 text-xs font-bold uppercase tracking-[0.26em] transition ${
+		                className={`-mb-px border-b-2 pb-5 text-xs font-bold uppercase tracking-[0.26em] transition sm:pb-6 ${
 		                  activeTab === "description"
 		                    ? "border-black text-black"
 		                    : "border-transparent text-zinc-400 hover:text-black"
@@ -2355,7 +2677,7 @@ const ProductDetails = () => {
                 aria-controls="product-tabpanel-additional"
                 tabIndex={activeTab === "additional" ? 0 : -1}
                 onClick={() => setActiveTab("additional")}
-		                className={`-mb-px border-b-2 pb-6 text-xs font-bold uppercase tracking-[0.26em] transition ${
+		                className={`-mb-px border-b-2 pb-5 text-xs font-bold uppercase tracking-[0.26em] transition sm:pb-6 ${
 		                  activeTab === "additional"
 		                    ? "border-black text-black"
 		                    : "border-transparent text-zinc-400 hover:text-black"
@@ -2372,7 +2694,7 @@ const ProductDetails = () => {
                 aria-controls="product-tabpanel-reviews"
                 tabIndex={activeTab === "reviews" ? 0 : -1}
                 onClick={() => setActiveTab("reviews")}
-		                className={`-mb-px border-b-2 pb-6 text-xs font-bold uppercase tracking-[0.26em] transition ${
+		                className={`-mb-px border-b-2 pb-5 text-xs font-bold uppercase tracking-[0.26em] transition sm:pb-6 ${
 		                  activeTab === "reviews"
 		                    ? "border-black text-black"
 		                    : "border-transparent text-zinc-400 hover:text-black"
@@ -2380,6 +2702,7 @@ const ProductDetails = () => {
 	              >
                 Reviews ({Number(reviewSummary.ratingCount || 0)})
               </button>
+              </div>
             </div>
 
             <div className="pt-12">
@@ -2393,7 +2716,7 @@ const ProductDetails = () => {
                   {product.description ? (
                     hasHtmlContent(product.description) ? (
                       <div
-                        className="prose max-w-3xl text-zinc-500"
+                        className="prose max-w-3xl break-words text-zinc-500 [&>*]:break-words"
                         dangerouslySetInnerHTML={{ __html: product.description }}
                       />
                     ) : (
@@ -2495,7 +2818,7 @@ const ProductDetails = () => {
                 >
                   {additionalInfoRows.length > 0 ? (
                     <div className="overflow-hidden rounded-[1.8rem] border border-black/10 bg-white shadow-sm">
-                      <div className="overflow-x-auto">
+                      <div className="scrollbar-none overflow-x-auto">
                       <table className="min-w-full text-sm">
                         <tbody className="divide-y divide-black/8">
                           {additionalInfoRows.map((row) => (
@@ -2535,13 +2858,56 @@ const ProductDetails = () => {
                   <section
                     id="reviews"
                     data-review-section
-                    className="scroll-mt-storefront"
+                      className="scrollbar-none scroll-mt-storefront overflow-hidden"
                   >
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
+          <ProductReviewsPanel
+            isLoggedIn={isLoggedIn}
+            myReview={myReview}
+            productTitle={product?.title || "Product"}
+            reviewSummary={reviewSummary}
+            reviews={reviews}
+            reviewsLoading={reviewsLoading}
+            reviewForm={reviewForm}
+            hoverRating={hoverRating}
+            reviewSubmitting={reviewSubmitting}
+            reviewDeleting={reviewDeleting}
+            user={user}
+            onLoginNavigate={() => navigate("/login")}
+            onFieldChange={(field, value) =>
+              setReviewForm((prev) => ({
+                ...prev,
+                [field]: value,
+              }))
+            }
+            onHoverRatingChange={setHoverRating}
+            onRatingChange={(rating) =>
+              setReviewForm((prev) => ({ ...prev, rating }))
+            }
+            onSubmitReview={handleSubmitReview}
+            onDeleteReview={handleDeleteReview}
+            onEditReview={(review) => {
+              setMyReview(review);
+              setReviewForm({
+                rating: Number(review.rating || 0),
+                title: review.title || "",
+                comment: review.comment || "",
+                reviewerName: review.reviewerName || user?.name || "",
+                reviewerEmail: review.reviewerEmail || user?.email || "",
+              });
+              if (typeof document !== "undefined") {
+                document
+                  .getElementById("review-form")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            }}
+          />
+          {false ? (
+            <>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Product Reviews</h2>
             <div className="text-sm text-gray-600">
@@ -2804,6 +3170,8 @@ const ProductDetails = () => {
                 </form>
             </div>
           </div>
+            </>
+          ) : null}
           </motion.div>
                   </section>
                 </div>
@@ -2812,7 +3180,7 @@ const ProductDetails = () => {
           </div>
         </div>
         {relatedProductsLoading || relatedProducts.length > 0 ? (
-          <section className="mt-32 pb-6">
+          <section className="mx-auto mt-32 w-full max-w-[1240px] pb-6">
             <div className="mb-14 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h2 className="text-3xl font-bold tracking-tight text-black sm:text-4xl">
@@ -2837,25 +3205,28 @@ const ProductDetails = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-4">
+            <div className="storefront-card-grid">
               {relatedProductsLoading
                 ? Array.from({ length: 4 }).map((_, index) => (
-                    <div key={`related-skeleton-${index}`} className="animate-pulse">
-                      <div className="aspect-[3/4] rounded-[2rem] bg-zinc-100 p-8" />
-                      <div className="mt-6 space-y-3">
-                        <div className="h-3 w-24 rounded bg-zinc-100" />
-                        <div className="h-4 w-4/5 rounded bg-zinc-100" />
-                        <div className="h-10 w-full rounded bg-zinc-100" />
+                    <div key={`related-skeleton-${index}`} className="storefront-card-grid__item animate-pulse">
+                      <div className="storefront-product-card rounded-[22px] border border-zinc-100 bg-white p-3 shadow-sm">
+                        <div className="aspect-square rounded-[18px] bg-zinc-100" />
+                        <div className="mt-4 space-y-3">
+                          <div className="h-3 w-24 rounded bg-zinc-100" />
+                          <div className="h-4 w-4/5 rounded bg-zinc-100" />
+                          <div className="h-10 w-full rounded bg-zinc-100" />
+                        </div>
                       </div>
                     </div>
                   ))
                 : relatedProducts.map((entry) => (
-                    <StorefrontProductCard
-                      key={entry._id}
-                      product={entry}
-                      className="h-full"
-                      onViewDetails={() => handleNavigateToProduct(entry._id)}
-                    />
+                    <div key={entry._id} className="storefront-card-grid__item">
+                      <StorefrontProductCard
+                        product={entry}
+                        className="h-full"
+                        onViewDetails={() => handleNavigateToProduct(entry._id)}
+                      />
+                    </div>
                   ))}
             </div>
           </section>

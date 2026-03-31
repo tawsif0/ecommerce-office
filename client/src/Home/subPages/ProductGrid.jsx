@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
+import { toast } from "react-hot-toast";
 import {
   FiFilter,
   FiX,
@@ -11,6 +12,7 @@ import {
   FiHeart,
   FiGrid,
   FiList,
+  FiShoppingBag,
   FiShuffle,
   FiChevronDown,
   FiChevronUp,
@@ -27,9 +29,15 @@ import {
   getPublicStockBadgeText,
   isPublicStockVisible,
 } from "../../utils/publicProduct";
-import { toggleCompareItem } from "../../store/compareSlice";
+import { hasVariantOptionPricing } from "../../utils/productVariants";
+import {
+  COMPARE_LIMIT_MESSAGE,
+  MAX_COMPARE_ITEMS,
+  toggleCompareItem,
+} from "../../store/compareSlice";
 import { createProductSnapshot } from "../../utils/productSnapshot";
 import StorefrontProductCard from "../components/StorefrontProductCard";
+import { useCart } from "../../context/CartContext";
 const INITIAL_DISPLAY_LIMIT = 20;
 
 const DEFAULT_STOREFRONT = getDefaultPublicSettings().storefront;
@@ -51,6 +59,7 @@ const ProductGrid = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
+  const { isProductInCart: isProductInCartById, toggleProductInCart } = useCart();
   const compareItems = useSelector((state) => state.compare.items || []);
   const wishlistItems = useSelector((state) => state.wishlist.items || []);
   const wishlistPendingIds = useSelector(selectWishlistPendingIds);
@@ -95,6 +104,15 @@ const ProductGrid = () => {
   );
 
   const baseUrl = import.meta.env.VITE_API_URL;
+  const persistCurrentShopScroll = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    window.sessionStorage.setItem(
+      `shop-scroll:${location.pathname}${location.search}`,
+      String(window.scrollY || window.pageYOffset || 0),
+    );
+  }, [location.pathname, location.search]);
+
   const getCategoryIdFromProduct = (product) => {
     if (!product?.category) return null;
     return typeof product.category === "string"
@@ -207,13 +225,42 @@ const ProductGrid = () => {
     [wishlistItems],
   );
 
+  const isProductInCart = React.useCallback(
+    (productId) => isProductInCartById(productId),
+    [isProductInCartById],
+  );
+
   const handleToggleCompare = React.useCallback(
     (product) => {
       const snapshot = createProductSnapshot(product);
       if (!snapshot) return;
+      const exists = compareItems.some(
+        (item) => String(item?._id || "") === String(snapshot._id || ""),
+      );
+      if (!exists && compareItems.length >= MAX_COMPARE_ITEMS) {
+        toast.error(COMPARE_LIMIT_MESSAGE);
+        return;
+      }
       dispatch(toggleCompareItem(snapshot));
     },
-    [dispatch],
+    [compareItems, dispatch],
+  );
+
+  const handleToggleCart = React.useCallback(
+    async (product) => {
+      const marketplaceType = String(product?.marketplaceType || "simple")
+        .trim()
+        .toLowerCase();
+
+      if (["variable", "grouped"].includes(marketplaceType)) {
+        persistCurrentShopScroll();
+        navigate(`/product/${product?._id || product?.id}`);
+        return;
+      }
+
+      await toggleProductInCart(product, 1);
+    },
+    [navigate, persistCurrentShopScroll, toggleProductInCart],
   );
 
   const handleToggleWishlist = React.useCallback(
@@ -1063,8 +1110,8 @@ const ProductGrid = () => {
                         metaLine={getProductCardMetaLine(product)}
                         className="!w-full"
                         onViewDetails={() => {
+                          persistCurrentShopScroll();
                           navigate(`/product/${product._id}`);
-                          if (typeof window !== "undefined") window.scrollTo(0, 0);
                         }}
                       />
                     </div>
@@ -1119,8 +1166,8 @@ const ProductGrid = () => {
                           transition={{ duration: 0.3, delay: index * 0.05 }}
                           className="group bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:shadow-xl transition-all duration-500 overflow-hidden hover:-translate-y-1 cursor-pointer"
                           onClick={() => {
+                            persistCurrentShopScroll();
                             navigate(`/product/${product._id}`);
-                            window.scrollTo(0, 0);
                           }}
                         >
                           <div className="flex flex-col lg:flex-row lg:h-64">
@@ -1234,39 +1281,9 @@ const ProductGrid = () => {
                                         </p>
                                       )}
 
-                                      {/* Colors & Dimensions */}
-                                      {(product.colors &&
-                                        product.colors.length > 0) ||
-                                      product.dimensions ? (
+                                      {/* Dimensions */}
+                                      {product.dimensions ? (
                                         <div className="flex flex-col gap-2 mb-6">
-                                          {product.colors &&
-                                            product.colors.length > 0 && (
-                                              <div className="flex items-center gap-3">
-                                                <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
-                                                  Colors:
-                                                </span>
-                                                <div className="flex gap-1.5 -space-x-1">
-                                                  {product.colors
-                                                    .slice(0, 4)
-                                                    .map((color, idx) => (
-                                                      <div
-                                                        key={idx}
-                                                        className="w-4 h-4 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform"
-                                                        style={{
-                                                          backgroundColor:
-                                                            color,
-                                                        }}
-                                                        title={color}
-                                                      />
-                                                    ))}
-                                                  {product.colors.length > 4 ? (
-                                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-linear-to-br from-black to-gray-700 text-white text-[8px] font-bold shadow-sm">
-                                                      4+
-                                                    </span>
-                                                  ) : null}
-                                                </div>
-                                              </div>
-                                            )}
                                           {product.dimensions && (
                                             <div className="text-xs font-medium text-gray-500">
                                               Dim: {product.dimensions}
@@ -1278,6 +1295,12 @@ const ProductGrid = () => {
 
                                     {/* Price & View Button - Right Aligned */}
                                     <div className="flex flex-col items-end gap-4 mt-2 lg:mt-0 lg:text-right">
+                                      {(() => {
+                                        const inCart = isProductInCart(product._id);
+                                        const showCardCartButton =
+                                          !hasVariantOptionPricing(product);
+                                        return (
+                                          <>
                                       {pricing.isTba ? (
                                         <div className="text-2xl font-bold text-black whitespace-nowrap">
                                           TBA
@@ -1295,13 +1318,29 @@ const ProductGrid = () => {
                                         </div>
                                       )}
                                       <div className="flex items-center gap-2">
+                                        {showCardCartButton ? (
+                                          <button
+                                            type="button"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              await handleToggleCart(product);
+                                            }}
+                                            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-colors ${
+                                              inCart
+                                                ? "border-emerald-600 bg-emerald-600 text-white hover:border-emerald-700 hover:bg-emerald-700"
+                                                : "border-gray-300 bg-white text-gray-600 hover:border-black hover:text-black"
+                                            }`}
+                                          >
+                                            <FiShoppingBag className="h-4 w-4" />
+                                          </button>
+                                        ) : null}
                                         <button
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleToggleCompare(product);
                                           }}
-                                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+                                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full border bg-white shadow-sm transition-colors ${
                                             compared
                                               ? "border-black bg-black text-white"
                                               : "border-gray-300 text-gray-600 hover:border-black hover:text-black"
@@ -1331,16 +1370,20 @@ const ProductGrid = () => {
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            persistCurrentShopScroll();
                                             navigate(`/product/${product._id}`);
-                                            if (typeof window !== "undefined") {
-                                              window.scrollTo(0, 0);
-                                            }
                                           }}
-                                          className="inline-flex h-10 w-full items-center justify-center rounded-none bg-gray-900 px-5 text-sm font-semibold text-white transition hover:bg-black lg:w-auto"
+                                          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-black transition hover:border-black hover:bg-gray-50"
+                                          aria-label="View details"
+                                          title="View details"
                                         >
-                                          View Details
+                                          <FiEye className="h-4 w-4" />
+                                          <span className="sr-only">View details</span>
                                         </button>
                                       </div>
+                                          </>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                 </div>

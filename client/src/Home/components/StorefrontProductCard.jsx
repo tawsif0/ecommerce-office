@@ -1,9 +1,8 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FiHeart, FiShoppingBag, FiShuffle } from "react-icons/fi";
+import { FiEye, FiHeart, FiShoppingBag, FiShuffle } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import { getProductPricingDisplay } from "../../utils/productPricing";
 import {
   getPublicStockBadgeText,
   isPublicStockVisible,
@@ -13,9 +12,20 @@ import {
   selectWishlistPendingIds,
   toggleWishlistItem,
 } from "../../store/wishlistSlice";
-import { toggleCompareItem } from "../../store/compareSlice";
+import {
+  COMPARE_LIMIT_MESSAGE,
+  MAX_COMPARE_ITEMS,
+  toggleCompareItem,
+} from "../../store/compareSlice";
 import { createProductSnapshot } from "../../utils/productSnapshot";
 import { useCart } from "../../context/CartContext";
+import {
+  getDefaultSelectedVariants,
+  getProductPricingForSelectedVariants,
+  getSelectedVariantSignature,
+  normalizeProductVariantDefinitions,
+  normalizeSelectedVariantsPayload,
+} from "../../utils/productVariants";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -136,27 +146,19 @@ const getCategoryLabel = (product, badgeText = "") => {
   return "General";
 };
 
-const getPreviewColors = (product) => {
-  const directColors = Array.isArray(product?.colors)
-    ? product.colors.filter((color) => /^#[0-9a-fA-F]{6}$/.test(String(color || "").trim()))
-    : [];
+const getCompareButtonClassName = (isCompared) =>
+  `inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition sm:h-9 sm:w-9 ${
+    isCompared
+      ? "border-black bg-black text-white"
+      : "border-gray-200 bg-white text-gray-700 hover:border-black hover:text-black"
+  }`;
 
-  const variantColors = Array.isArray(product?.variantDefinitions)
-    ? product.variantDefinitions
-        .filter(
-          (variant) =>
-            String(variant?.preset || "").trim().toLowerCase() === "color" ||
-            String(variant?.name || "").trim().toLowerCase() === "color",
-        )
-        .flatMap((variant) => variant.options || [])
-        .map((option) =>
-          String(option?.colorHex || option?.value || "").trim().toLowerCase(),
-        )
-        .filter((color) => /^#[0-9a-fA-F]{6}$/.test(color))
-    : [];
-
-  return [...new Set([...variantColors, ...directColors])];
-};
+const getCartButtonClassName = (isInCart) =>
+  `inline-flex h-10 w-10 items-center justify-center rounded-[14px] border transition sm:h-[42px] sm:w-[42px] ${
+    isInCart
+      ? "border-emerald-600 bg-emerald-600 text-white hover:border-emerald-700 hover:bg-emerald-700"
+      : "border-gray-200 bg-white text-black hover:border-black hover:bg-gray-50"
+  }`;
 
 const StorefrontProductCard = ({
   product,
@@ -165,25 +167,42 @@ const StorefrontProductCard = ({
   badgeClassName = "",
   topRightSlot = null,
   metaLine,
-  buttonLabel = "View",
+  buttonLabel = "View details",
   className = "",
   onViewDetails,
   showCompareButton = true,
   showWishlistButton = true,
   showCartButton = true,
+  onCartActionComplete,
 }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const { isCartItemPresent, toggleCartItem } = useCart();
   const settings = useSelector(selectPublicSettings);
   const compareItems = useSelector((state) => state.compare.items || []);
   const wishlistItems = useSelector((state) => state.wishlist.items || []);
   const wishlistPendingIds = useSelector(selectWishlistPendingIds);
-  const pricing = useMemo(() => getProductPricingDisplay(product), [product]);
+  const productId = String(product?._id || product?.id || "").trim();
+  const variantDefinitions = useMemo(
+    () => normalizeProductVariantDefinitions(product),
+    [product],
+  );
+  const [selectedVariants, setSelectedVariants] = useState(() =>
+    getDefaultSelectedVariants(product),
+  );
+  const resolvedSelectedVariants = useMemo(
+    () => normalizeSelectedVariantsPayload(selectedVariants),
+    [selectedVariants],
+  );
+  const selectedVariantSignature = useMemo(
+    () => getSelectedVariantSignature(resolvedSelectedVariants),
+    [resolvedSelectedVariants],
+  );
+  const pricing = useMemo(
+    () => getProductPricingForSelectedVariants(product, resolvedSelectedVariants),
+    [product, resolvedSelectedVariants],
+  );
   const displayMetaLine = getCardMetaLine(product, metaLine);
-  const allPreviewColors = useMemo(() => getPreviewColors(product), [product]);
-  const previewColors = allPreviewColors.slice(0, 4);
-  const hasMoreColors = allPreviewColors.length > 4;
   const discountLabel = buildDiscountLabel(pricing);
   const categoryLabel = getCategoryLabel(product, badgeText);
   const sectionBadgeLabel =
@@ -196,7 +215,7 @@ const StorefrontProductCard = ({
     [product, settings],
   );
   const showStockBadge = Boolean(stockBadgeText) && isPublicStockVisible(product, settings);
-  const productId = String(product?._id || product?.id || "").trim();
+  const showCardCartButton = showCartButton;
   const isCompared = compareItems.some(
     (item) => String(item?._id || "") === productId,
   );
@@ -204,6 +223,62 @@ const StorefrontProductCard = ({
     (item) => String(item?._id || "") === productId,
   );
   const wishlistLoading = wishlistPendingIds.includes(productId);
+  const isInCart = isCartItemPresent(
+    productId,
+    "",
+    "",
+    "",
+    selectedVariantSignature,
+  );
+
+  useEffect(() => {
+    setSelectedVariants((currentSelections) => {
+      const currentByName = new Map(
+        normalizeSelectedVariantsPayload(currentSelections).map((variant) => [
+          String(variant?.name || "").toLowerCase(),
+          variant,
+        ]),
+      );
+
+      return variantDefinitions
+        .map((definition) => {
+          const existing = currentByName.get(definition.name.toLowerCase());
+          const matchingOption = (definition.options || []).find((option) => {
+            if (!existing) return false;
+
+            if (
+              definition.preset === "color" &&
+              String(option.colorHex || "").toLowerCase() ===
+                String(existing.colorHex || "").toLowerCase()
+            ) {
+              return true;
+            }
+
+            return (
+              String(option.value || "").toLowerCase() ===
+                String(existing.value || "").toLowerCase()
+            );
+          });
+
+          if (!matchingOption) return null;
+
+          return {
+            name: definition.name,
+            preset: definition.preset,
+            label: matchingOption.label || matchingOption.value,
+            value: matchingOption.value || matchingOption.label,
+            colorHex:
+              definition.preset === "color"
+                ? String(matchingOption.colorHex || matchingOption.value || "").toLowerCase()
+                : "",
+            priceMode: matchingOption.priceMode || "default",
+            price: matchingOption.price,
+            comparePrice: matchingOption.comparePrice,
+          };
+        })
+        .filter(Boolean);
+    });
+  }, [productId, variantDefinitions]);
 
   const handleViewDetails = () => {
     if (typeof onViewDetails === "function") {
@@ -222,6 +297,10 @@ const StorefrontProductCard = ({
     event.stopPropagation();
     const snapshot = createProductSnapshot(product);
     if (!snapshot) return;
+    if (!isCompared && compareItems.length >= MAX_COMPARE_ITEMS) {
+      toast.error(COMPARE_LIMIT_MESSAGE);
+      return;
+    }
     dispatch(toggleCompareItem(snapshot));
   };
 
@@ -240,15 +319,18 @@ const StorefrontProductCard = ({
     event.stopPropagation();
 
     const marketplaceType = String(product?.marketplaceType || "simple").trim().toLowerCase();
-    if (["variable", "grouped"].includes(marketplaceType)) {
-      toast("Choose options on the product details page first.");
-      navigate(`/products/${productId || product?._id || product?.id}`);
+    if (marketplaceType === "grouped") {
+      toast("Choose grouped items on the product details page first.");
+      navigate(`/product/${productId || product?._id || product?.id}`);
       return;
     }
 
-    const result = await addToCart(product, 1);
-    if (!result?.success && result?.error) {
-      toast.error(result.error);
+    const result = await toggleCartItem(product, 1, "", "", {
+      selectedVariants: resolvedSelectedVariants,
+    });
+
+    if (typeof onCartActionComplete === "function") {
+      await onCartActionComplete(result, product);
     }
   };
 
@@ -284,11 +366,7 @@ const StorefrontProductCard = ({
             <button
               type="button"
               onClick={handleToggleCompare}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 shadow-sm transition ${
-                isCompared
-                  ? "border-black bg-black text-white"
-                  : "border-gray-200 text-gray-700 hover:border-black hover:text-black"
-              }`}
+              className={getCompareButtonClassName(isCompared)}
               aria-label={isCompared ? "Remove from compare" : "Add to compare"}
               title={isCompared ? "Remove from compare" : "Add to compare"}
             >
@@ -320,26 +398,8 @@ const StorefrontProductCard = ({
             <p className="line-clamp-1 text-[11px] text-gray-500 sm:text-xs">{`Brand: ${product.brand}`}</p>
           ) : null}
 
-          {previewColors.length > 0 || displayMetaLine ? (
+          {displayMetaLine ? (
             <div className="flex items-center gap-2">
-              {previewColors.length > 0 ? (
-                <div className="flex shrink-0 items-center gap-1">
-                  {previewColors.map((color, index) => (
-                    <span
-                      key={`${color}-${index}`}
-                      className="h-3 w-3 rounded-full border border-gray-300"
-                      style={{ backgroundColor: color }}
-                      title={color}
-                    />
-                  ))}
-                  {hasMoreColors ? (
-                    <span className="inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-linear-to-br from-black to-gray-700 text-[8px] font-bold text-white shadow-sm">
-                      4+
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-
               {displayMetaLine ? (
                 <p className="line-clamp-1 text-[11px] text-gray-500 sm:text-xs">{displayMetaLine}</p>
               ) : null}
@@ -360,6 +420,7 @@ const StorefrontProductCard = ({
               ) : null}
             </div>
           ) : null}
+
         </div>
 
         <div className="mt-auto flex flex-col gap-3 border-t border-gray-100 pt-3">
@@ -382,13 +443,13 @@ const StorefrontProductCard = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {showCartButton ? (
+            {showCardCartButton ? (
               <button
                 type="button"
                 onClick={handleAddToCart}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-[14px] border border-gray-200 bg-white text-black transition hover:border-black hover:bg-gray-50 sm:h-[42px] sm:w-[42px]"
-                aria-label="Add to cart"
-                title="Add to cart"
+                className={getCartButtonClassName(isInCart)}
+                aria-label={isInCart ? "Remove from cart" : "Add to cart"}
+                title={isInCart ? "Remove from cart" : "Add to cart"}
               >
                 <FiShoppingBag className="h-4 w-4" />
               </button>
@@ -399,9 +460,12 @@ const StorefrontProductCard = ({
                 event.stopPropagation();
                 handleViewDetails();
               }}
-              className="mt-auto flex-1 rounded-[14px] bg-gray-900 py-2.5 text-xs font-semibold text-white transition hover:bg-black sm:text-sm"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-[14px] border border-gray-200 bg-white text-black transition hover:border-black hover:bg-gray-50 sm:h-[42px] sm:w-[42px]"
+              aria-label={buttonLabel}
+              title={buttonLabel}
             >
-              {buttonLabel}
+              <FiEye className="h-4 w-4" />
+              <span className="sr-only">{buttonLabel}</span>
             </button>
             {showWishlistButton ? (
               <button

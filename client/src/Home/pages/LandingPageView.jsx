@@ -3,8 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { FiArrowRight } from "react-icons/fi";
 import { toast } from "react-hot-toast";
+import usePublicSettings from "../../hooks/usePublicSettings";
 import { setLandingAttribution } from "../../utils/landingAttribution";
 import { pushDataLayerEvent } from "../../utils/marketingDataLayer";
+import { formatDocumentTitle } from "../../utils/publicSettings";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -51,6 +53,7 @@ const getProductPriceLabel = (product) => {
 
 const LandingPageView = () => {
   const { slug } = useParams();
+  const { settings } = usePublicSettings();
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(null);
 
@@ -121,8 +124,11 @@ const LandingPageView = () => {
     if (!page) return;
 
     const title = String(page.headline || page.title || "Landing Page").trim();
-    document.title = title || "Landing Page";
-  }, [page]);
+    const timer = window.setTimeout(() => {
+      document.title = formatDocumentTitle(settings, title || "Landing Page");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [page, settings]);
 
   if (loading) {
     return (

@@ -810,7 +810,9 @@ const getCustomerOrderInsights = async ({
 
   const matchedUsers = userConditions.length
     ? await User.find({ $or: userConditions })
-      .select("_id name email phone originalPhone isBlacklisted blacklistReason")
+      .select(
+        "_id name email phone originalPhone isBlacklisted blacklistReason addressBook",
+      )
       .limit(10)
       .lean()
     : [];
@@ -834,7 +836,7 @@ const getCustomerOrderInsights = async ({
 
   const orders = orderConditions.length
     ? await Order.find({ $or: orderConditions })
-      .select("orderNumber orderStatus total createdAt")
+      .select("orderNumber orderStatus total createdAt user shippingAddress shippingMeta")
       .sort({ createdAt: -1 })
       .limit(300)
       .lean()
@@ -860,6 +862,106 @@ const getCustomerOrderInsights = async ({
   const blacklistedUser = matchedUsers.find((entry) => Boolean(entry?.isBlacklisted));
   const isBlacklisted = Boolean(blacklistedUser);
   const blacklistReason = String(blacklistedUser?.blacklistReason || "").trim();
+  const normalizeCustomerNameParts = (fullName = "") => {
+    const nameParts = String(fullName || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    return {
+      firstName: nameParts[0] || "",
+      lastName: nameParts.slice(1).join(" "),
+    };
+  };
+  const findRecentOrderForUser = (entry = {}) =>
+    dedupedOrders.find((orderEntry) => String(orderEntry?.user || "") === String(entry?._id || ""));
+  const buildCustomerAutofill = ({ user = null, recentOrder = null } = {}) => {
+    const defaultAddress =
+      (Array.isArray(user?.addressBook) ? user.addressBook : []).find(
+        (entry) => entry?.isDefault,
+      ) ||
+      (Array.isArray(user?.addressBook) ? user.addressBook[0] : null) ||
+      null;
+    const shipping = recentOrder?.shippingAddress || {};
+    const recentOrderName = `${String(shipping?.firstName || "").trim()} ${String(
+      shipping?.lastName || "",
+    ).trim()}`.trim();
+    const fallbackName = String(defaultAddress?.recipientName || recentOrderName || user?.name || "").trim();
+    const nameParts = normalizeCustomerNameParts(fallbackName);
+
+    return {
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
+      email: String(user?.email || shipping?.email || "").trim().toLowerCase(),
+      phone: String(user?.originalPhone || user?.phone || shipping?.phone || "").trim(),
+      alternativePhone: String(
+        defaultAddress?.alternativePhone ||
+          shipping?.alternativePhone ||
+          recentOrder?.shippingMeta?.alternativePhone ||
+          "",
+      ).trim(),
+      address: String(defaultAddress?.address || shipping?.address || "").trim(),
+      city: String(defaultAddress?.city || shipping?.city || "").trim(),
+      subCity: String(defaultAddress?.subCity || shipping?.subCity || "").trim(),
+      district: String(defaultAddress?.district || shipping?.district || "").trim(),
+      postalCode: String(defaultAddress?.postalCode || shipping?.postalCode || "").trim(),
+      country: String(defaultAddress?.country || shipping?.country || "Bangladesh").trim(),
+    };
+  };
+  const matchedCustomers = matchedUsers.slice(0, 5).map((entry) => {
+    const recentOrder = findRecentOrderForUser(entry);
+    return {
+      _id: entry._id,
+      name: entry.name || "",
+      email: entry.email || "",
+      phone: entry.originalPhone || entry.phone || "",
+      isBlacklisted: Boolean(entry.isBlacklisted),
+      blacklistReason: String(entry.blacklistReason || ""),
+      autofill: buildCustomerAutofill({
+        user: entry,
+        recentOrder,
+      }),
+    };
+  });
+  const knownCustomerKeys = new Set(
+    matchedCustomers.map(
+      (entry) =>
+        `${String(entry?.email || "").trim().toLowerCase()}|${User.normalizePhone
+          ? User.normalizePhone(String(entry?.phone || "").trim())
+          : String(entry?.phone || "").trim()}`,
+    ),
+  );
+  const guestMatches = dedupedOrders
+    .map((entry) => {
+      const shipping = entry?.shippingAddress || {};
+      const emailValue = String(shipping?.email || "").trim().toLowerCase();
+      const phoneValue = User.normalizePhone
+        ? User.normalizePhone(String(shipping?.phone || "").trim())
+        : String(shipping?.phone || "").trim();
+      const dedupeKey = `${emailValue}|${phoneValue}`;
+      if (!emailValue && !phoneValue) return null;
+      if (knownCustomerKeys.has(dedupeKey)) return null;
+
+      const displayName = `${String(shipping?.firstName || "").trim()} ${String(
+        shipping?.lastName || "",
+      ).trim()}`.trim();
+
+      knownCustomerKeys.add(dedupeKey);
+
+      return {
+        _id: "",
+        name: displayName || "Guest customer",
+        email: emailValue,
+        phone: String(shipping?.phone || "").trim(),
+        isBlacklisted: false,
+        blacklistReason: "",
+        autofill: buildCustomerAutofill({
+          recentOrder: entry,
+        }),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 5);
 
   return {
     totalOrders: metrics.totalOrders,
@@ -884,14 +986,7 @@ const getCustomerOrderInsights = async ({
       total: roundMoney(entry.total),
       createdAt: entry.createdAt,
     })),
-    matchedCustomers: matchedUsers.slice(0, 5).map((entry) => ({
-      _id: entry._id,
-      name: entry.name || "",
-      email: entry.email || "",
-      phone: entry.originalPhone || entry.phone || "",
-      isBlacklisted: Boolean(entry.isBlacklisted),
-      blacklistReason: String(entry.blacklistReason || ""),
-    })),
+    matchedCustomers: [...matchedCustomers, ...guestMatches].slice(0, 5),
   };
 };
 
@@ -1444,6 +1539,22 @@ const normalizeOrderSource = (value) => {
     .toLowerCase()
     .slice(0, 120);
   return normalized || "shop";
+};
+
+const resolveOrderType = (order = {}) => {
+  const explicitType = String(order?.orderType || "")
+    .trim()
+    .toLowerCase();
+
+  if (explicitType === "manual" || explicitType === "online") {
+    return explicitType;
+  }
+
+  const source = String(order?.source || "")
+    .trim()
+    .toLowerCase();
+
+  return source.includes("manual") ? "manual" : "online";
 };
 
 const resolveLandingAttribution = async ({ source = "shop", landingPageSlug = "" } = {}) => {
@@ -2390,6 +2501,7 @@ exports.getAllOrders = async (req, res) => {
         { "paymentDetails.gatewayPaymentId": { $regex: trimmedSearch, $options: "i" } },
         { "paymentDetails.sentFrom": { $regex: trimmedSearch, $options: "i" } },
         { "paymentDetails.sentTo": { $regex: trimmedSearch, $options: "i" } },
+        { source: { $regex: trimmedSearch, $options: "i" } },
       ];
 
       if (mongoose.Types.ObjectId.isValid(trimmedSearch)) {
@@ -2458,6 +2570,8 @@ exports.getAllOrders = async (req, res) => {
       paymentStatus: resolveEffectivePaymentStatus(order),
       paymentMethod: order.paymentMethod,
       transactionId: order.paymentDetails?.transactionId || "N/A",
+      orderType: resolveOrderType(order),
+      source: order.source || "shop",
       shippingAddress: order.shippingAddress,
       paymentDetails: order.paymentDetails,
       courier: getOrderCourierMeta(order),
@@ -3971,12 +4085,9 @@ exports.createAdminOrder = async (req, res) => {
     const {
       shippingAddress = {},
       items = [],
-      shippingFee = 0,
       shippingMeta = {},
       couponCode = "",
-      source = "manual_admin",
       landingPageSlug = "",
-      paymentMethodId,
       paymentMethod,
       paymentDetails,
       customerUserId = "",
@@ -4077,23 +4188,35 @@ exports.createAdminOrder = async (req, res) => {
       });
     }
 
-    const paymentSelection = await resolvePaymentMethodSelection({
-      paymentMethodId,
-      paymentMethod,
-      paymentDetails,
-      shippingAddress: normalizedShippingAddress,
-    });
-    const resolvedShippingFee =
-      paymentSelection.channelType === "cod"
-        ? Math.max(0, Number(paymentSelection.shippingCost || 0))
-        : shippingFee;
+    const manualPaymentMode = String(
+      paymentDetails?.paymentMode || paymentDetails?.mode || paymentMethod || "cash",
+    )
+      .trim()
+      .toLowerCase();
+    const isManualCashOrder = manualPaymentMode === "cash";
+    const manualMethodName = isManualCashOrder
+      ? "Cash on Delivery"
+      : String(
+          paymentMethod ||
+            paymentDetails?.methodName ||
+            paymentDetails?.method ||
+            "Manual Online Payment",
+        ).trim();
+    const resolvedShippingFee = 0;
 
     const normalizedPaymentDetails = normalizePaymentDetails(
-      paymentSelection.methodName,
+      manualMethodName,
       paymentDetails,
       {
-        providerType: paymentSelection.channelType,
-        defaultAccountNo: paymentSelection.defaultAccountNo,
+        providerType: isManualCashOrder ? "cod" : "manual_online",
+        defaultAccountNo: String(
+          paymentDetails?.transactionDetails ||
+            paymentDetails?.paymentTransaction ||
+          paymentDetails?.accountNo ||
+            paymentDetails?.sentTo ||
+            paymentDetails?.receiverPhone ||
+            "",
+        ).trim(),
       },
     );
 
@@ -4101,16 +4224,6 @@ exports.createAdminOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Payment method is required",
-      });
-    }
-
-    if (
-      paymentSelection.requiresTransactionProof &&
-      !String(normalizedPaymentDetails.transactionId || "").trim()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Transaction ID is required for this payment method",
       });
     }
 
@@ -4139,7 +4252,7 @@ exports.createAdminOrder = async (req, res) => {
     }
 
     const attribution = await resolveLandingAttribution({
-      source,
+      source: "manual_admin",
       landingPageSlug,
     });
 
@@ -4153,6 +4266,7 @@ exports.createAdminOrder = async (req, res) => {
     mergedShippingMeta.createdByAdmin = true;
     mergedShippingMeta.createdByUser =
       req.user?._id || req.user?.id || null;
+    mergedShippingMeta.manualOrder = true;
     const finalizedShippingMeta = mergeEstimatedDeliveryIntoShippingMeta(
       mergedShippingMeta,
       builtItems,
@@ -4169,19 +4283,19 @@ exports.createAdminOrder = async (req, res) => {
       discount: pricing.discount,
       couponCode: pricing.couponCode,
       total: pricing.total,
-      paymentMethod: paymentSelection.methodName || normalizedPaymentDetails.method,
+      paymentMethod: normalizedPaymentDetails.method,
       paymentDetails: normalizedPaymentDetails,
-      paymentStatus: "pending",
-      orderStatus: "pending",
+      paymentStatus: "completed",
+      orderStatus: "delivered",
       adminNotes: String(adminNotes || "").trim(),
       statusTimeline: [
         buildOrderStatusTimelineEntry({
-          status: "pending",
-          note: "Order created manually by admin",
+          status: "delivered",
+          note: "Manual order created and completed by admin",
           user: req.user,
         }),
       ],
-      source: attribution.source || "manual_admin",
+      source: "manual_admin",
       landingPage: attribution.landingPage,
       landingPageSlug: attribution.landingPageSlug,
     });
@@ -4195,7 +4309,7 @@ exports.createAdminOrder = async (req, res) => {
         providerName: String(courierProvider || "").trim(),
         trackingNumber: String(courierTrackingNumber || "").trim(),
         consignmentId: String(courierConsignmentId || "").trim(),
-        status: "pending",
+        status: "delivered",
         generatedBy: "manual",
       });
     }
@@ -4266,7 +4380,7 @@ exports.createAdminOrder = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Order created successfully",
+      message: "Manual order created successfully",
       order: populatedOrder,
       customerInsights,
     });

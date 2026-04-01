@@ -7,6 +7,12 @@ import toast from "react-hot-toast";
 import ConfirmModal from "../../components/ConfirmModal";
 import RichTextEditor from "../../components/RichTextEditor";
 import { stripHtml } from "../../utils/richText";
+import {
+  dashboardFieldClass,
+  dashboardFormSurfaceClass,
+  dashboardPrimaryButtonClass,
+  dashboardSecondaryButtonClass,
+} from "../../utils/dashboardFormStyles";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -250,7 +256,7 @@ function ModifyCategory() {
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.4 }}
-          className="bg-white rounded-xl shadow-lg p-4 md:p-8 border border-gray-200"
+          className={`${dashboardFormSurfaceClass} p-4 md:p-8`}
         >
           <div className="py-1 border-b border-gray-100">
             <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">
@@ -335,11 +341,11 @@ function ModifyCategory() {
                                 setEditName(e.target.value);
                                 if (editError) setEditError("");
                               }}
-                              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
+                              className={`${dashboardFieldClass} ${
                                 editError
                                   ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                                  : "border-gray-300 focus:border-gray-500 focus:ring-gray-500"
-                              } text-gray-900 placeholder-gray-400`}
+                                  : ""
+                              }`}
                               placeholder="Category name"
                               autoFocus
                             />
@@ -354,7 +360,7 @@ function ModifyCategory() {
                             <select
                               value={editType}
                               onChange={(e) => setEditType(e.target.value)}
-                              className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:border-gray-500 focus:ring-gray-500 text-gray-900"
+                              className={`${dashboardFieldClass} w-full md:w-auto`}
                             >
                               {categoryTypes.map((type) => (
                                 <option key={type} value={type}>
@@ -366,16 +372,16 @@ function ModifyCategory() {
                           <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
                             <button
                               onClick={() => handleUpdate(category._id)}
-                            className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
-                          >
+                              className={dashboardPrimaryButtonClass}
+                            >
                             Save
                           </button>
                           <button
                             onClick={cancelEditing}
-                            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 text-gray-700 transition-colors duration-200"
-                            >
-                              Cancel
-                            </button>
+                            className={dashboardSecondaryButtonClass}
+                          >
+                            Cancel
+                          </button>
                           </div>
                         </div>
                         {editImagePreview ? (
@@ -391,7 +397,7 @@ function ModifyCategory() {
                               <button
                                 type="button"
                                 onClick={clearEditImageSelection}
-                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                                className={dashboardSecondaryButtonClass}
                               >
                                 Remove selection
                               </button>

@@ -5,6 +5,12 @@ import { toast } from "react-hot-toast";
 import axios from "axios";
 import { FiImage, FiUpload, FiType, FiFileText, FiX } from "react-icons/fi";
 import RichTextEditor from "../../components/RichTextEditor";
+import {
+  dashboardFieldClass,
+  dashboardFormSurfaceClass,
+  dashboardLabelClass,
+  dashboardPrimaryButtonClass,
+} from "../../utils/dashboardFormStyles";
 
 const CreateBanner = () => {
   const baseUrl = import.meta.env.VITE_API_URL;
@@ -254,7 +260,7 @@ const CreateBanner = () => {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.5, delay: 0.1 }}
-                className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+                className={dashboardFormSurfaceClass}
               >
                 <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-4 md:mb-6 flex items-center">
                   <FiType className="mr-2" /> Banner Information
@@ -263,8 +269,8 @@ const CreateBanner = () => {
                 <div className="space-y-4 md:space-y-6">
                   {/* Title */}
                   <div>
-                    <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                      <FiType className="mr-2" /> Title
+                    <label className="block">
+                      <span className={dashboardLabelClass}>Title</span>
                     </label>
                     <input
                       type="text"
@@ -272,7 +278,7 @@ const CreateBanner = () => {
                       value={form.title}
                       onChange={handleChange}
                       placeholder="Enter banner title"
-                      className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300  focus:border-gray-500 transition-all text-sm md:text-base"
+                      className={`${dashboardFieldClass} text-sm md:text-base`}
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Title will be displayed if provided
@@ -281,8 +287,8 @@ const CreateBanner = () => {
 
                   {/* Description */}
                   <div>
-                    <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                      <FiFileText className="mr-2" /> Description
+                    <label className="block">
+                      <span className={dashboardLabelClass}>Description</span>
                     </label>
                     <RichTextEditor
                       value={form.description}
@@ -304,7 +310,7 @@ const CreateBanner = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+                className={dashboardFormSurfaceClass}
               >
                 <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
                   <FiImage className="mr-2" /> Banner Image
@@ -312,8 +318,8 @@ const CreateBanner = () => {
 
                 {/* Image Upload Area */}
                 <div className="mb-3 md:mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Banner Image
+                  <label className="block">
+                    <span className={dashboardLabelClass}>Banner Image</span>
                   </label>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 md:p-6 text-center hover:border-gray-500 transition-colors">
                     {imagePreview ? (
@@ -349,7 +355,7 @@ const CreateBanner = () => {
                         />
                         <label
                           htmlFor="banner-image-upload"
-                          className="inline-flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-600 text-white rounded-lg cursor-pointer hover:bg-gray-700 transition-colors text-sm md:text-base"
+                          className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 md:text-base"
                         >
                           <FiUpload /> Upload Image
                         </label>
@@ -367,11 +373,9 @@ const CreateBanner = () => {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={isSubmitting}
-                  className={`w-full mt-4 md:mt-6 py-2 md:py-3 px-3 md:px-4 rounded-lg font-medium text-white ${
-                    isSubmitting
-                      ? "bg-gray-600 cursor-not-allowed"
-                      : "bg-gray-900 hover:bg-gray-800"
-                  } transition-all shadow-sm md:shadow-md flex items-center justify-center text-sm md:text-base`}
+                  className={`${dashboardPrimaryButtonClass} mt-4 flex w-full items-center justify-center text-sm md:mt-6 md:text-base ${
+                    isSubmitting ? "cursor-not-allowed opacity-60" : ""
+                  }`}
                 >
                   {isSubmitting ? (
                     <>

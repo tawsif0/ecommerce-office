@@ -8,6 +8,13 @@ import ConfirmModal from "../../components/ConfirmModal";
 import RichTextEditor from "../../components/RichTextEditor";
 import { stripHtml } from "../../utils/richText";
 import {
+  dashboardFieldClass,
+  dashboardFormSurfaceClass,
+  dashboardLabelClass,
+  dashboardPrimaryButtonClass,
+  dashboardSecondaryButtonClass,
+} from "../../utils/dashboardFormStyles";
+import {
   FiEdit2,
   FiTrash2,
   FiImage,
@@ -490,7 +497,7 @@ function ModifyBanner() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.5, delay: 0.1 }}
-                  className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+                  className={dashboardFormSurfaceClass}
                 >
                   <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-4 md:mb-6 flex items-center">
                     <FiType className="mr-2" /> Banner Information
@@ -499,8 +506,8 @@ function ModifyBanner() {
                   <div className="space-y-4 md:space-y-6">
                     {/* Title */}
                     <div>
-                      <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                        <FiType className="mr-2" /> Title
+                      <label className="block">
+                        <span className={dashboardLabelClass}>Title</span>
                       </label>
                       <input
                         type="text"
@@ -508,7 +515,7 @@ function ModifyBanner() {
                         value={form.title}
                         onChange={handleChange}
                         placeholder="Enter banner title"
-                        className="w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-300  focus:border-gray-500 transition-all text-sm md:text-base"
+                        className={`${dashboardFieldClass} text-sm md:text-base`}
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Title will be displayed if provided
@@ -517,8 +524,8 @@ function ModifyBanner() {
 
                     {/* Description */}
                     <div>
-                      <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                        <FiFileText className="mr-2" /> Description
+                      <label className="block">
+                        <span className={dashboardLabelClass}>Description</span>
                       </label>
                       <RichTextEditor
                         value={form.description}
@@ -540,7 +547,7 @@ function ModifyBanner() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.5, delay: 0.2 }}
-                  className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+                  className={dashboardFormSurfaceClass}
                 >
                   <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
                     <FiImage className="mr-2" /> Banner Image
@@ -548,12 +555,14 @@ function ModifyBanner() {
 
                   {/* Image Upload/Preview Area */}
                   <div className="mb-3 md:mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {imagePreview
-                        ? "New Image Preview"
-                        : currentImage
-                        ? "Current Image"
-                        : "Banner Image"}
+                    <label className="block">
+                      <span className={dashboardLabelClass}>
+                        {imagePreview
+                          ? "New Image Preview"
+                          : currentImage
+                            ? "Current Image"
+                            : "Banner Image"}
+                      </span>
                     </label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 md:p-6 text-center hover:border-gray-500 transition-colors">
                       {imagePreview ? (
@@ -607,7 +616,7 @@ function ModifyBanner() {
                           />
                           <label
                             htmlFor="banner-image-upload"
-                            className="inline-flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-600 text-white rounded-lg cursor-pointer hover:bg-gray-700 transition-colors text-sm md:text-base"
+                          className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 md:text-base"
                           >
                             <FiImage /> Upload Image
                           </label>
@@ -635,7 +644,7 @@ function ModifyBanner() {
                     <button
                       type="button"
                       onClick={cancelForm}
-                      className="w-full py-2 md:py-3 px-3 md:px-4 rounded-lg font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-all shadow-sm md:shadow-md text-sm md:text-base"
+                      className={`${dashboardSecondaryButtonClass} w-full text-sm md:text-base`}
                     >
                       Cancel
                     </button>
@@ -644,11 +653,9 @@ function ModifyBanner() {
                       whileTap={{ scale: 0.98 }}
                       type="submit"
                       disabled={isSubmitting}
-                      className={`w-full py-2 md:py-3 px-3 md:px-4 rounded-lg font-medium text-white ${
-                        isSubmitting
-                          ? "bg-gray-600 cursor-not-allowed"
-                          : "bg-gray-900 hover:bg-gray-800"
-                      } transition-all shadow-sm md:shadow-md flex items-center justify-center text-sm md:text-base`}
+                      className={`${dashboardPrimaryButtonClass} flex w-full items-center justify-center text-sm md:text-base ${
+                        isSubmitting ? "cursor-not-allowed opacity-60" : ""
+                      }`}
                     >
                       {isSubmitting ? (
                         <>
@@ -705,7 +712,7 @@ function ModifyBanner() {
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.4 }}
-          className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+          className={`${dashboardFormSurfaceClass} p-4 md:p-6`}
         >
           <div className="py-1 border-b border-gray-100 mb-4 md:mb-6">
             <div className="flex items-center justify-end gap-2">

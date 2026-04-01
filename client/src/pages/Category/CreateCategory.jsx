@@ -5,6 +5,13 @@ import { motion } from "framer-motion";
 import axios from "axios";
 import toast from "react-hot-toast";
 import RichTextEditor from "../../components/RichTextEditor";
+import {
+  dashboardFieldClass,
+  dashboardFormSurfaceClass,
+  dashboardLabelClass,
+  dashboardPrimaryButtonClass,
+  dashboardSecondaryButtonClass,
+} from "../../utils/dashboardFormStyles";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -150,16 +157,13 @@ function CreateCategory() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="bg-white rounded-xl shadow-lg p-4 md:p-8 border border-gray-200"
+          className={`${dashboardFormSurfaceClass} p-4 md:p-8`}
         >
           <form onSubmit={handleSubmit} noValidate>
             {/* Category Type Dropdown */}
             <div className="mb-4 md:mb-6">
-              <label
-                htmlFor="categoryType"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Category Type *
+              <label htmlFor="categoryType">
+                <span className={dashboardLabelClass}>Category Type *</span>
               </label>
               <select
                 id="categoryType"
@@ -169,10 +173,10 @@ function CreateCategory() {
                   // Clear error when user selects an option
                   if (typeError) setTypeError("");
                 }}
-                className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-1 transition-colors text-base md:text-lg ${
+                className={`${dashboardFieldClass} text-base md:text-lg ${
                   typeError
                     ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                    : "border-gray-300 focus:border-gray-500 focus:ring-gray-500"
+                    : ""
                 }`}
               >
                 {categoryTypes.map((type) => (
@@ -201,11 +205,8 @@ function CreateCategory() {
             </div>
             {/* Category Name Field */}
             <div className="mb-4">
-              <label
-                htmlFor="categoryName"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Category Name *
+              <label htmlFor="categoryName">
+                <span className={dashboardLabelClass}>Category Name *</span>
               </label>
               <input
                 type="text"
@@ -216,10 +217,10 @@ function CreateCategory() {
                   // Clear error when user starts typing
                   if (nameError) setNameError("");
                 }}
-                className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-1 transition-colors text-base md:text-lg ${
+                className={`${dashboardFieldClass} text-base md:text-lg ${
                   nameError
                     ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                    : "border-gray-300 focus:border-gray-500 focus:ring-gray-500"
+                    : ""
                 }`}
                 placeholder="Enter category name"
                 autoComplete="off"
@@ -244,11 +245,8 @@ function CreateCategory() {
             </div>
 
             <div className="mb-4">
-              <label
-                htmlFor="categoryDescription"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Description
+              <label htmlFor="categoryDescription">
+                <span className={dashboardLabelClass}>Description</span>
               </label>
               <RichTextEditor
                 value={categoryDescription}
@@ -259,8 +257,8 @@ function CreateCategory() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Category Image
+              <label>
+                <span className={dashboardLabelClass}>Category Image</span>
               </label>
               <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-100">
                 <input
@@ -286,7 +284,7 @@ function CreateCategory() {
                   <button
                     type="button"
                     onClick={removeCategoryImage}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                    className={dashboardSecondaryButtonClass}
                   >
                     Remove
                   </button>
@@ -299,11 +297,9 @@ function CreateCategory() {
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={isSubmitting}
-              className={`w-full py-3 px-4 rounded-lg font-medium text-white mt-2 ${
-                isSubmitting
-                  ? "bg-gray-600 cursor-not-allowed"
-                  : "bg-gray-800 hover:bg-gray-900"
-              } transition-all shadow-md flex items-center justify-center text-base md:text-lg`}
+              className={`${dashboardPrimaryButtonClass} mt-2 flex w-full items-center justify-center text-base md:text-lg ${
+                isSubmitting ? "cursor-not-allowed opacity-60" : ""
+              }`}
             >
               {isSubmitting ? (
                 <>

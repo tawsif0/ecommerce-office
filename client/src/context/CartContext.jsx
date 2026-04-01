@@ -16,10 +16,13 @@ import {
 } from "../store/cartSlice";
 import {
   buildSelectedVariantLabel,
-  getEffectiveProductPricing,
   getSelectedVariantSignature,
   normalizeSelectedVariantsPayload,
 } from "../utils/productVariants";
+import {
+  resolveEffectiveUnitPriceForProduct,
+  resolveLiveCartLineUnitPrice,
+} from "../utils/cartLinePricing";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const GUEST_CART_KEY = "guestCart";
@@ -31,58 +34,7 @@ const resolveEffectiveUnitPrice = (
   product,
   variationId = "",
   selectedVariants = [],
-) => {
-  if (!product) return 0;
-
-  const marketplaceType = String(product.marketplaceType || "simple");
-  const normalizedVariationId = String(variationId || "").trim();
-  if (
-    marketplaceType === "variable" &&
-    normalizedVariationId &&
-    Array.isArray(product.variations)
-  ) {
-    const selectedVariation =
-      product.variations.find(
-        (variation) =>
-          String(variation?._id || "") === normalizedVariationId &&
-          variation?.isActive !== false,
-      ) || null;
-
-    if (selectedVariation) {
-      const variationSalePrice = Number(selectedVariation.salePrice);
-      const variationPrice = Number(selectedVariation.price);
-      const pricing = getEffectiveProductPricing({
-        basePrice:
-          Number.isFinite(variationSalePrice) && variationSalePrice >= 0
-            ? variationSalePrice
-            : variationPrice,
-        baseComparePrice:
-          Number.isFinite(variationSalePrice) && variationSalePrice >= 0
-            ? variationPrice
-            : null,
-        selectedVariants,
-      });
-      if (Number.isFinite(pricing.currentPrice) && pricing.currentPrice >= 0) {
-        return pricing.currentPrice;
-      }
-    }
-  }
-
-  const priceType = String(product.priceType || "single");
-  const pricing = getEffectiveProductPricing({
-    basePrice:
-      priceType === "best" && Number.isFinite(Number(product.salePrice))
-        ? Number(product.salePrice)
-        : Number(product.price),
-    baseComparePrice: priceType === "best" ? Number(product.price) : null,
-    selectedVariants,
-  });
-  if (Number.isFinite(pricing.currentPrice) && pricing.currentPrice >= 0) {
-    return pricing.currentPrice;
-  }
-
-  return 0;
-};
+) => resolveEffectiveUnitPriceForProduct(product, variationId, selectedVariants);
 
 const getCartItemProductId = (item) =>
   String(
@@ -702,10 +654,7 @@ export const useCart = () => {
 
   const getCartSubtotal = useCallback(() => {
     return cartItems.reduce(
-      (sum, item) =>
-        sum +
-        (item.unitPrice || item.product?.salePrice || item.product?.price || item.price || 0) *
-          (item.quantity || 1),
+      (sum, item) => sum + resolveLiveCartLineUnitPrice(item) * (item.quantity || 1),
       0,
     );
   }, [cartItems]);

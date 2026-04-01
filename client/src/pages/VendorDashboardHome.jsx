@@ -286,7 +286,6 @@ const VendorDashboardHome = ({ onTabChange }) => {
             { label: "Brands", tab: "module-brands", icon: FiTag },
             { label: "Sales Report", tab: "module-business-reports", icon: FiBarChart2 },
             { label: "Suppliers", tab: "module-suppliers", icon: FiPackage },
-            { label: "Purchases", tab: "module-purchases", icon: FiPackage },
             { label: "Accounts", tab: "module-accounts", icon: FiDollarSign },
             { label: "Customer Messages", tab: "vendor-messages", icon: FiMail },
             { label: "Support Tickets", tab: "module-support", icon: FiMessageSquare },

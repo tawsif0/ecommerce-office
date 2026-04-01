@@ -1,12 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
-import { FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
-import { fetchPublicSettings } from "../utils/publicSettings";
 import {
-  BANGLADESH_DISTRICT_OPTIONS,
-  getCodDeliveryChargeForDistrict,
-} from "../utils/bangladeshLocations";
+  FiCheck,
+  FiCreditCard,
+  FiPackage,
+  FiSearch,
+  FiShoppingBag,
+  FiTrash2,
+  FiUser,
+} from "react-icons/fi";
+import { fetchPublicSettings } from "../utils/publicSettings";
+import { BANGLADESH_DISTRICT_OPTIONS } from "../utils/bangladeshLocations";
+import {
+  getEffectiveProductPricing,
+  getReadableVariantOptionLabel,
+  normalizeProductVariantDefinitions,
+  normalizeSelectedVariantsPayload,
+} from "../utils/productVariants";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -21,22 +32,197 @@ const roundMoney = (value) => {
   return Math.round((parsed + Number.EPSILON) * 100) / 100;
 };
 
+const formatMoney = (value) =>
+  `${roundMoney(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} Tk`;
+
 const qty = (value) => {
   const parsed = parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 1;
   return parsed;
 };
 
-const getPrice = (product = {}, variation = null) => {
-  const source = variation || product;
-  const base = Number(source?.price || 0);
-  const sale =
-    source?.salePrice === null || source?.salePrice === undefined
-      ? null
-      : Number(source.salePrice);
-  if (Number.isFinite(sale) && sale > 0 && sale < base) return roundMoney(sale);
-  return roundMoney(base);
+const buildLineId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const getFullImageUrl = (imagePath) => {
+  const value = Array.isArray(imagePath) ? imagePath[0] : imagePath;
+  if (!value) return "";
+  if (
+    String(value).startsWith("http://") ||
+    String(value).startsWith("https://") ||
+    String(value).startsWith("data:")
+  ) {
+    return value;
+  }
+  if (String(value).startsWith("/")) {
+    return baseUrl ? `${baseUrl}${value}` : value;
+  }
+  return baseUrl ? `${baseUrl}/uploads/products/${value}` : `/uploads/products/${value}`;
 };
+
+const parseCustomerName = (value = "") => {
+  const nameParts = String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return {
+    firstName: nameParts[0] || "",
+    lastName: nameParts.slice(1).join(" "),
+  };
+};
+
+const getBasePricingFromFields = (priceValue, salePriceValue = null) => {
+  const regularPrice = Number(priceValue);
+  const salePrice =
+    salePriceValue === null || salePriceValue === undefined || salePriceValue === ""
+      ? null
+      : Number(salePriceValue);
+
+  if (
+    Number.isFinite(regularPrice) &&
+    Number.isFinite(salePrice) &&
+    regularPrice > salePrice &&
+    salePrice >= 0
+  ) {
+    return {
+      basePrice: roundMoney(salePrice),
+      baseComparePrice: roundMoney(regularPrice),
+      isTba: false,
+    };
+  }
+
+  return {
+    basePrice: roundMoney(Number.isFinite(regularPrice) ? regularPrice : 0),
+    baseComparePrice: null,
+    isTba: false,
+  };
+};
+
+const getProductBasePricing = (product = {}) => {
+  const priceType = String(product?.priceType || "single").trim().toLowerCase();
+  if (priceType === "tba") {
+    return { basePrice: 0, baseComparePrice: null, isTba: true };
+  }
+
+  return getBasePricingFromFields(
+    product?.price,
+    priceType === "best" ? product?.salePrice : null,
+  );
+};
+
+const getActiveVariations = (product = {}) =>
+  (Array.isArray(product?.variations) ? product.variations : [])
+    .filter((entry) => entry?.isActive !== false)
+    .map((entry) => ({ ...entry, _id: String(entry?._id || "") }))
+    .filter((entry) => entry._id);
+
+const getVariationBasePricing = (variation = {}) =>
+  getBasePricingFromFields(variation?.price, variation?.salePrice);
+
+const getVariationOptionValue = (definition = {}, option = {}) => {
+  if (String(definition?.preset || "").toLowerCase() === "color") {
+    return String(option?.colorHex || option?.value || option?.label || "").trim();
+  }
+  return String(option?.value || option?.label || "").trim();
+};
+
+const buildSelectedVariantFromOption = (definition = {}, option = {}) => ({
+  name: definition.name,
+  preset: definition.preset,
+  label: option.label || option.value,
+  value: option.value || option.label,
+  colorHex:
+    String(definition?.preset || "").toLowerCase() === "color"
+      ? String(option?.colorHex || option?.value || option?.label || "").trim()
+      : "",
+  priceMode: option.priceMode || "default",
+  price: option.price,
+  comparePrice: option.comparePrice,
+});
+
+const buildVariantOptionLabel = (definition = {}, option = {}) => {
+  const readableLabel = getReadableVariantOptionLabel({
+    preset: definition?.preset,
+    label: option?.label,
+    value: option?.value,
+    colorHex: option?.colorHex,
+  });
+  const priceMode = String(option?.priceMode || "default").trim().toLowerCase();
+  const optionPrice = Number(option?.price);
+  const optionComparePrice = Number(option?.comparePrice);
+
+  if (priceMode === "compare" && Number.isFinite(optionPrice)) {
+    if (Number.isFinite(optionComparePrice) && optionComparePrice > optionPrice) {
+      return `${readableLabel} - +${formatMoney(optionPrice)} (was +${formatMoney(
+        optionComparePrice,
+      )})`;
+    }
+    return `${readableLabel} - +${formatMoney(optionPrice)}`;
+  }
+
+  if (priceMode === "direct" && Number.isFinite(optionPrice)) {
+    return `${readableLabel} - +${formatMoney(optionPrice)}`;
+  }
+
+  return `${readableLabel} - No extra charge`;
+};
+
+const getOrderItemResolvedPricing = (item = {}) => {
+  const product = item?.product || {};
+  const activeVariations = getActiveVariations(product);
+  const selectedVariation =
+    activeVariations.find((entry) => String(entry._id) === String(item?.variationId || "")) ||
+    null;
+  const basePricing = selectedVariation
+    ? getVariationBasePricing(selectedVariation)
+    : getProductBasePricing(product);
+
+  const pricing = basePricing.isTba
+    ? { currentPrice: null, previousPrice: null, hasDiscount: false, isTba: true }
+    : {
+        ...getEffectiveProductPricing({
+          basePrice: basePricing.basePrice,
+          baseComparePrice: basePricing.baseComparePrice,
+          selectedVariants: normalizeSelectedVariantsPayload(item?.selectedVariants || []),
+        }),
+        isTba: false,
+      };
+
+  const previousPrice =
+    pricing.previousPrice !== null &&
+    Number(pricing.previousPrice || 0) > Number(pricing.currentPrice || 0)
+      ? pricing.previousPrice
+      : null;
+
+  return {
+    activeVariation: selectedVariation,
+    currentPrice: pricing.currentPrice,
+    previousPrice,
+    hasDiscount: previousPrice !== null,
+    isTba: Boolean(pricing.isTba),
+  };
+};
+
+const buildInitialItem = (product = {}) => ({
+  lineId: buildLineId(),
+  productId: String(product?._id || product?.id || "").trim(),
+  product,
+  quantity: 1,
+  variationId: "",
+  selectedVariants: [],
+});
+
+const inputClassName =
+  "w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-black";
+
+const selectClassName =
+  "w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-black";
+
+const sectionClassName =
+  "rounded-[28px] border border-gray-200 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.05)] sm:p-6";
 
 const AdminAddOrder = () => {
   const [customer, setCustomer] = useState({
@@ -52,94 +238,49 @@ const AdminAddOrder = () => {
     postalCode: "",
     country: "Bangladesh",
   });
-  const [meta, setMeta] = useState({
-    source: "shop",
-    couponCode: "",
-    adminNotes: "",
-    courierProvider: "",
-    courierTrackingNumber: "",
-    courierConsignmentId: "",
-  });
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [paymentMethodId, setPaymentMethodId] = useState("");
-  const [paymentDetails, setPaymentDetails] = useState({
-    transactionId: "",
-    sentFrom: "",
-    sentTo: "",
-  });
-  const [shippingFee, setShippingFee] = useState(0);
-  const [locationOptions, setLocationOptions] = useState({
-    cities: [],
-    subCities: [],
-  });
-
-  const [search, setSearch] = useState("");
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [results, setResults] = useState([]);
-  const [items, setItems] = useState([]);
-
-  const [insights, setInsights] = useState(null);
-  const [insightLoading, setInsightLoading] = useState(false);
+  const [customerLookup, setCustomerLookup] = useState("");
+  const [customerLookupLocked, setCustomerLookupLocked] = useState(false);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [customerResults, setCustomerResults] = useState([]);
   const [customerUserId, setCustomerUserId] = useState("");
+  const [insights, setInsights] = useState(null);
+
+  const [productQuery, setProductQuery] = useState("");
+  const [productSearchLoading, setProductSearchLoading] = useState(false);
+  const [productResults, setProductResults] = useState([]);
+
+  const [items, setItems] = useState([]);
+  const [locationOptions, setLocationOptions] = useState({ cities: [], subCities: [] });
+  const [paymentMode, setPaymentMode] = useState("cash");
+  const [paymentDetails, setPaymentDetails] = useState({
+    methodName: "",
+    transactionDetails: "",
+    transactionId: "",
+  });
+  const [orderMeta, setOrderMeta] = useState({
+    adminNotes: "",
+  });
   const [submitting, setSubmitting] = useState(false);
 
-  const selectedMethod = useMemo(
-    () => paymentMethods.find((entry) => String(entry._id) === String(paymentMethodId)) || null,
-    [paymentMethods, paymentMethodId],
-  );
-  const selectedMethodChannel = String(selectedMethod?.channelType || "manual").toLowerCase();
-  const selectedMethodIsCod = selectedMethodChannel === "cod";
-  const selectedMethodIsGateway = ["stripe", "paypal", "sslcommerz"].includes(
-    selectedMethodChannel,
-  );
-  const selectedMethodShippingCost =
-    selectedMethodIsCod && selectedMethod
-      ? getCodDeliveryChargeForDistrict(selectedMethod, customer.district)
-      : 0;
-  const selectedMethodRequiresProof =
-    selectedMethod?.requiresTransactionProof === undefined
-      ? !selectedMethodIsCod && !selectedMethodIsGateway
-      : Boolean(selectedMethod?.requiresTransactionProof);
+  const orderSummary = useMemo(() => {
+    const subtotal = roundMoney(
+      items.reduce((sum, item) => {
+        const pricing = getOrderItemResolvedPricing(item);
+        return sum + Number(pricing.currentPrice || 0) * Number(item.quantity || 1);
+      }, 0),
+    );
 
-  const subtotal = useMemo(
-    () =>
-      roundMoney(
-        items.reduce(
-          (sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0),
-          0,
-        ),
-      ),
-    [items],
-  );
-
-  const total = useMemo(
-    () => roundMoney(subtotal + Number(shippingFee || 0)),
-    [subtotal, shippingFee],
-  );
-
-  useEffect(() => {
-    const loadMethods = async () => {
-      try {
-        const response = await axios.get(`${baseUrl}/auth/payment-methods`);
-        const methods = Array.isArray(response.data) ? response.data : [];
-        setPaymentMethods(methods);
-        if (methods[0]?._id) {
-          setPaymentMethodId(String(methods[0]._id));
-        }
-      } catch (error) {
-        toast.error(error.response?.data?.error || "Failed to load payment methods");
-      }
+    return {
+      subtotal,
+      total: subtotal,
+      quantity: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     };
-    loadMethods();
-  }, []);
+  }, [items]);
 
   useEffect(() => {
-    let mounted = true;
-    const loadLocationOptions = async () => {
+    const loadPageData = async () => {
       try {
-        const settings = await fetchPublicSettings();
-        if (!mounted) return;
-
+        const settings = await fetchPublicSettings().catch(() => null);
         setLocationOptions({
           cities: Array.isArray(settings?.locations?.cityOptions)
             ? settings.locations.cityOptions
@@ -148,203 +289,264 @@ const AdminAddOrder = () => {
             ? settings.locations.subCityOptions
             : [],
         });
-      } catch {
-        if (!mounted) return;
-        setLocationOptions({
-          cities: [],
-          subCities: [],
-        });
+      } catch (error) {
+        toast.error(error.response?.data?.error || "Failed to load add-order data");
       }
     };
 
-    loadLocationOptions();
-    return () => {
-      mounted = false;
-    };
+    loadPageData();
   }, []);
 
   useEffect(() => {
-    const query = String(search || "").trim();
-    if (query.length < 2) {
-      setResults([]);
-      return;
+    if (paymentMode === "cash") {
+      setPaymentDetails({
+        methodName: "",
+        transactionDetails: "",
+        transactionId: "",
+      });
     }
-    const timer = setTimeout(async () => {
+  }, [paymentMode]);
+
+  useEffect(() => {
+    const query = String(customerLookup || "").trim();
+    if (customerLookupLocked || query.length < 2) {
+      setCustomerResults([]);
+      setCustomerSearchLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
       try {
-        setSearchLoading(true);
-        const response = await axios.get(`${baseUrl}/products/public/search`, {
-          params: { query },
-        });
-        setResults(Array.isArray(response.data?.products) ? response.data.products : []);
+        setCustomerSearchLoading(true);
+        const payload = query.includes("@") ? { email: query } : { phone: query };
+        const response = await axios.post(
+          `${baseUrl}/orders/admin/customer-insights`,
+          payload,
+          { headers: getAuthHeaders() },
+        );
+
+        if (!active) return;
+        const nextInsights = response.data?.insights || null;
+        setInsights(nextInsights);
+        setCustomerResults(
+          Array.isArray(nextInsights?.matchedCustomers) ? nextInsights.matchedCustomers : [],
+        );
       } catch {
-        setResults([]);
+        if (!active) return;
+        setCustomerResults([]);
       } finally {
-        setSearchLoading(false);
+        if (active) setCustomerSearchLoading(false);
       }
     }, 280);
 
-    return () => clearTimeout(timer);
-  }, [search]);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [customerLookup, customerLookupLocked]);
 
   useEffect(() => {
-    if (!selectedMethodRequiresProof && paymentDetails.transactionId) {
-      setPaymentDetails((prev) => ({
-        ...prev,
-        transactionId: "",
-      }));
-    }
-  }, [paymentDetails.transactionId, selectedMethodRequiresProof]);
-
-  useEffect(() => {
-    if (selectedMethodIsCod) {
-      setShippingFee(selectedMethodShippingCost);
-    }
-  }, [selectedMethodIsCod, selectedMethodShippingCost, customer.district]);
-
-  const checkRisk = async () => {
-    if (!customer.phone.trim() && !customer.email.trim() && !customerUserId) {
-      toast.error("Phone or email is required to check customer risk");
-      return;
+    const query = String(productQuery || "").trim();
+    if (query.length < 2) {
+      setProductResults([]);
+      setProductSearchLoading(false);
+      return undefined;
     }
 
-    try {
-      setInsightLoading(true);
-      const response = await axios.post(
-        `${baseUrl}/orders/admin/customer-insights`,
-        {
-          email: customer.email,
-          phone: customer.phone,
-          alternativePhone: customer.alternativePhone,
-          customerUserId,
-        },
-        { headers: getAuthHeaders() },
-      );
-      setInsights(response.data?.insights || null);
-      if (response.data?.insights?.isBlacklisted) {
-        toast.error(response.data?.insights?.blacklistReason || "Customer is blacklisted");
-      } else {
-        toast.success("Customer risk loaded");
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        setProductSearchLoading(true);
+        const response = await axios.get(`${baseUrl}/products/public/search`, {
+          params: { query },
+        });
+        if (!active) return;
+        setProductResults(Array.isArray(response.data?.products) ? response.data.products : []);
+      } catch {
+        if (!active) return;
+        setProductResults([]);
+      } finally {
+        if (active) setProductSearchLoading(false);
       }
-    } catch (error) {
-      setInsights(null);
-      toast.error(error.response?.data?.message || "Failed to load customer risk");
-    } finally {
-      setInsightLoading(false);
-    }
+    }, 220);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [productQuery]);
+
+  const handleSelectCustomerMatch = (match = {}) => {
+    const autofill = match?.autofill || {};
+    const fallbackName = String(
+      match?.name ||
+        `${autofill.firstName || ""} ${autofill.lastName || ""}`.trim(),
+    ).trim();
+    const nameParts = parseCustomerName(fallbackName);
+
+    setCustomer((prev) => ({
+      ...prev,
+      firstName: String(autofill.firstName || nameParts.firstName || prev.firstName).trim(),
+      lastName: String(autofill.lastName || nameParts.lastName || prev.lastName).trim(),
+      email: String(autofill.email || match?.email || prev.email).trim(),
+      phone: String(autofill.phone || match?.phone || prev.phone).trim(),
+      alternativePhone: String(autofill.alternativePhone || prev.alternativePhone).trim(),
+      address: String(autofill.address || prev.address).trim(),
+      city: String(autofill.city || prev.city).trim(),
+      subCity: String(autofill.subCity || prev.subCity).trim(),
+      district: String(autofill.district || prev.district).trim(),
+      postalCode: String(autofill.postalCode || prev.postalCode).trim(),
+      country: String(autofill.country || prev.country || "Bangladesh").trim(),
+    }));
+    setCustomerUserId(String(match?._id || "").trim());
+    setCustomerLookupLocked(true);
+    setCustomerLookup(String(match?.email || match?.phone || fallbackName).trim());
+    setCustomerResults([]);
+    toast.success("Customer details filled from search");
   };
 
-  const addItem = (product) => {
+  const handleAddProduct = (product = {}) => {
     if (!product?._id) return;
-    if (String(product.priceType || "").toLowerCase() === "tba") {
+
+    if (String(product?.priceType || "").trim().toLowerCase() === "tba") {
       toast.error("TBA products cannot be added");
       return;
     }
 
-    const exists = items.some((entry) => String(entry.productId) === String(product._id));
-    if (exists) {
-      setItems((prev) =>
-        prev.map((entry) =>
-          String(entry.productId) === String(product._id)
-            ? { ...entry, quantity: entry.quantity + 1 }
-            : entry,
-        ),
-      );
+    if (String(product?.marketplaceType || "").trim().toLowerCase() === "grouped") {
+      toast.error("Grouped products must be ordered from the product details flow");
       return;
     }
 
-    const variations = Array.isArray(product.variations)
-      ? product.variations.filter((entry) => entry?.isActive !== false)
-      : [];
-    const firstVariation = variations[0] || null;
+    setItems((prev) => [...prev, buildInitialItem(product)]);
+    setProductQuery("");
+    setProductResults([]);
+    toast.success("Product added to order");
+  };
 
-    setItems((prev) => [
-      ...prev,
-      {
-        productId: String(product._id),
-        title: product.title || "Product",
-        quantity: 1,
-        unitPrice: getPrice(product, firstVariation),
-        variationId: firstVariation?._id ? String(firstVariation._id) : "",
-        variations: variations.map((entry) => ({
-          _id: String(entry._id),
-          label: entry.label || "Variation",
-          price: Number(entry.price || 0),
-          salePrice:
-            entry.salePrice === null || entry.salePrice === undefined
-              ? null
-              : Number(entry.salePrice),
-        })),
-      },
-    ]);
+  const updateOrderItem = (lineId, updater) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.lineId !== lineId) return item;
+        return typeof updater === "function" ? updater(item) : { ...item, ...updater };
+      }),
+    );
+  };
+
+  const removeOrderItem = (lineId) => {
+    setItems((prev) => prev.filter((item) => item.lineId !== lineId));
+  };
+
+  const handleVariationChange = (lineId, variationId) => {
+    updateOrderItem(lineId, (item) => ({ ...item, variationId }));
+  };
+
+  const handleVariantOptionChange = (lineId, definition, nextValue) => {
+    updateOrderItem(lineId, (item) => {
+      const existingSelections = normalizeSelectedVariantsPayload(item.selectedVariants || []);
+      const trimmedValue = String(nextValue || "").trim();
+      const nextSelections = existingSelections.filter(
+        (variant) =>
+          String(variant?.name || "").trim().toLowerCase() !==
+          String(definition?.name || "").trim().toLowerCase(),
+      );
+
+      if (!trimmedValue) {
+        return { ...item, selectedVariants: nextSelections };
+      }
+
+      const matchedOption = (definition?.options || []).find(
+        (option) => getVariationOptionValue(definition, option) === trimmedValue,
+      );
+
+      if (!matchedOption) {
+        return { ...item, selectedVariants: nextSelections };
+      }
+
+      nextSelections.push(buildSelectedVariantFromOption(definition, matchedOption));
+      return { ...item, selectedVariants: nextSelections };
+    });
   };
 
   const submit = async (event) => {
     event.preventDefault();
 
-    if (items.length === 0) {
+    if (!items.length) {
       toast.error("Add at least one product");
       return;
     }
 
-    if (!paymentMethodId) {
-      toast.error("Select a payment method");
-      return;
-    }
-
-    if (selectedMethodIsCod && !String(customer.district || "").trim()) {
-      toast.error("Select a district for Cash on Delivery orders");
-      return;
-    }
-
-    if (selectedMethodRequiresProof && !String(paymentDetails.transactionId || "").trim()) {
-      toast.error("Transaction ID is required for this payment method");
+    if (
+      paymentMode === "online" &&
+      (!String(paymentDetails.methodName || "").trim() ||
+        !String(paymentDetails.transactionDetails || "").trim())
+    ) {
+      toast.error("Payment type name and payment transaction are required");
       return;
     }
 
     try {
       setSubmitting(true);
-      const response = await axios.post(
-        `${baseUrl}/orders/admin/manual`,
-        {
-          customerUserId: customerUserId || undefined,
-          shippingAddress: {
-            firstName: customer.firstName,
-            lastName: customer.lastName,
-            email: customer.email,
-            phone: customer.phone,
-            alternativePhone: customer.alternativePhone,
-            address: customer.address,
-            city: customer.city,
-            subCity: customer.subCity,
-            district: customer.district || customer.subCity,
-            postalCode: customer.postalCode,
-            country: customer.country,
-          },
-          items: items.map((entry) => ({
-            productId: entry.productId,
-            quantity: qty(entry.quantity),
-            variationId: entry.variationId || undefined,
-          })),
-          shippingFee: Number(shippingFee || 0),
-          source: meta.source,
-          couponCode: meta.couponCode || undefined,
-          adminNotes: meta.adminNotes || "",
-          courierProvider: meta.courierProvider || "",
-          courierTrackingNumber: meta.courierTrackingNumber || "",
-          courierConsignmentId: meta.courierConsignmentId || "",
-          paymentMethodId,
-          paymentMethod: selectedMethod?.type || "",
-          paymentDetails,
+      const payload = {
+        customerUserId: customerUserId || undefined,
+        shippingAddress: {
+          firstName: customer.firstName,
+          lastName: customer.lastName,
+          email: customer.email,
+          phone: customer.phone,
+          alternativePhone: customer.alternativePhone,
+          address: customer.address,
+          city: customer.city,
+          subCity: customer.subCity,
+          district: customer.district || customer.subCity,
+          postalCode: customer.postalCode,
+          country: customer.country,
         },
-        { headers: getAuthHeaders() },
-      );
+        items: items.map((item) => ({
+          productId: item.productId,
+          quantity: qty(item.quantity),
+          variationId: item.variationId || undefined,
+          selectedVariants: normalizeSelectedVariantsPayload(item.selectedVariants || []),
+        })),
+        adminNotes: orderMeta.adminNotes,
+        paymentMethod:
+          paymentMode === "cash"
+            ? "Cash on Delivery"
+            : String(paymentDetails.methodName || "").trim(),
+        paymentDetails: {
+          paymentMode,
+          mode: paymentMode,
+          methodName:
+            paymentMode === "cash"
+              ? "Cash on Delivery"
+              : String(paymentDetails.methodName || "").trim(),
+          method:
+            paymentMode === "cash"
+              ? "Cash on Delivery"
+              : String(paymentDetails.methodName || "").trim(),
+          transactionId: paymentDetails.transactionId,
+          sentTo: paymentDetails.transactionDetails,
+          accountNo: paymentDetails.transactionDetails,
+          meta: {
+            manualTransactionDetails: String(paymentDetails.transactionDetails || "").trim(),
+          },
+        },
+      };
+
+      const response = await axios.post(`${baseUrl}/orders/admin/manual`, payload, {
+        headers: getAuthHeaders(),
+      });
 
       toast.success(response.data?.message || "Order created");
       setItems([]);
-      setSearch("");
-      setResults([]);
-      setMeta((prev) => ({ ...prev, couponCode: "", adminNotes: "" }));
-      setPaymentDetails({ transactionId: "", sentFrom: "", sentTo: "" });
+      setProductResults([]);
+      setProductQuery("");
+      setCustomerResults([]);
+      setPaymentDetails({ methodName: "", transactionDetails: "", transactionId: "" });
+      setOrderMeta({
+        adminNotes: "",
+      });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to create order");
     } finally {
@@ -353,219 +555,481 @@ const AdminAddOrder = () => {
   };
 
   return (
-    <div className="space-y-5">
-      <form onSubmit={submit} className="space-y-5">
-        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-black">Customer</h2>
-            <button
-              type="button"
-              onClick={checkRisk}
-              disabled={insightLoading}
-              className="px-3 h-9 border border-gray-300 rounded-lg text-sm"
-            >
-              {insightLoading ? "Checking..." : "Check Risk"}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input value={customer.firstName} onChange={(e) => setCustomer((p) => ({ ...p, firstName: e.target.value }))} placeholder="First name*" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
-            <input value={customer.lastName} onChange={(e) => setCustomer((p) => ({ ...p, lastName: e.target.value }))} placeholder="Last name*" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
-            <input type="email" value={customer.email} onChange={(e) => setCustomer((p) => ({ ...p, email: e.target.value }))} placeholder="Email*" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
-            <input value={customer.phone} onChange={(e) => setCustomer((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone*" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
-            <input value={customer.alternativePhone} onChange={(e) => setCustomer((p) => ({ ...p, alternativePhone: e.target.value }))} placeholder="Alternative phone" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={customer.postalCode} onChange={(e) => setCustomer((p) => ({ ...p, postalCode: e.target.value }))} placeholder="Postal code*" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
-          </div>
-          <input value={customer.address} onChange={(e) => setCustomer((p) => ({ ...p, address: e.target.value }))} placeholder="Address*" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" required />
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <input value={customer.city} onChange={(e) => setCustomer((p) => ({ ...p, city: e.target.value }))} placeholder="City*" list="admin-order-city-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" required />
-            <input value={customer.subCity} onChange={(e) => setCustomer((p) => ({ ...p, subCity: e.target.value }))} placeholder="Sub city" list="admin-order-subcity-options" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <select
-              value={customer.district}
-              onChange={(e) => setCustomer((p) => ({ ...p, district: e.target.value }))}
-              className="px-3 py-2.5 border border-gray-200 rounded-lg"
-            >
-              <option value="">Select district</option>
-              {customer.district &&
-              !BANGLADESH_DISTRICT_OPTIONS.includes(customer.district) ? (
-                <option value={customer.district}>{customer.district}</option>
-              ) : null}
-              {BANGLADESH_DISTRICT_OPTIONS.map((district) => (
-                <option key={district} value={district}>
-                  {district}
-                </option>
-              ))}
-            </select>
-            <input value={customer.country} onChange={(e) => setCustomer((p) => ({ ...p, country: e.target.value }))} placeholder="Country" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-          </div>
-          <datalist id="admin-order-city-options">
-            {locationOptions.cities.map((city) => (
-              <option key={city} value={city} />
-            ))}
-          </datalist>
-          <datalist id="admin-order-subcity-options">
-            {locationOptions.subCities.map((subCity) => (
-              <option key={subCity} value={subCity} />
-            ))}
-          </datalist>
-
-          {insights ? (
-            <div className="border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
-              <p>Risk: <span className="font-semibold uppercase">{insights.riskLevel || "new"}</span> | Success: {Number(insights.successRate || 0).toFixed(2)}%</p>
-              <p>Orders: {insights.totalOrders || 0} | Delivered: {insights.deliveredOrders || 0} | Returned: {insights.returnedOrders || 0}</p>
-              {insights.blacklistReason ? <p className="text-red-600">{insights.blacklistReason}</p> : null}
-              {Array.isArray(insights.matchedCustomers) && insights.matchedCustomers.length > 0 ? (
-                <select
-                  value={customerUserId}
-                  onChange={(e) => setCustomerUserId(e.target.value)}
-                  className="mt-2 w-full px-3 py-2 border border-gray-200 rounded-lg"
-                >
-                  <option value="">Do not link user account</option>
-                  {insights.matchedCustomers.map((entry) => (
-                    <option key={entry._id} value={entry._id}>
-                      {entry.name} - {entry.phone}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-          <h2 className="font-semibold text-black">Products</h2>
-          <div className="relative">
-            <FiSearch className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products..." className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg" />
-          </div>
-
-          {search.trim().length >= 2 ? (
-            <div className="border border-gray-200 rounded-lg max-h-56 overflow-auto">
-              {searchLoading ? <p className="p-3 text-sm text-gray-600">Searching...</p> : (
-                results.map((entry) => (
-                  <div key={entry._id} className="p-3 border-b border-gray-100 flex items-center justify-between gap-3">
-                    <p className="text-sm text-black">{entry.title}</p>
-                    <button type="button" onClick={() => addItem(entry)} className="inline-flex items-center gap-1 px-3 h-8 bg-black text-white rounded-lg text-xs">
-                      <FiPlus className="w-3.5 h-3.5" /> Add
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          ) : null}
-
-          {items.length > 0 ? (
-            <div className="space-y-2">
-              {items.map((entry) => (
-                <div key={entry.productId} className="grid grid-cols-1 md:grid-cols-12 gap-2 border border-gray-200 rounded-lg p-3">
-                  <div className="md:col-span-4">
-                    <p className="text-sm font-medium text-black">{entry.title}</p>
-                  </div>
-                  <div className="md:col-span-3">
-                    {entry.variations.length > 0 ? (
-                      <select
-                        value={entry.variationId}
-                        onChange={(e) =>
-                          setItems((prev) =>
-                            prev.map((row) => {
-                              if (row.productId !== entry.productId) return row;
-                              const nextVariation = row.variations.find((v) => v._id === e.target.value);
-                              return {
-                                ...row,
-                                variationId: e.target.value,
-                                unitPrice: getPrice(nextVariation || {}, null),
-                              };
-                            }),
-                          )
-                        }
-                        className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm"
-                      >
-                        {entry.variations.map((variation) => (
-                          <option key={variation._id} value={variation._id}>{variation.label}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="text-xs text-gray-500 py-2">No variations</p>
-                    )}
-                  </div>
-                  <div className="md:col-span-2">
-                    <input type="number" min="1" value={entry.quantity} onChange={(e) => setItems((prev) => prev.map((row) => row.productId === entry.productId ? { ...row, quantity: qty(e.target.value) } : row))} className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm" />
-                  </div>
-                  <div className="md:col-span-2 text-sm font-semibold text-black flex items-center">
-                    {Number(entry.unitPrice || 0).toFixed(2)} Tk
-                  </div>
-                  <div className="md:col-span-1">
-                    <button type="button" onClick={() => setItems((prev) => prev.filter((row) => row.productId !== entry.productId))} className="w-full h-9 border border-red-300 text-red-600 rounded-lg inline-flex items-center justify-center">
-                      <FiTrash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-600">No products selected.</p>
-          )}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-          <h2 className="font-semibold text-black">Payment & Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <select value={meta.source} onChange={(e) => setMeta((p) => ({ ...p, source: e.target.value }))} className="px-3 py-2.5 border border-gray-200 rounded-lg">
-              <option value="shop">Shop</option>
-              <option value="landing">Landing</option>
-              <option value="facebook">Facebook</option>
-              <option value="messenger">Messenger</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="phone_call">Phone Call</option>
-            </select>
-            <select value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-lg" required>
-              <option value="">Payment method</option>
-              {paymentMethods.map((entry) => (
-                <option key={entry._id} value={entry._id}>{entry.type}</option>
-              ))}
-            </select>
-            <input type="number" min="0" step="0.01" value={shippingFee} onChange={(e) => setShippingFee(roundMoney(e.target.value))} placeholder="Shipping fee" disabled={selectedMethodIsCod} className="px-3 py-2.5 border border-gray-200 rounded-lg disabled:bg-gray-100" />
-            <input value={paymentDetails.sentFrom} onChange={(e) => setPaymentDetails((p) => ({ ...p, sentFrom: e.target.value }))} placeholder="Sent from" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={paymentDetails.sentTo} onChange={(e) => setPaymentDetails((p) => ({ ...p, sentTo: e.target.value }))} placeholder="Sent to" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={meta.couponCode} onChange={(e) => setMeta((p) => ({ ...p, couponCode: e.target.value }))} placeholder="Coupon code" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={meta.courierProvider} onChange={(e) => setMeta((p) => ({ ...p, courierProvider: e.target.value }))} placeholder="Courier provider" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={meta.courierTrackingNumber} onChange={(e) => setMeta((p) => ({ ...p, courierTrackingNumber: e.target.value }))} placeholder="Tracking number" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-            <input value={meta.courierConsignmentId} onChange={(e) => setMeta((p) => ({ ...p, courierConsignmentId: e.target.value }))} placeholder="Consignment ID" className="px-3 py-2.5 border border-gray-200 rounded-lg" />
-          </div>
-          {selectedMethodRequiresProof ? (
-            <div className="space-y-2">
-              <input value={paymentDetails.transactionId} onChange={(e) => setPaymentDetails((p) => ({ ...p, transactionId: e.target.value }))} placeholder="Transaction ID*" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" />
-              <p className="text-xs text-gray-500">
-                Admin must match this transaction manually from order management before marking the payment as paid.
+    <div className="space-y-6">
+      <form onSubmit={submit} className="space-y-6">
+        <section className={sectionClassName}>
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-bold text-black">
+                <FiPackage className="h-5 w-5" />
+                Product Search
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Type product name, brand, or category. Click a result to add it, then set
+                quantity and variants below.
               </p>
             </div>
-          ) : selectedMethodIsGateway ? (
-            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-800">
-              This is a gateway payment method. Create the order, then update payment status after confirmation.
-            </p>
-          ) : selectedMethodIsCod ? (
-            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
-              Cash on Delivery does not need a transaction ID. Payment completes automatically on
-              delivery. Inside Dhaka:{" "}
-              {Number(
-                selectedMethod?.insideDhakaShippingCost ?? selectedMethod?.shippingCost ?? 0,
-              ).toFixed(2)}{" "}
-              Tk. Outside Dhaka:{" "}
-              {Number(
-                selectedMethod?.outsideDhakaShippingCost ?? selectedMethod?.shippingCost ?? 0,
-              ).toFixed(2)}{" "}
-              Tk. Selected shipping fee: {selectedMethodShippingCost.toFixed(2)} Tk.
-            </p>
-          ) : null}
-          <textarea value={meta.adminNotes} onChange={(e) => setMeta((p) => ({ ...p, adminNotes: e.target.value }))} rows={2} placeholder="Admin notes" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg" />
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <p>Subtotal: <span className="font-semibold">{subtotal.toFixed(2)} Tk</span></p>
-            <p>Total: <span className="font-bold">{total.toFixed(2)} Tk</span></p>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 font-semibold">
+                {items.length} selected item{items.length === 1 ? "" : "s"}
+              </span>
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 font-semibold">
+                Total {formatMoney(orderSummary.total)}
+              </span>
+            </div>
           </div>
-          <button type="submit" disabled={submitting || items.length === 0} className="px-6 h-11 bg-black text-white rounded-lg font-semibold disabled:opacity-60">
-            {submitting ? "Creating..." : "Create Order"}
-          </button>
-        </div>
+
+          <div className="relative">
+            <div className="relative">
+              <FiSearch className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                value={productQuery}
+                onChange={(event) => setProductQuery(event.target.value)}
+                placeholder="Search products by title, brand, category, or type"
+                className={`${inputClassName} pl-11`}
+              />
+            </div>
+
+            {productSearchLoading ? (
+              <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                Searching products...
+              </div>
+            ) : null}
+
+            {productResults.length > 0 ? (
+              <div className="mt-3 max-h-80 overflow-auto rounded-[24px] border border-gray-200 bg-white p-3 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                <div className="space-y-2">
+                  {productResults.map((product, index) => {
+                    const previewPricing = getOrderItemResolvedPricing({
+                      product,
+                      variationId: "",
+                      selectedVariants: [],
+                    });
+                    const imageUrl = getFullImageUrl(product?.images?.[0] || product?.image);
+
+                    return (
+                      <button
+                        key={`${product?._id || index}`}
+                        type="button"
+                        onClick={() => handleAddProduct(product)}
+                        className="flex w-full items-center gap-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-left transition hover:border-black hover:bg-white"
+                      >
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-gray-200 bg-white p-2">
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={product?.title || "Product"}
+                              className="h-full w-full object-contain"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                            {product?.category?.name || product?.productType || "Product"}
+                          </p>
+                          <p className="mt-1 truncate text-sm font-semibold text-black">
+                            {product?.title || "Product"}
+                          </p>
+                          <p className="mt-1 text-sm font-bold text-black">
+                            {previewPricing.isTba
+                              ? "TBA"
+                              : formatMoney(previewPricing.currentPrice)}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {items.length === 0 ? (
+              <div className="rounded-[24px] border border-dashed border-gray-300 bg-gray-50 px-5 py-10 text-center text-sm text-gray-500">
+                Start typing to pick products for this manual order.
+              </div>
+            ) : (
+              items.map((item) => {
+                const product = item.product || {};
+                const activeVariations = getActiveVariations(product);
+                const variantDefinitions = normalizeProductVariantDefinitions(product);
+                const pricing = getOrderItemResolvedPricing(item);
+                const selectedVariants = normalizeSelectedVariantsPayload(item.selectedVariants || []);
+
+                return (
+                  <div key={item.lineId} className="rounded-[28px] border border-gray-200 bg-gray-50 p-4 sm:p-5">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="flex min-w-0 flex-1 gap-4">
+                        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3">
+                          {getFullImageUrl(product?.images?.[0] || product?.image) ? (
+                            <img
+                              src={getFullImageUrl(product?.images?.[0] || product?.image)}
+                              alt={product?.title || "Product"}
+                              className="h-full w-full object-contain"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                            {product?.category?.name || product?.productType || "Product"}
+                          </p>
+                          <h3 className="mt-2 text-lg font-bold text-black">
+                            {product?.title || "Product"}
+                          </h3>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {pricing.hasDiscount ? (
+                              <span className="text-sm text-gray-400 line-through">
+                                {formatMoney(pricing.previousPrice)}
+                              </span>
+                            ) : null}
+                            <span className="text-xl font-black text-black">
+                              {pricing.isTba ? "TBA" : formatMoney(pricing.currentPrice)}
+                            </span>
+                            {pricing.activeVariation?.label ? (
+                              <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-600">
+                                {pricing.activeVariation.label}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="inline-flex items-center rounded-2xl border border-gray-200 bg-white">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateOrderItem(item.lineId, {
+                                quantity: Math.max(1, Number(item.quantity || 1) - 1),
+                              })
+                            }
+                            className="h-11 w-11 text-lg text-gray-600 transition hover:text-black"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(event) =>
+                              updateOrderItem(item.lineId, { quantity: qty(event.target.value) })
+                            }
+                            className="h-11 w-14 border-x border-gray-200 text-center text-sm font-semibold outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateOrderItem(item.lineId, {
+                                quantity: Number(item.quantity || 1) + 1,
+                              })
+                            }
+                            className="h-11 w-11 text-lg text-gray-600 transition hover:text-black"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeOrderItem(item.lineId)}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-red-200 bg-white text-red-500 transition hover:bg-red-50"
+                        >
+                          <FiTrash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+                      {activeVariations.length > 0 ? (
+                        <div className="xl:col-span-2">
+                          <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">
+                            Variation
+                          </label>
+                          <select
+                            value={item.variationId}
+                            onChange={(event) =>
+                              handleVariationChange(item.lineId, event.target.value)
+                            }
+                            className={selectClassName}
+                          >
+                            <option value="">Select variation</option>
+                            {activeVariations.map((variation) => {
+                              const variationPricing = getVariationBasePricing(variation);
+                              return (
+                                <option key={variation._id} value={variation._id}>
+                                  {variation.label} - {formatMoney(variationPricing.basePrice)}
+                                  {variationPricing.baseComparePrice
+                                    ? ` (was ${formatMoney(variationPricing.baseComparePrice)})`
+                                    : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      ) : null}
+
+                      {variantDefinitions.map((definition) => {
+                        const currentSelection =
+                          selectedVariants.find(
+                            (variant) =>
+                              String(variant?.name || "").trim().toLowerCase() ===
+                              String(definition?.name || "").trim().toLowerCase(),
+                          ) || null;
+                        const currentValue = currentSelection
+                          ? getVariationOptionValue(definition, currentSelection)
+                          : "";
+
+                        return (
+                          <div key={`${item.lineId}-${definition.name}`}>
+                            <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">
+                              {definition.name}
+                            </label>
+                            <select
+                              value={currentValue}
+                              onChange={(event) =>
+                                handleVariantOptionChange(item.lineId, definition, event.target.value)
+                              }
+                              className={selectClassName}
+                            >
+                              <option value="">{`${definition.name} - No selection`}</option>
+                              {definition.options.map((option, index) => (
+                                <option
+                                  key={`${item.lineId}-${definition.name}-${index}`}
+                                  value={getVariationOptionValue(definition, option)}
+                                >
+                                  {buildVariantOptionLabel(definition, option)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3">
+                      <div className="text-sm text-gray-600">
+                        <span className="font-semibold text-black">Unit Price:</span>{" "}
+                        {pricing.isTba ? "TBA" : formatMoney(pricing.currentPrice)}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <span className="font-semibold text-black">Line Total:</span>{" "}
+                        {pricing.isTba
+                          ? "TBA"
+                          : formatMoney(
+                              Number(pricing.currentPrice || 0) * Number(item.quantity || 1),
+                            )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        <section className={sectionClassName}>
+          <div className="mb-5">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-black">
+              <FiUser className="h-5 w-5" />
+              Customer Search & Details
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Type email or phone number to find an existing customer and auto-fill the form.
+            </p>
+          </div>
+
+          <div className="relative">
+            <div className="relative">
+              <FiSearch className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                value={customerLookup}
+                onChange={(event) => {
+                  setCustomerLookupLocked(false);
+                  setCustomerLookup(event.target.value);
+                }}
+                placeholder="Search customer by email or phone"
+                className={`${inputClassName} pl-11`}
+              />
+            </div>
+
+            {customerSearchLoading ? (
+              <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                Searching customers...
+              </div>
+            ) : null}
+
+            {customerResults.length > 0 ? (
+              <div className="mt-3 max-h-72 overflow-auto rounded-[24px] border border-gray-200 bg-white p-3 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                <div className="space-y-2">
+                  {customerResults.map((entry, index) => (
+                    <button
+                      key={`${entry._id || entry.email || entry.phone || index}`}
+                      type="button"
+                      onClick={() => handleSelectCustomerMatch(entry)}
+                      className="flex w-full items-start justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-left transition hover:border-black hover:bg-white"
+                    >
+                      <div>
+                        <p className="font-semibold text-black">{entry.name || "Customer"}</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {[entry.email, entry.phone].filter(Boolean).join(" • ")}
+                        </p>
+                      </div>
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500">
+                        <FiCheck className="h-4 w-4" />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {insights ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                  Risk
+                </p>
+                <p className="mt-2 text-sm font-bold uppercase text-black">
+                  {insights.riskLevel || "new"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                  Success Rate
+                </p>
+                <p className="mt-2 text-sm font-bold text-black">
+                  {Number(insights.successRate || 0).toFixed(2)}%
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                  Orders
+                </p>
+                <p className="mt-2 text-sm font-bold text-black">
+                  {insights.totalOrders || 0}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                  Delivered
+                </p>
+                <p className="mt-2 text-sm font-bold text-black">
+                  {insights.deliveredOrders || 0}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                  Returned
+                </p>
+                <p className="mt-2 text-sm font-bold text-black">
+                  {insights.returnedOrders || 0}
+                </p>
+              </div>
+              {insights.blacklistReason ? (
+                <div className="md:col-span-2 xl:col-span-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {insights.blacklistReason}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <input value={customer.firstName} onChange={(event) => setCustomer((prev) => ({ ...prev, firstName: event.target.value }))} placeholder="First name" className={inputClassName} required />
+            <input value={customer.lastName} onChange={(event) => setCustomer((prev) => ({ ...prev, lastName: event.target.value }))} placeholder="Last name" className={inputClassName} required />
+            <input type="email" value={customer.email} onChange={(event) => setCustomer((prev) => ({ ...prev, email: event.target.value }))} placeholder="Email" className={inputClassName} required />
+            <input value={customer.phone} onChange={(event) => setCustomer((prev) => ({ ...prev, phone: event.target.value }))} placeholder="Phone" className={inputClassName} required />
+            <input value={customer.alternativePhone} onChange={(event) => setCustomer((prev) => ({ ...prev, alternativePhone: event.target.value }))} placeholder="Alternative phone" className={inputClassName} />
+            <input value={customer.postalCode} onChange={(event) => setCustomer((prev) => ({ ...prev, postalCode: event.target.value }))} placeholder="Postal code" className={inputClassName} required />
+          </div>
+
+          <div className="mt-3">
+            <textarea value={customer.address} onChange={(event) => setCustomer((prev) => ({ ...prev, address: event.target.value }))} placeholder="Address" rows={3} className={`${inputClassName} resize-none`} required />
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <input value={customer.city} onChange={(event) => setCustomer((prev) => ({ ...prev, city: event.target.value }))} placeholder="City" list="admin-order-city-options" className={inputClassName} required />
+            <input value={customer.subCity} onChange={(event) => setCustomer((prev) => ({ ...prev, subCity: event.target.value }))} placeholder="Sub city" list="admin-order-subcity-options" className={inputClassName} />
+            <select value={customer.district} onChange={(event) => setCustomer((prev) => ({ ...prev, district: event.target.value }))} className={selectClassName}>
+              <option value="">Select district</option>
+              {customer.district && !BANGLADESH_DISTRICT_OPTIONS.includes(customer.district) ? <option value={customer.district}>{customer.district}</option> : null}
+              {BANGLADESH_DISTRICT_OPTIONS.map((district) => (
+                <option key={district} value={district}>{district}</option>
+              ))}
+            </select>
+            <input value={customer.country} onChange={(event) => setCustomer((prev) => ({ ...prev, country: event.target.value }))} placeholder="Country" className={inputClassName} />
+          </div>
+
+          <datalist id="admin-order-city-options">
+            {locationOptions.cities.map((city) => <option key={city} value={city} />)}
+          </datalist>
+          <datalist id="admin-order-subcity-options">
+            {locationOptions.subCities.map((subCity) => <option key={subCity} value={subCity} />)}
+          </datalist>
+        </section>
+
+        <section className={sectionClassName}>
+          <div className="mb-5">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-black">
+              <FiCreditCard className="h-5 w-5" />
+              Payment & Save
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Custom orders do not need courier setup here. Cash on Delivery needs no
+              extra payment fields, and online payment stores the payment type, payment
+              transaction, and optional transaction ID.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <select value={paymentMode} onChange={(event) => setPaymentMode(event.target.value)} className={selectClassName}>
+              <option value="cash">Cash on Delivery</option>
+              <option value="online">Online Payment</option>
+            </select>
+            <input value="Custom Order" readOnly className={`${inputClassName} bg-gray-50 text-gray-500`} />
+          </div>
+
+          {paymentMode === "online" ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <input value={paymentDetails.methodName} onChange={(event) => setPaymentDetails((prev) => ({ ...prev, methodName: event.target.value }))} placeholder="Payment method name" className={inputClassName} />
+              <input value={paymentDetails.transactionDetails} onChange={(event) => setPaymentDetails((prev) => ({ ...prev, transactionDetails: event.target.value }))} placeholder="Payment transaction" className={inputClassName} />
+              <input value={paymentDetails.transactionId} onChange={(event) => setPaymentDetails((prev) => ({ ...prev, transactionId: event.target.value }))} placeholder="Transaction ID (optional)" className={inputClassName} />
+            </div>
+          ) : (
+            <div className="mt-4 rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
+              Cash on Delivery selected. No extra payment information is needed for this custom order.
+            </div>
+          )}
+
+          <div className="mt-4">
+            <textarea value={orderMeta.adminNotes} onChange={(event) => setOrderMeta((prev) => ({ ...prev, adminNotes: event.target.value }))} rows={3} placeholder="Admin note" className={`${inputClassName} resize-none`} />
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            <div className="rounded-[24px] border border-gray-200 bg-gray-50 px-4 py-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">Items</p>
+              <p className="mt-2 text-2xl font-black text-black">{orderSummary.quantity}</p>
+            </div>
+            <div className="rounded-[24px] border border-gray-200 bg-gray-50 px-4 py-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">Subtotal</p>
+              <p className="mt-2 text-2xl font-black text-black">{formatMoney(orderSummary.subtotal)}</p>
+            </div>
+            <div className="rounded-[24px] border border-black bg-black px-4 py-4 text-white">
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/65">Total</p>
+              <p className="mt-2 text-2xl font-black">{formatMoney(orderSummary.total)}</p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-gray-500">
+              Custom orders are saved directly into order management after pricing is finalized here.
+            </div>
+            <button type="submit" disabled={submitting || items.length === 0} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-black px-7 text-sm font-semibold text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-60">
+              <FiShoppingBag className="h-4 w-4" />
+              {submitting ? "Creating Order..." : "Save Order"}
+            </button>
+          </div>
+        </section>
       </form>
     </div>
   );

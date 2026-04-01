@@ -54,7 +54,6 @@ const ModuleSupportTickets = React.lazy(() => import("./ModuleSupportTickets"));
 const ModuleGeolocation = React.lazy(() => import("./ModuleGeolocation"));
 const ModuleAbandonedOrders = React.lazy(() => import("./ModuleAbandonedOrders"));
 const ModuleSuppliers = React.lazy(() => import("./ModuleSuppliers"));
-const ModulePurchases = React.lazy(() => import("./ModulePurchases"));
 const ModuleInventoryCenter = React.lazy(() => import("./ModuleInventoryCenter"));
 const ModuleAccounts = React.lazy(() => import("./ModuleAccounts"));
 const ModuleBrands = React.lazy(() => import("./ModuleBrands"));
@@ -222,10 +221,6 @@ const TabContent = React.memo(({
       return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
         <ModuleSuppliers />
       ) : null;
-    case "module-purchases":
-      return user?.userType === "admin" || user?.userType === "vendor" || user?.userType === "staff" ? (
-        <ModulePurchases />
-      ) : null;
     case "module-inventory":
       return user?.userType === "admin" || user?.userType === "vendor" ? (
         <ModuleInventoryCenter />
@@ -283,6 +278,7 @@ const Dashboard = () => {
     ? normalizeMarketplaceMode(settings?.marketplaceMode)
     : "multi";
   const pageMeta = getDashboardTabMeta(activeTab, user);
+  const showShellHeader = pageMeta?.hideShellHeader !== true;
 
   // Check screen size
   useEffect(() => {
@@ -502,22 +498,24 @@ const Dashboard = () => {
                 transition={{ duration: 0.3 }}
                 className="dashboard-page-shell w-full min-w-0 space-y-6"
               >
-                <div className="dashboard-page-bar app-panel-soft w-full px-5 py-5 md:px-6">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                    <div className="min-w-0">
-                      <p className="app-kicker">{pageMeta.section}</p>
-                      <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
-                        {pageMeta.title}
-                      </h1>
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 md:text-[0.95rem]">
-                        {pageMeta.description}
-                      </p>
-                    </div>
-                    <div className="app-panel-muted inline-flex items-center rounded-[22px] px-4 py-3 text-sm font-medium text-slate-600">
-                      Active module: <span className="ml-2 font-semibold text-slate-950">{pageMeta.title}</span>
+                {showShellHeader ? (
+                  <div className="dashboard-page-bar app-panel-soft w-full px-5 py-5 md:px-6">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                      <div className="min-w-0">
+                        <p className="app-kicker">{pageMeta.section}</p>
+                        <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
+                          {pageMeta.title}
+                        </h1>
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 md:text-[0.95rem]">
+                          {pageMeta.description}
+                        </p>
+                      </div>
+                      <div className="app-panel-muted inline-flex items-center rounded-[22px] px-4 py-3 text-sm font-medium text-slate-600">
+                        Active module: <span className="ml-2 font-semibold text-slate-950">{pageMeta.title}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : null}
                 <Suspense fallback={<TabLoadingFallback />}>
                   <TabContent
                     activeTab={activeTab}

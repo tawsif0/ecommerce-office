@@ -74,6 +74,73 @@ const collectItemProductIds = (items = []) =>
       .filter(Boolean),
   );
 
+const normalizeStringArray = (value) =>
+  [...new Set((Array.isArray(value) ? value : []).map((entry) => String(entry || "").trim()).filter(Boolean))];
+
+const normalizeObjectIdArray = (value) =>
+  [...new Set((Array.isArray(value) ? value : []).map((entry) => String(entry || "").trim()).filter((entry) => /^[0-9a-fA-F]{24}$/.test(entry)))];
+
+const hasCatalogTargets = (coupon = {}) =>
+  normalizeStringArray(coupon?.targetCategoryTypes).length > 0 ||
+  normalizeObjectIdArray(coupon?.targetCategories).length > 0 ||
+  normalizeObjectIdArray(coupon?.targetProducts).length > 0;
+
+const buildCouponItemCatalogMap = async (items = []) => {
+  const productIds = [...collectItemProductIds(items)];
+  if (productIds.length === 0) {
+    return new Map();
+  }
+
+  const products = await Product.find({ _id: { $in: productIds } })
+    .select("_id vendor category")
+    .populate({ path: "category", select: "name type" })
+    .lean();
+
+  return new Map(products.map((product) => [String(product._id), product]));
+};
+
+const calculateEligibleSubtotalForCouponTargets = async (coupon = {}, items = []) => {
+  const couponVendorId = String(coupon?.vendor || "");
+  const targetCategoryTypes = normalizeStringArray(coupon?.targetCategoryTypes).map((entry) =>
+    entry.toLowerCase(),
+  );
+  const targetCategories = new Set(normalizeObjectIdArray(coupon?.targetCategories));
+  const targetProducts = new Set(normalizeObjectIdArray(coupon?.targetProducts));
+  const catalogMap = await buildCouponItemCatalogMap(items);
+
+  let eligibleSubtotal = 0;
+
+  for (const item of items) {
+    const productId = String(extractProductIdFromItem(item) || "");
+    const catalogProduct = catalogMap.get(productId) || null;
+    const explicitVendor = String(extractVendorIdFromItem(item) || "");
+    const resolvedVendor = explicitVendor || String(catalogProduct?.vendor || "");
+
+    if (couponVendorId && resolvedVendor !== couponVendorId) {
+      continue;
+    }
+
+    if (hasCatalogTargets(coupon)) {
+      const categoryId = String(catalogProduct?.category?._id || catalogProduct?.category || "");
+      const categoryType = String(catalogProduct?.category?.type || "").trim().toLowerCase();
+      const matchesTarget =
+        targetProducts.has(productId) ||
+        (categoryId && targetCategories.has(categoryId)) ||
+        (categoryType && targetCategoryTypes.includes(categoryType));
+
+      if (!matchesTarget) {
+        continue;
+      }
+    }
+
+    const quantity = Math.max(1, parseInt(item?.quantity, 10) || 1);
+    const unitPrice = Math.max(0, toNumber(item?.price ?? item?.product?.price ?? 0, 0));
+    eligibleSubtotal += unitPrice * quantity;
+  }
+
+  return roundMoney(Math.max(eligibleSubtotal, 0));
+};
+
 const validateCouponForSubtotal = async (code, subtotal, items = []) => {
   const normalizedCode = normalizeCouponCode(code);
   const normalizedSubtotal = toNumber(subtotal, NaN);
@@ -129,7 +196,7 @@ const validateCouponForSubtotal = async (code, subtotal, items = []) => {
     .trim()
     .toLowerCase();
 
-  if (couponVendorId) {
+  if (couponVendorId || hasCatalogTargets(coupon)) {
     if (!Array.isArray(items) || items.length === 0) {
       return {
         success: false,
@@ -138,8 +205,8 @@ const validateCouponForSubtotal = async (code, subtotal, items = []) => {
       };
     }
 
-    eligibleSubtotal = await calculateEligibleSubtotalForVendor(
-      couponVendorId,
+    eligibleSubtotal = await calculateEligibleSubtotalForCouponTargets(
+      coupon,
       items,
     );
 
@@ -147,7 +214,9 @@ const validateCouponForSubtotal = async (code, subtotal, items = []) => {
       return {
         success: false,
         status: 400,
-        message: "Coupon is not applicable to selected cart items",
+        message: hasCatalogTargets(coupon)
+          ? "Coupon is not applicable to the selected products"
+          : "Coupon is not applicable to selected cart items",
       };
     }
   }
@@ -243,4 +312,8 @@ module.exports = {
   roundMoney,
   toNumber,
   calculateEligibleSubtotalForVendor,
+  calculateEligibleSubtotalForCouponTargets,
+  normalizeStringArray,
+  normalizeObjectIdArray,
+  hasCatalogTargets,
 };

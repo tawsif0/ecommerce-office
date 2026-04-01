@@ -32,6 +32,10 @@ import {
 } from "../../utils/orderPresentation";
 import { getSelectedVariantSignature } from "../../utils/productVariants";
 import {
+  resolveLiveCartLineTotal,
+  resolveLiveCartLineUnitPrice,
+} from "../../utils/cartLinePricing";
+import {
   BANGLADESH_DISTRICT_OPTIONS,
   getCodDeliveryChargeForDistrict,
 } from "../../utils/bangladeshLocations";
@@ -284,16 +288,11 @@ const CheckOut = () => {
   const getItemData = (item) => {
     const product = typeof item.product === "object" ? item.product : null;
     const selectedVariants = Array.isArray(item.selectedVariants) ? item.selectedVariants : [];
+    const unitPrice = resolveLiveCartLineUnitPrice(item);
     return {
       productId: item.productId || product?._id || item.product,
       title: item.title || product?.title || "Product",
-      price: Number(
-        item.unitPrice ??
-          item.price ??
-          product?.salePrice ??
-          product?.price ??
-          0,
-      ),
+      price: unitPrice,
       image: resolveImageValue(
         item.image || product?.images?.[0] || product?.image || "",
       ),
@@ -409,13 +408,7 @@ const CheckOut = () => {
         return {
           productId,
           quantity: Number(item.quantity || 1),
-          price: Number(
-            item.unitPrice ??
-              item.price ??
-              product?.salePrice ??
-              product?.price ??
-              0,
-          ),
+          price: resolveLiveCartLineUnitPrice(item),
           vendor:
             item.vendor ||
             product?.vendor?._id ||
@@ -458,13 +451,7 @@ const CheckOut = () => {
           return {
             productId,
             quantity: Number(item.quantity || 1),
-            price: Number(
-              item.unitPrice ??
-                item.price ??
-                product?.salePrice ??
-                product?.price ??
-                0,
-            ),
+            price: resolveLiveCartLineUnitPrice(item),
             vendor:
               item.vendor ||
               product?.vendor?._id ||
@@ -1499,8 +1486,8 @@ const CheckOut = () => {
                           ) : null}
                         </div>
                       </div>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {formatCurrency(itemData.price * itemData.quantity)}
+                        <p className="text-sm font-semibold text-gray-900">
+                        {formatCurrency(resolveLiveCartLineTotal(item))}
                       </p>
                     </div>
                   );

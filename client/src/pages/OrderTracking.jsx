@@ -846,6 +846,12 @@ const OrderTracking = () => {
                         <span>-Tk {order.discount?.toFixed(2)}</span>
                       </div>
                     )}
+                    {order.couponCode && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Coupon:</span>
+                        <span>{order.couponCode}</span>
+                      </div>
+                    )}
                     <div className="border-t pt-3">
                       <div className="flex justify-between font-bold text-lg">
                         <span>Total:</span>

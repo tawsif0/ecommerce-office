@@ -211,6 +211,21 @@ const AdminOrderList = () => {
   const canAdminCancelOrder = (order) =>
     String(order?.orderStatus || "").trim().toLowerCase() === "pending";
 
+  const getOrderTypeValue = (order) => {
+    const explicitType = String(order?.orderType || "").trim().toLowerCase();
+    if (explicitType === "manual" || explicitType === "online") {
+      return explicitType;
+    }
+
+    const source = String(order?.source || "").trim().toLowerCase();
+    return source.includes("manual") ? "manual" : "online";
+  };
+
+  const getOrderTypeLabel = (order) =>
+    getOrderTypeValue(order) === "manual" ? "Manual" : "Online";
+
+  const isManualOrder = (order) => getOrderTypeValue(order) === "manual";
+
   // Fetch orders
   const fetchOrders = async (page = 1) => {
     try {
@@ -680,13 +695,13 @@ const AdminOrderList = () => {
       </html>
       `;
 
-      const printWindow = window.open("", "_blank");
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-      printWindow.close();
-      toast.success("Courier label opened for print");
+      const queued = printHtmlDocument(
+        `Courier Label ${label.orderNumber || selectedOrder.orderNumber || ""}`,
+        printContent,
+      );
+      if (queued) {
+        toast.success("Courier label prepared for printing");
+      }
     } catch (error) {
       console.error("Print courier label error:", error);
       toast.error(error.response?.data?.message || "Failed to print courier label");
@@ -744,18 +759,78 @@ const AdminOrderList = () => {
     }
   };
 
+  const printHtmlDocument = (title, htmlMarkup) => {
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.setAttribute("title", title || "print-preview");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.style.opacity = "0";
+      iframe.style.pointerEvents = "none";
+      document.body.appendChild(iframe);
+
+      const frameWindow = iframe.contentWindow;
+      const frameDocument = frameWindow?.document;
+
+      if (!frameWindow || !frameDocument) {
+        iframe.remove();
+        toast.error("Unable to prepare the print document");
+        return false;
+      }
+
+      let hasPrinted = false;
+      const cleanup = () => {
+        window.setTimeout(() => {
+          iframe.remove();
+        }, 800);
+      };
+      const runPrint = () => {
+        if (hasPrinted) return;
+        hasPrinted = true;
+        window.setTimeout(() => {
+          try {
+            frameWindow.focus();
+            frameWindow.print();
+          } catch (error) {
+            console.error("Print error:", error);
+            toast.error("Print dialog could not be opened");
+          } finally {
+            cleanup();
+          }
+        }, 250);
+      };
+
+      iframe.onload = runPrint;
+      frameDocument.open();
+      frameDocument.write(`<!DOCTYPE html>${htmlMarkup}`);
+      frameDocument.close();
+
+      window.setTimeout(runPrint, 900);
+      return true;
+    } catch (error) {
+      console.error("Prepare print document error:", error);
+      toast.error("Failed to prepare the print document");
+      return false;
+    }
+  };
+
   // Print order
   const printOrder = (order) => {
     const customer = getOrderCustomerProfile(order);
     const showPaymentStatus = !isCashOnDeliveryOrder(order);
     const paymentMethodLabel = formatPaymentMethodLabel(order?.paymentMethod);
+    const orderTypeLabel = getOrderTypeLabel(order);
     const orderItems = Array.isArray(order?.items) ? order.items : [];
     const escapeHtml = (value) =>
       String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
     const printContent = `
@@ -898,9 +973,29 @@ const AdminOrderList = () => {
               line-height: 1.7;
             }
             @media print {
-              body { background: #ffffff; }
+              body {
+                background: #ffffff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
               .sheet { padding: 0; }
               .invoice { border: none; box-shadow: none; border-radius: 0; }
+              .hero {
+                background: #ffffff !important;
+                color: #111827 !important;
+                border-bottom: 1px solid #e5e7eb;
+              }
+              .hero h1,
+              .hero p,
+              .kicker,
+              .badge {
+                color: #111827 !important;
+                opacity: 1 !important;
+              }
+              .badge {
+                background: #f8fafc !important;
+                border-color: #d1d5db !important;
+              }
             }
           </style>
         </head>
@@ -928,6 +1023,7 @@ const AdminOrderList = () => {
                   <div class="card">
                     <h3>Order & Payment</h3>
                     <div class="meta-row"><span>Date</span><strong>${escapeHtml(formatDate(order.createdAt))}</strong></div>
+                    <div class="meta-row"><span>Order Type</span><strong>${escapeHtml(orderTypeLabel)}</strong></div>
                     <div class="meta-row"><span>Payment Method</span><strong>${escapeHtml(paymentMethodLabel)}</strong></div>
                     ${
                       showPaymentStatus
@@ -986,9 +1082,8 @@ const AdminOrderList = () => {
                         const colorMarkup = displayColor
                           ? `<span class="product-meta" style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 999px; border: 1px solid #d1d5db; background-color: ${escapeHtml(displayColor)}; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.12); -webkit-print-color-adjust: exact; print-color-adjust: exact;"></span></span>`
                           : "";
-                        const lineTotal = Number(
-                          item?.total ?? Number(item?.quantity || 0) * Number(item?.price || 0),
-                        );
+                        const unitPrice = getOrderItemUnitPrice(item);
+                        const lineTotal = getOrderItemLineTotal(item);
 
                         return `
                           <tr>
@@ -1002,7 +1097,7 @@ const AdminOrderList = () => {
                               }
                             </td>
                             <td>${escapeHtml(Number(item?.quantity || 0))}</td>
-                            <td>Tk ${Number(item?.price || 0).toFixed(2)}</td>
+                            <td>Tk ${unitPrice.toFixed(2)}</td>
                             <td>Tk ${lineTotal.toFixed(2)}</td>
                           </tr>
                         `;
@@ -1037,12 +1132,13 @@ const AdminOrderList = () => {
       </html>
     `;
 
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
+    const queued = printHtmlDocument(
+      `Invoice ${order?.orderNumber || "order"}`,
+      printContent,
+    );
+    if (queued) {
+      toast.success("Invoice prepared for printing");
+    }
   };
 
   if (user?.userType !== "admin") {
@@ -1161,6 +1257,9 @@ const AdminOrderList = () => {
                       Customer
                     </th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
                       Total
                     </th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
@@ -1178,6 +1277,8 @@ const AdminOrderList = () => {
                   {orders.map((order) => {
                     const customer = getOrderCustomerProfile(order);
                     const showPaymentStatus = !isCashOnDeliveryOrder(order);
+                    const orderTypeLabel = getOrderTypeLabel(order);
+                    const manualOrder = isManualOrder(order);
 
                     return (
                     <tr
@@ -1210,6 +1311,17 @@ const AdminOrderList = () => {
                             {customer.email || "No email"}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 sm:px-6 py-3 sm:py-4">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
+                            manualOrder
+                              ? "bg-slate-900 text-white"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {orderTypeLabel}
+                        </span>
                       </td>
                       <td className="px-4 sm:px-6 py-3 sm:py-4">
                         <div className="font-semibold text-gray-900 text-sm sm:text-base">
@@ -1258,18 +1370,20 @@ const AdminOrderList = () => {
                           >
                             <FiEye className="w-3 h-3 sm:w-4 sm:h-4" />
                           </motion.button>
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setShowStatusModal(true);
-                            }}
-                            className="p-1.5 sm:p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                            title="Update Status"
-                          >
-                            <FiEdit className="w-3 h-3 sm:w-4 sm:h-4" />
-                          </motion.button>
+                          {!manualOrder ? (
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                setSelectedOrder(order);
+                                setShowStatusModal(true);
+                              }}
+                              className="p-1.5 sm:p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                              title="Update Status"
+                            >
+                              <FiEdit className="w-3 h-3 sm:w-4 sm:h-4" />
+                            </motion.button>
+                          ) : null}
                           <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
@@ -1293,6 +1407,8 @@ const AdminOrderList = () => {
               {orders.map((order) => {
                 const customer = getOrderCustomerProfile(order);
                 const showPaymentStatus = !isCashOnDeliveryOrder(order);
+                const orderTypeLabel = getOrderTypeLabel(order);
+                const manualOrder = isManualOrder(order);
 
                 return (
                 <div key={order._id} className="p-3 hover:bg-gray-50">
@@ -1345,6 +1461,17 @@ const AdminOrderList = () => {
 
                   <div className="flex justify-between items-center">
                     <div className="text-xs">
+                      <div className="mb-1">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                            manualOrder
+                              ? "bg-slate-900 text-white"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {orderTypeLabel}
+                        </span>
+                      </div>
                       <div className="font-medium truncate max-w-[120px]">
                         {getPaymentMethodDisplay(order)}
                       </div>
@@ -1364,16 +1491,18 @@ const AdminOrderList = () => {
                       >
                         <FiEye className="w-3 h-3" />
                       </button>
-                      <button
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowStatusModal(true);
-                        }}
-                        className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
-                        title="Update Status"
-                      >
-                        <FiEdit className="w-3 h-3" />
-                      </button>
+                      {!manualOrder ? (
+                        <button
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setShowStatusModal(true);
+                          }}
+                          className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                          title="Update Status"
+                        >
+                          <FiEdit className="w-3 h-3" />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -1843,6 +1972,12 @@ const AdminOrderList = () => {
                         <span>-Tk {selectedOrder.discount.toFixed(2)}</span>
                       </div>
                     )}
+                    {selectedOrder.couponCode ? (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Coupon:</span>
+                        <span>{selectedOrder.couponCode}</span>
+                      </div>
+                    ) : null}
                     <div className="border-t pt-2">
                       <div className="flex justify-between font-semibold text-sm sm:text-base">
                         <span>Total:</span>

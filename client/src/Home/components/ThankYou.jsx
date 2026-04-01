@@ -630,6 +630,12 @@ const ThankYou = () => {
                     <span className="font-medium text-green-700">-{formatCurrency(order.discount)}</span>
                   </div>
                 ) : null}
+                {order.couponCode ? (
+                  <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3 text-sm">
+                    <span className="text-gray-600">Coupon</span>
+                    <span className="font-medium text-black">{order.couponCode}</span>
+                  </div>
+                ) : null}
                 {order.tax > 0 ? (
                   <div className="flex items-center justify-between rounded-2xl bg-[#fafafa] px-4 py-3 text-sm">
                     <span className="text-gray-600">Tax</span>

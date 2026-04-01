@@ -1,8 +1,11 @@
 const Coupon = require("../models/Coupon.js");
 const Vendor = require("../models/Vendor.js");
 const Product = require("../models/Product.js");
+const Category = require("../models/Category.js");
 const {
   normalizeCouponCode,
+  normalizeObjectIdArray,
+  normalizeStringArray,
   validateCouponForSubtotal,
   toNumber,
 } = require("../utils/couponUtils.js");
@@ -51,6 +54,98 @@ const normalizeRequiredProducts = (value) => {
     .map((entry) => String(entry || "").trim())
     .filter((entry) => /^[0-9a-fA-F]{24}$/.test(entry));
   return [...new Set(ids)];
+};
+
+const CATEGORY_TYPE_OPTIONS = [
+  "General",
+  "Popular",
+  "Hot deals",
+  "Best Selling",
+  "Latest",
+];
+
+const normalizeCategoryTypes = (value) => {
+  const source = normalizeStringArray(value);
+  return source
+    .map((entry) => {
+      const matched = CATEGORY_TYPE_OPTIONS.find(
+        (option) => option.toLowerCase() === entry.toLowerCase(),
+      );
+      return matched || "";
+    })
+    .filter(Boolean);
+};
+
+const resolveCouponCatalogTargeting = async ({
+  applicabilityMode,
+  targetCategoryTypes,
+  targetCategories,
+  targetProducts,
+  vendorId = null,
+}) => {
+  const normalizedMode =
+    String(applicabilityMode || "").trim().toLowerCase() === "targeted"
+      ? "targeted"
+      : "global";
+  const normalizedCategoryTypes = normalizeCategoryTypes(targetCategoryTypes);
+  const normalizedTargetCategories = normalizeObjectIdArray(targetCategories);
+  const normalizedTargetProducts = normalizeObjectIdArray(targetProducts);
+
+  if (normalizedMode === "global") {
+    return {
+      applicabilityMode: "global",
+      targetCategoryTypes: [],
+      targetCategories: [],
+      targetProducts: [],
+    };
+  }
+
+  if (
+    normalizedMode === "targeted" &&
+    !normalizedCategoryTypes.length &&
+    !normalizedTargetCategories.length &&
+    !normalizedTargetProducts.length
+  ) {
+    return { error: "Select at least one category type, category, or product" };
+  }
+
+  if (normalizedTargetCategories.length > 0) {
+    const categories = await Category.find({ _id: { $in: normalizedTargetCategories } })
+      .select("_id")
+      .lean();
+
+    if (categories.length !== normalizedTargetCategories.length) {
+      return { error: "One or more selected categories are invalid" };
+    }
+  }
+
+  if (normalizedTargetProducts.length > 0) {
+    const products = await Product.find({ _id: { $in: normalizedTargetProducts } })
+      .select("_id vendor")
+      .lean();
+
+    if (products.length !== normalizedTargetProducts.length) {
+      return { error: "One or more selected target products are invalid" };
+    }
+
+    if (vendorId) {
+      const mismatched = products.some(
+        (product) => String(product.vendor || "") !== String(vendorId),
+      );
+      if (mismatched) {
+        return {
+          error: "Target products must belong to the same vendor scope",
+        };
+      }
+    }
+  }
+
+  return {
+    applicabilityMode: normalizedMode,
+    targetCategoryTypes: normalizedCategoryTypes,
+    targetCategories: normalizedTargetCategories,
+    targetProducts: normalizedTargetProducts,
+  };
 };
 
 const getVendorForRequester = async (req) =>
@@ -161,6 +256,10 @@ exports.createCoupon = async (req, res) => {
       isActive,
       vendorId,
       requiredProducts,
+      applicabilityMode,
+      targetCategoryTypes,
+      targetCategories,
+      targetProducts,
     } = req.body;
 
     if (!code || !validUntil) {
@@ -224,6 +323,20 @@ exports.createCoupon = async (req, res) => {
       });
     }
 
+    const catalogTargeting = await resolveCouponCatalogTargeting({
+      applicabilityMode,
+      targetCategoryTypes,
+      targetCategories,
+      targetProducts,
+      vendorId: vendorResolution.vendorId,
+    });
+    if (catalogTargeting.error) {
+      return res.status(400).json({
+        success: false,
+        message: catalogTargeting.error,
+      });
+    }
+
     const normalizedRequiredProducts = normalizeRequiredProducts(requiredProducts);
     if (normalizedOfferType === "combo" && normalizedRequiredProducts.length === 0) {
       return res.status(400).json({
@@ -272,12 +385,18 @@ exports.createCoupon = async (req, res) => {
       isActive: typeof isActive === "boolean" ? isActive : true,
       vendor: vendorResolution.vendorId,
       requiredProducts: normalizedRequiredProducts,
+      applicabilityMode: catalogTargeting.applicabilityMode,
+      targetCategoryTypes: catalogTargeting.targetCategoryTypes,
+      targetCategories: catalogTargeting.targetCategories,
+      targetProducts: catalogTargeting.targetProducts,
       createdBy: req.user.id || req.user._id,
     });
 
     const populatedCoupon = await Coupon.findById(coupon._id)
       .populate("vendor", "storeName slug")
       .populate("requiredProducts", "title vendor")
+      .populate("targetCategories", "name type")
+      .populate("targetProducts", "title vendor")
       .lean();
 
     res.status(201).json({
@@ -315,6 +434,8 @@ exports.getCoupons = async (req, res) => {
     const coupons = await Coupon.find(query)
       .populate("vendor", "storeName slug")
       .populate("requiredProducts", "title vendor")
+      .populate("targetCategories", "name type")
+      .populate("targetProducts", "title vendor")
       .sort({ createdAt: -1 });
 
     res.json({
@@ -393,6 +514,10 @@ exports.updateCoupon = async (req, res) => {
       isActive,
       vendorId,
       requiredProducts,
+      applicabilityMode,
+      targetCategoryTypes,
+      targetCategories,
+      targetProducts,
     } = req.body;
 
     const updateData = {
@@ -490,6 +615,47 @@ exports.updateCoupon = async (req, res) => {
       }
     }
 
+    if (
+      applicabilityMode !== undefined ||
+      targetCategoryTypes !== undefined ||
+      targetCategories !== undefined ||
+      targetProducts !== undefined ||
+      (vendorId !== undefined && isAdminUser(req.user))
+    ) {
+      const catalogTargeting = await resolveCouponCatalogTargeting({
+        applicabilityMode:
+          applicabilityMode !== undefined
+            ? applicabilityMode
+            : updateData.applicabilityMode || permission.coupon.applicabilityMode,
+        targetCategoryTypes:
+          targetCategoryTypes !== undefined
+            ? targetCategoryTypes
+            : updateData.targetCategoryTypes || permission.coupon.targetCategoryTypes,
+        targetCategories:
+          targetCategories !== undefined
+            ? targetCategories
+            : updateData.targetCategories || permission.coupon.targetCategories,
+        targetProducts:
+          targetProducts !== undefined
+            ? targetProducts
+            : updateData.targetProducts || permission.coupon.targetProducts,
+        vendorId:
+          updateData.vendor !== undefined ? updateData.vendor : permission.coupon.vendor || null,
+      });
+
+      if (catalogTargeting.error) {
+        return res.status(400).json({
+          success: false,
+          message: catalogTargeting.error,
+        });
+      }
+
+      updateData.applicabilityMode = catalogTargeting.applicabilityMode;
+      updateData.targetCategoryTypes = catalogTargeting.targetCategoryTypes;
+      updateData.targetCategories = catalogTargeting.targetCategories;
+      updateData.targetProducts = catalogTargeting.targetProducts;
+    }
+
     if (requiredProducts !== undefined) {
       const normalizedRequiredProducts = normalizeRequiredProducts(requiredProducts);
       const nextOfferType = normalizeOfferType(
@@ -562,7 +728,9 @@ exports.updateCoupon = async (req, res) => {
       runValidators: true,
     })
       .populate("vendor", "storeName slug")
-      .populate("requiredProducts", "title vendor");
+      .populate("requiredProducts", "title vendor")
+      .populate("targetCategories", "name type")
+      .populate("targetProducts", "title vendor");
 
     res.json({
       success: true,

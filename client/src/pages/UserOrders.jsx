@@ -484,7 +484,7 @@ const UserOrders = () => {
                                 {item.product?.title || "Product"}
                               </p>
                               <p className="text-sm text-gray-600">
-                                Qty: {item.quantity} × Tk {item.price?.toFixed(2)}
+                                Qty: {item.quantity} × Tk {getOrderItemUnitPrice(item).toFixed(2)}
                               </p>
                             </div>
                           </div>
@@ -780,6 +780,12 @@ const UserOrders = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-600">Discount</span>
                       <span>-Tk {selectedOrder.discount?.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {selectedOrder.couponCode && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Coupon</span>
+                      <span>{selectedOrder.couponCode}</span>
                     </div>
                   )}
                   <div className="border-t pt-3">

@@ -12,6 +12,10 @@ import {
   getOrderItemVariantLines,
 } from "../../utils/orderPresentation";
 import { getSelectedVariantSignature } from "../../utils/productVariants";
+import {
+  resolveLiveCartLineTotal,
+  resolveLiveCartLineUnitPrice,
+} from "../../utils/cartLinePricing";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 const COUPON_STORAGE_KEY = "appliedCoupon";
@@ -244,13 +248,7 @@ const AddToCart = () => {
           return {
             productId,
             quantity: Number(item.quantity || 1),
-            price: Number(
-              item.unitPrice ??
-                item.price ??
-                product?.salePrice ??
-                product?.price ??
-                0,
-            ),
+            price: resolveLiveCartLineUnitPrice(item),
             vendor:
               item.vendor ||
               product?.vendor?._id ||
@@ -325,16 +323,11 @@ const AddToCart = () => {
   const getItemData = (item) => {
     const product = typeof item.product === "object" ? item.product : null;
     const selectedVariants = Array.isArray(item.selectedVariants) ? item.selectedVariants : [];
+    const unitPrice = resolveLiveCartLineUnitPrice(item);
     return {
       productId: item.productId || product?._id || item.product,
       title: item.title || product?.title || "Product",
-      price: Number(
-        item.unitPrice ??
-          item.price ??
-          product?.salePrice ??
-          product?.price ??
-          0,
-      ),
+      price: unitPrice,
       image: resolveImageValue(
         item.image || product?.images?.[0] || product?.image || "",
       ),
@@ -567,7 +560,7 @@ const AddToCart = () => {
                               Line Total
                             </p>
                             <p className="mt-1 text-lg font-bold text-black">
-                              {formatCurrency(itemData.price * itemData.quantity)}
+                              {formatCurrency(resolveLiveCartLineTotal(item))}
                             </p>
                           </div>
                           {updatingItemId === key ? (

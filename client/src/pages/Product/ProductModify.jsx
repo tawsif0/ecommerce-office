@@ -1795,7 +1795,7 @@ function ProductModify({ initialMode = "list" }) {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.5, delay: 0.1 }}
-                  className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+                  className="dashboard-form-surface bg-white p-4 md:p-6 border border-gray-200"
                 >
                   <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-4 md:mb-6 flex items-center">
                     <FiPackage className="mr-2" /> Product Information
@@ -2372,7 +2372,7 @@ function ProductModify({ initialMode = "list" }) {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.5, delay: 0.2 }}
-                  className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+                  className="dashboard-form-surface bg-white p-4 md:p-6 border border-gray-200"
                 >
                   <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
                     <FiImage className="mr-2" /> Product Images *
@@ -2675,7 +2675,7 @@ function ProductModify({ initialMode = "list" }) {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.5, delay: 0.3 }}
-                  className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+                  className="dashboard-form-surface bg-white p-4 md:p-6 border border-gray-200"
                 >
                   <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4">
                     Product Variants
@@ -3009,7 +3009,7 @@ function ProductModify({ initialMode = "list" }) {
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.4 }}
-          className="bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200"
+          className="dashboard-form-surface bg-white p-4 md:p-6 border border-gray-200"
         >
           <div className="py-1 border-b border-gray-100 mb-4 md:mb-6">
             <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">

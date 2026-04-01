@@ -34,6 +34,33 @@ const couponSchema = new mongoose.Schema({
     ],
     default: [],
   },
+  applicabilityMode: {
+    type: String,
+    enum: ["global", "targeted"],
+    default: "global",
+  },
+  targetCategoryTypes: {
+    type: [String],
+    default: [],
+  },
+  targetCategories: {
+    type: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+      },
+    ],
+    default: [],
+  },
+  targetProducts: {
+    type: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
+    default: [],
+  },
   minPurchase: {
     type: Number,
     default: 0,

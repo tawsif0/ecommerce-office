@@ -270,7 +270,7 @@ const DashboardHome = ({ user, onTabChange }) => {
                 {[
                   { label: "Manage Products", tab: "modify-product" },
                   { label: "Inventory Center", tab: "module-inventory" },
-                  { label: "Create Purchase", tab: "module-purchases" },
+                  { label: "Suppliers", tab: "module-suppliers" },
                   { label: "Order List", tab: "order-list" },
                   { label: "Product Reports", tab: "product-reports" },
                 ].map((action) => (
@@ -416,7 +416,6 @@ const DashboardHome = ({ user, onTabChange }) => {
                   { label: "Super Admin", tab: "module-super-admin", icon: ShieldCheckIcon },
                   { label: "Vendor Reports", tab: "vendor-reports", icon: ArrowRightIcon },
                   { label: "Suppliers", tab: "module-suppliers", icon: ArrowRightIcon },
-                  { label: "Purchases", tab: "module-purchases", icon: ArrowRightIcon },
                   { label: "Brands", tab: "module-brands", icon: ArrowRightIcon },
                   { label: "Accounts", tab: "module-accounts", icon: CurrencyDollarIcon },
                   { label: "Vendor Payouts", tab: "module-vendor-payouts", icon: CurrencyDollarIcon },

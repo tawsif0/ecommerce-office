@@ -8,7 +8,6 @@ import {
   FiPackage,
   FiRefreshCw,
   FiSearch,
-  FiShoppingBag,
 } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
 
@@ -172,11 +171,11 @@ const ModuleInventoryCenter = () => {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => openDashboardTab("module-purchases")}
+              onClick={() => openDashboardTab("module-suppliers")}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-black px-5 text-sm font-bold text-white"
             >
-              <FiShoppingBag className="h-4 w-4" />
-              Create Purchase
+              <FiPackage className="h-4 w-4" />
+              Suppliers
             </button>
             <button
               type="button"
@@ -343,11 +342,11 @@ const ModuleInventoryCenter = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => openDashboardTab("module-purchases")}
+                      onClick={() => openDashboardTab("module-suppliers")}
                       className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-black px-4 text-sm font-semibold text-white transition hover:bg-zinc-900"
                     >
-                      <FiShoppingBag className="h-4 w-4" />
-                      Add Purchase
+                      <FiPackage className="h-4 w-4" />
+                      Suppliers
                     </button>
                   </div>
                 </div>

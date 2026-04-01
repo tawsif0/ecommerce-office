@@ -17,7 +17,6 @@ const baseUrl = import.meta.env.VITE_API_URL;
 const REPORT_TYPES = [
   { value: "profit", label: "Profit / Loss" },
   { value: "sales", label: "Sales / Orders" },
-  { value: "purchases", label: "Purchases" },
   { value: "suppliers", label: "Suppliers" },
   { value: "stock", label: "Stock" },
   { value: "abandoned", label: "Abandoned Orders" },
@@ -344,10 +343,6 @@ const ModuleBusinessReports = () => {
       value: `${Number(summaryByModule?.sales?.revenue || 0).toFixed(2)} Tk`,
     },
     {
-      label: "Purchase Total",
-      value: `${Number(summaryByModule?.purchases?.totalAmount || 0).toFixed(2)} Tk`,
-    },
-    {
       label: "Supplier Due",
       value: `${Number(summaryByModule?.suppliers?.totalDue || 0).toFixed(2)} Tk`,
     },
@@ -384,7 +379,7 @@ const ModuleBusinessReports = () => {
         </div>
         <h1 className="text-2xl md:text-3xl font-bold">Business Reports</h1>
         <p className="text-zinc-200 mt-2">
-          Profit/loss, sales, purchases, suppliers, stock, abandoned, and risk analysis.
+          Profit/loss, sales, suppliers, stock, abandoned, and risk analysis.
         </p>
       </div>
 

@@ -121,11 +121,6 @@ const MODULE_CHILDREN = [
     tab: "module-suppliers",
   },
   {
-    name: "Purchases",
-    icon: FiShoppingBag,
-    tab: "module-purchases",
-  },
-  {
     name: "Accounts",
     icon: FiDollarSign,
     tab: "module-accounts",
@@ -358,11 +353,6 @@ const getRoleSections = (
             tab: "module-suppliers",
           },
           {
-            name: "Purchases",
-            icon: FiShoppingBag,
-            tab: "module-purchases",
-          },
-          {
             name: "Accounts",
             icon: FiDollarSign,
             tab: "module-accounts",
@@ -527,11 +517,6 @@ const getRoleSections = (
             name: "Suppliers",
             icon: FiPackage,
             tab: "module-suppliers",
-          },
-          {
-            name: "Purchases",
-            icon: FiShoppingBag,
-            tab: "module-purchases",
           },
           {
             name: "Accounts",

@@ -63,6 +63,7 @@ const TAB_META = {
     section: "Commerce",
     title: "Add Order",
     description: "Create manual orders directly from the dashboard workspace.",
+    hideShellHeader: true,
   },
   "vendor-store": {
     section: "Storefront",
@@ -183,11 +184,6 @@ const TAB_META = {
     section: "Operations",
     title: "Suppliers",
     description: "Manage supplier records, sourcing, and procurement relationships.",
-  },
-  "module-purchases": {
-    section: "Operations",
-    title: "Purchases",
-    description: "Record stock purchases and replenish inventory levels.",
   },
   "module-inventory": {
     section: "Catalog & Inventory",
